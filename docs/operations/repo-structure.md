@@ -103,7 +103,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cilladev/xlstream"
 authors = ["Priscilla Emasoga"]
