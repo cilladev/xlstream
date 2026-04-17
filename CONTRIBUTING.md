@@ -24,9 +24,9 @@ What runs when:
 
 | Stage | Checks |
 |---|---|
-| pre-commit | whitespace, EOF, YAML/TOML/JSON syntax, typos, `cargo fmt --check`, `cargo check`, `ruff` on Python |
+| pre-commit | whitespace, EOF, YAML/TOML/JSON syntax, `cargo fmt --check`, `cargo clippy -D warnings`, `ruff` on Python |
 | commit-msg | commit message matches `<prefix>: <imperative, lowercase>` format and contains no forbidden trailers |
-| pre-push | `cargo clippy -D warnings`, `cargo test`, `cargo test --doc` |
+| pre-push | `cargo test --all-features`, `cargo test --doc` |
 
 Manual run on everything:
 

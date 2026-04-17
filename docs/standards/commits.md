@@ -5,9 +5,9 @@
 Contributors run `pre-commit` locally so nonsense never reaches CI. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md#one-time-setup) for the install steps. The hooks enforce:
 
 - Generic hygiene: trailing whitespace, EOF newline, merge markers, YAML / TOML / JSON syntax, large-file detection, line-ending normalisation.
-- Typos (via `crate-ci/typos`).
-- Rust: `cargo fmt --check` + `cargo check` on every commit. `cargo clippy -D warnings` + `cargo test` + `cargo test --doc` on every push.
-- Python (`bindings/python/` only): `ruff check --fix` + `ruff-format`.
+- Rust on every commit: `cargo fmt --check` + `cargo clippy -D warnings`. Failing either blocks the commit, same muscle memory as ruff on a Python project.
+- Rust on every push: `cargo test --all-features` + `cargo test --doc`. Tests are too slow for per-commit; they run at push time.
+- Python (`bindings/python/` only): `ruff check --fix` + `ruff-format` on every commit.
 - Commit message format (see below).
 
 The same checks run in CI via `.github/workflows/pre-commit.yml`. A PR from someone who skipped local hooks will hit the same wall at CI.

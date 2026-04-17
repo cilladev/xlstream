@@ -8,7 +8,7 @@
 #
 # Run manually on all files:
 #   pre-commit run --all-files
-#   pre-commit run --all-files --hook-stage pre-push   # includes clippy
+#   pre-commit run --all-files --hook-stage pre-push   # includes tests
 #
 # See docs/standards/commits.md for the full contributor workflow.
 
@@ -34,13 +34,7 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
-  # -------- typos --------
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.28.1
-    hooks:
-      - id: typos
-
-  # -------- Rust: fast checks on commit --------
+  # -------- Rust: fmt + clippy block the commit (ruff-style) --------
   - repo: local
     hooks:
       - id: cargo-fmt
@@ -50,27 +44,17 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-check
-        name: cargo check
-        entry: cargo check --workspace --all-targets --all-features
-        language: system
-        types: [rust]
-        pass_filenames: false
-        # Skip if no Rust crates exist yet (Phase 0 → Phase 1 transition).
-        require_serial: true
-
-  # -------- Rust: heavy checks on push --------
-  - repo: local
-    hooks:
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]
         require_serial: true
 
+  # -------- Rust: tests on push (too slow for every commit) --------
+  - repo: local
+    hooks:
       - id: cargo-test
         name: cargo test
         entry: cargo test --workspace --all-features
