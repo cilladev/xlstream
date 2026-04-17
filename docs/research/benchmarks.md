@@ -37,15 +37,17 @@ Stretch goals (v0.2):
 
 ## Baseline comparison
 
-We benchmark xlstream against formualizer on identical hardware and identical workloads. Numbers below are **projected** based on the agent review; will be measured once xlstream v0.1 is runnable.
+xlstream vs. formualizer on identical hardware and identical workloads. The **Reference** row for formualizer is a real measurement (2026-04-17); other rows are extrapolated and will be confirmed by our benchmark harness. xlstream numbers are targets; will be measured once v0.1 is runnable.
 
-| Workload | formualizer RSS | formualizer wall | xlstream RSS | xlstream wall |
+| Workload | formualizer RSS | formualizer wall | xlstream RSS (target) | xlstream wall (target) |
 |---|---|---|---|---|
-| Smoke (1k) | ~500 MB | ~0.5 s | ~40 MB | ~0.3 s |
-| Small (10k) | ~1 GB | ~5 s | ~50 MB | ~1 s |
-| Medium (100k) | ~3 GB | ~2 min | ~150 MB | ~10 s |
-| Reference (400k) | ~11 GB | ~30 min | ~250 MB | ~3 min |
-| Stress (1M) | OOM / crash | OOM / crash | ~500 MB | ~7 min |
+| Smoke (1k) | ~400 MB | ~3 s | < 40 MB | < 0.5 s |
+| Small (10k) | ~700 MB | ~1 min | < 50 MB | < 2 s |
+| Medium (100k) | ~1.5 GB | ~20 min | < 150 MB | < 15 s |
+| **Reference (400k)** | **3.3 GB (measured)** | **5h 40m (measured)** | **< 250 MB** | **< 3 min** |
+| Stress (1M) | likely OOM / hour+ | very long | < 500 MB | < 7.5 min |
+
+Reference-row measurement details: 23.4 MB raw data xlsx, 56.1 MB with formulas, 71.7 MB evaluated CSV. Load phase 2m 30s; evaluate + save phase 5h 38m. Ratio we're chasing: **≈ 13× less memory, ≈ 113× faster on wall-clock**.
 
 ## Methodology
 

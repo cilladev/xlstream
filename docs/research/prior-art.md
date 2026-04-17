@@ -19,7 +19,7 @@ Surveyed April 2026.
 
 ## Where each fits
 
-- **formualizer** — Rust, high function coverage, graph-based, 11 GB RSS on 400k × 20. We reuse the parser; we replace the engine.
+- **formualizer** — Rust, high function coverage, graph-based. Measured 3.3 GB RSS and 5h 40m wall-clock on 400k × 20. We reuse the parser; we replace the engine.
 - **IronCalc** — new, promising, full spreadsheet including UI. pip-installable as `ironcalc`. Focused on being a LibreOffice/Excel replacement, not specifically a batch evaluator. Different niche from us.
 - **HyperFormula** — GPL; unusable for commercial embedding without a paid licence. Also TS, not Python-reachable without subprocess.
 - **pycel / xlcalculator / formulas / koala2** — pure Python; correct but 10–100× slower than Rust-backed engines. Fine for < 10k-row workloads.

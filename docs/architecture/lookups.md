@@ -38,7 +38,7 @@ This is 100% pure Excel. Our hash index keys on the single text column; no compo
 A formula is `LookupOnly` if:
 - It contains at least one supported lookup function call.
 - The lookup range is a whole-column or whole-range reference into a different sheet.
-- That sheet is a **lookup sheet** (classified in pass 0) — small, no formulas that depend on the main sheet's rows.
+- That sheet is a **lookup sheet** (classified in pass 0) — fits in memory, no formulas that depend on the main sheet's rows.
 - All other refs in the formula are row-local.
 
 Forward-pointing cross-sheet refs from a lookup sheet back to the main sheet's rows make the sheet not-a-lookup-sheet. Refuse.
@@ -170,7 +170,7 @@ If the user's data isn't sorted, Excel returns unpredictable results — and so 
 
 ## Wildcard match (XLOOKUP match_mode=2)
 
-Wildcard patterns (`*abc*`, `a?c`) cannot use a hash index. Fall back to linear scan over the sorted array, up to the first match. Cost: O(N) per wildcard lookup. Acceptable because lookup sheets are small.
+Wildcard patterns (`*abc*`, `a?c`) cannot use a hash index. Fall back to linear scan over the sorted array, up to the first match. Cost: O(N) per wildcard lookup per row. For 400k main-sheet rows × a 10k-row lookup = 4B comparisons — acceptable for a small number of wildcard lookups, painful if every row does one. Classification emits a warning when wildcard match is detected on a lookup sheet > 10k rows; users can then pre-compute a non-wildcard helper column.
 
 Classification marks a formula as "wildcard" at parse time; if seen on a large lookup sheet (> 100k rows), emit a warning that perf will be suboptimal.
 

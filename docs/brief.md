@@ -2,27 +2,27 @@
 
 ## Vision (one sentence)
 
-Build the fastest, leanest Excel formula evaluation engine in Python's reach, by committing to a streaming architecture that trades feature breadth for memory and speed on the 90% of workloads that are row-local with small lookups.
+Build the fastest, leanest Excel formula evaluation engine in Python's reach, by committing to a streaming architecture that trades feature breadth for memory and speed on the 90% of workloads that are row-local with shared lookup sheets that fit in memory.
 
 ## Problem
 
 Data scientists, analysts, and finance teams generate Excel workbooks programmatically, often with hundreds of thousands of rows and a handful of formula columns. Existing Python-callable evaluators do not scale:
 
-| Engine | Approach | Status on 400k × 20 workload |
+| Engine | Approach | Measured on 400k × 20 reference workload |
 |---|---|---|
-| `formualizer` (Rust, graph-based) | Full dependency DAG | ~11 GB RSS, ~30 minutes |
-| `pycel`, `xlcalculator`, `formulas` (pure Python) | Graph + interpreter | Hours; OOM on lookups at scale |
+| `formualizer` (Rust, graph-based) | Full dependency DAG | **3.3 GB RSS, 5h 40m wall-clock** (measured 2026-04-17: Deals 400,001×20 + Thresholds 26×4 + Region Info 6×4) |
+| `pycel`, `xlcalculator`, `formulas` (pure Python) | Graph + interpreter | Hours → days; OOM on lookups at scale |
 | `xlwings` | Drives real Excel via COM | Requires Excel installed; slow |
 | LibreOffice `soffice --headless` | Shells out to LO | 1–3 GB RAM, minutes-to-tens-of-minutes; installs 600 MB of LibreOffice |
 
-None of these is satisfying for an automated pipeline that processes large workbooks repeatedly.
+None of these is satisfying for an automated pipeline that processes large workbooks repeatedly. xlstream's target on the same workload: **< 250 MB peak RSS, < 3 min wall-clock**. That's roughly **13× less memory and 100× faster** than formualizer.
 
 ## Insight
 
 In real business workbooks, formula columns overwhelmingly fall into three shapes:
 
 1. **Row-local**: `=Deal Value * Quantity`, `=IF(Revenue > 10000, "Gold", "Silver")`. Only reference cells on the same row.
-2. **Lookup-into-small-table**: `=VLOOKUP(Region, 'Region Info'!A:C, 2, FALSE)`. Lookup sheets are tiny (tens of rows).
+2. **Lookup-into-loaded-sheet**: `=VLOOKUP(Region, 'Region Info'!A:C, 2, FALSE)`. Lookup sheets are loaded fully into memory once during prelude and hash-indexed. Size bounded by RAM — tens to tens-of-thousands of rows is routine; a 100k-row lookup sheet still works if RAM allows.
 3. **Whole-column aggregate**: `=Deal Value / SUM(Deal Value:Deal Value) * 100`. Aggregates reduce a column to a scalar.
 
 None of these requires a full dependency graph. They can all be evaluated in a two-pass stream:
@@ -30,7 +30,7 @@ None of these requires a full dependency graph. They can all be evaluated in a t
 - **Pass 1 (prelude):** compute whole-column aggregates and hash-index lookup sheets.
 - **Pass 2 (stream):** read main sheet one row at a time, evaluate formula cells using current row values + prelude scalars + lookup indexes, write output row.
 
-Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` — bounded by inputs that are typically small, not by row count.
+Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` — bounded by the sum of input sizes, *not* by main-sheet row count. A 5M-row main sheet with a 10k-row lookup uses the same memory as a 50k-row main sheet with the same lookup.
 
 ## Scope
 
@@ -39,7 +39,7 @@ Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` —
 - `.xlsx` input and output (no `.xls`, `.xlsm`, `.ods` in v0.1).
 - Single- and multi-sheet workbooks.
 - Pre-computed whole-column aggregates: `SUM`, `COUNT`, `COUNTA`, `AVERAGE`, `MIN`, `MAX`, `SUMIF`, `COUNTIF`, `AVERAGEIF`.
-- Lookups with hash-indexed small tables: `VLOOKUP` (exact), `XLOOKUP` (exact), `MATCH` (exact), `HLOOKUP` (exact), `XMATCH`, `INDEX`, `CHOOSE`. Multi-key lookups handled via concatenated keys (`VLOOKUP(A&B, ...)`) into lookup sheets that have pre-computed helper columns — pure Excel idiom.
+- Lookups via hash-indexed tables loaded into memory at prelude: `VLOOKUP` (exact), `XLOOKUP` (exact), `MATCH` (exact), `HLOOKUP` (exact), `XMATCH`, `INDEX`, `CHOOSE`. Multi-key lookups handled via concatenated keys (`VLOOKUP(A&B, ...)`) into lookup sheets that have pre-computed helper columns — pure Excel idiom.
 - Approximate-match lookups via sorted binary search.
 - Per-row eval: arithmetic, comparison, `&` concat, `IF`, `IFS`, `AND`, `OR`, `NOT`, `XOR`, `IFERROR`, `IFNA`.
 - String functions: `LEFT`, `RIGHT`, `MID`, `LEN`, `UPPER`, `LOWER`, `TRIM`, `CONCAT`, `CONCATENATE`, `FIND`, `SEARCH`, `SUBSTITUTE`, `REPLACE`, `TEXT`.
@@ -79,7 +79,7 @@ Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` —
 
 v0.1 ships when all of the following hold:
 
-1. Reference workload (400k × 20, 10 formula cols including 4 VLOOKUP into small lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a typical laptop (8-core M-series or x86 equivalent).
+1. Reference workload (400k × 20, 10 formula cols including 4 VLOOKUP into hash-indexed lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a typical laptop (8-core M-series or x86 equivalent). For context: formualizer on the same workload takes 5h 40m at 3.3 GB peak.
 2. `pip install xlstream` on Linux, macOS, Windows across Python 3.9–3.14 works.
 3. Every public Rust API has rustdoc with a doctested example.
 4. All built-in functions have unit tests referencing Excel ground truth.

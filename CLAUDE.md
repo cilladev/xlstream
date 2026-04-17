@@ -8,11 +8,11 @@
 
 **Design goal in one sentence:** evaluate a 400,000-row × 20-column xlsx in under 3 minutes of wall-clock time with peak RSS under 250 MB.
 
-We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* engine for the subset of workloads where formulas are mostly **row-local** with **small shared lookup tables** and **whole-column aggregates** — which is ~90% of real business workbooks.
+We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* engine for the subset of workloads where formulas are mostly **row-local** with **shared lookup sheets that fit in memory** and **whole-column aggregates** — which is ~90% of real business workbooks. Lookup sheets can have thousands to hundreds of thousands of rows; "fits in memory" is the real constraint, not "small."
 
 ## Why this exists
 
-The alternative, `formualizer` (Rust, graph-based), uses ~11 GB RSS and takes ~30 minutes to evaluate a 400k × 20 workbook. That's architectural: the graph holds every cell as a vertex. By trading feature breadth (no volatile re-eval, no iterative calc, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we target a 50–100× memory reduction and a 5–10× speed-up.
+The alternative, `formualizer` (Rust, graph-based), takes **5h 40m wall-clock at 3.3 GB peak RSS** to evaluate a 400k × 20 workbook (measured 2026-04-17). That's architectural: the graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no iterative calc, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we target **~13× less memory and ~100× faster wall-clock** on the identical workload.
 
 Full background: [`docs/brief.md`](docs/brief.md) and [`docs/research/formualizer.md`](docs/research/formualizer.md).
 

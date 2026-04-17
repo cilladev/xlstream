@@ -6,13 +6,13 @@ Streaming Excel formula evaluation engine. Rust core, Python bindings.
 
 ## What it does
 
-Reads an `.xlsx` file row-by-row, evaluates formulas in a bounded-memory streaming traversal, and writes a new `.xlsx` with computed values. Built for workbooks where formulas are mostly row-local with small shared lookup tables and whole-column aggregates — the shape of ~90% of real business spreadsheets.
+Reads an `.xlsx` file row-by-row, evaluates formulas in a bounded-memory streaming traversal, and writes a new `.xlsx` with computed values. Built for workbooks where formulas are mostly row-local with shared lookup sheets that fit in memory and whole-column aggregates — the shape of ~90% of real business spreadsheets.
 
 Target for v0.1: evaluate a 400,000-row × 20-column xlsx in **under 3 minutes wall-clock** with **peak RSS under 250 MB**.
 
 ## Why another engine
 
-Existing Python-callable engines either hold the whole workbook in memory as a dependency graph (`formualizer`, 11 GB RSS on a 56 MB file) or are pure-Python and orders of magnitude slower (`pycel`, `xlcalculator`, `formulas`). xlstream trades feature breadth for architectural simplicity: streaming, two-pass, no circular refs, no iterative calc, no full dynamic-array spills. In return: 50–100× less memory and 5–10× more speed on the workloads that matter.
+Existing Python-callable engines either hold the whole workbook in memory as a dependency graph (`formualizer`: **3.3 GB RSS, 5h 40m wall-clock** on our 400k × 20 reference workload, measured 2026-04-17) or are pure-Python and orders of magnitude slower (`pycel`, `xlcalculator`, `formulas`). xlstream trades feature breadth for architectural simplicity: streaming, two-pass, no circular refs, no iterative calc, no full dynamic-array spills. In return: roughly **13× less memory and 100× faster wall-clock** on the workloads that matter.
 
 ## Getting started (once v0.1 ships)
 

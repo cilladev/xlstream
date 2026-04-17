@@ -4,7 +4,23 @@ Deep review conducted April 2026 on `~/Projects/formualizer/` at commit 0.5.x. T
 
 ## One-paragraph summary
 
-`formualizer` is a Rust spreadsheet evaluator with Python bindings (PyO3). It reads .xlsx via `umya-spreadsheet`, builds a full dependency graph over every cell, evaluates via a topological scheduler with rayon parallelism, and writes back through umya. Correctness is excellent; feature coverage is broad (320+ functions, cross-sheet refs, whole-column ranges, `_xlfn.` prefixes, static schedule caching). But the graph + umya + computed-overlay architecture costs ~11 GB RSS on a 56 MB / 400k-row / 20-col file, and ~30 minutes of wall-clock to evaluate it. Those costs are structural, not bugs.
+`formualizer` is a Rust spreadsheet evaluator with Python bindings (PyO3). It reads .xlsx via `umya-spreadsheet`, builds a full dependency graph over every cell, evaluates via a topological scheduler with rayon parallelism, and writes back through umya. Correctness is excellent; feature coverage is broad (320+ functions, cross-sheet refs, whole-column ranges, `_xlfn.` prefixes, static schedule caching). But the graph + umya + computed-overlay architecture costs real hardware time and memory on large workbooks. Those costs are structural, not bugs.
+
+## Measured on our reference workload
+
+Run on 2026-04-17 against `benchmark_large_data_400000.xlsx` (Deals: 400,001 × 20, Thresholds: 26 × 4, Region Info: 6 × 4):
+
+| Phase | Value |
+|---|---|
+| Load | 2m 30.5s |
+| Formula generation | 0.0s (pre-staged xlformula formulas) |
+| Save + Eval | 5h 37m 57.1s |
+| **Total wall-clock** | **5h 40m 27.5s** |
+| **Peak RSS** | **3.3 GB (3,299 MB)** |
+| Input xlsx | 23.4 MB raw data, 56.1 MB with formulas |
+| Output CSV | 71.7 MB |
+
+The 5h 40m is what we're racing. Our target on the identical workload: **< 3 min wall-clock, < 250 MB peak RSS** — roughly **13× less memory, 100×+ faster**.
 
 ## Architecture
 
@@ -25,14 +41,18 @@ Deep review conducted April 2026 on `~/Projects/formualizer/` at commit 0.5.x. T
 5. **Evaluate** — topological scheduler, rayon-parallel within topological layers.
 6. **Writeback** — computed values overlay → umya in-memory → xlsx save.
 
-### Scale at 400k × 20
+### Scale at 400k × 20 (measured 3.3 GB peak)
 
-- ~8M vertices in the graph.
-- ~4M edges.
+The 3.3 GB peak breaks down roughly as (estimates, not individually measured):
+
+- umya in-memory workbook (at load + at save): ~1–1.5 GB.
+- Dependency graph (8M vertices + edges, compressed via stripes): ~800 MB – 1.2 GB.
+- Per-cell AST storage + string interner: ~300–500 MB.
 - Computed overlay hashmap: ~150–300 MB.
-- Arrow column stores: ~300–500 MB.
-- umya in-memory workbook: ~1–2 GB.
-- jemalloc fragmentation: 20–30% overhead on top.
+- Arrow column stores: ~200–400 MB.
+- jemalloc fragmentation / unreleased pages: ~20–30% overhead layered on top.
+
+All structural. The graph-based architecture makes each component necessary.
 
 ## Where memory actually goes
 

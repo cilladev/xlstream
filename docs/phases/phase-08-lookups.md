@@ -15,7 +15,7 @@
 ### Classification
 
 - [ ] Recognise each lookup function; record (lookup_sheet, key_col, value_col, match_mode) in the prelude plan.
-- [ ] Mark lookup sheets in pass 0 — small sheets without formulas that main-sheet formulas reference.
+- [ ] Mark lookup sheets in pass 0 — sheets (any size, as long as they fit in memory) without formulas, which main-sheet formulas reference.
 - [ ] Multi-key lookups: user handles via concatenation at call site (`VLOOKUP(A&B, ...)`) against a helper column on the lookup sheet. Engine just sees a single text key. No composite-key logic in the classifier.
 
 ### `LookupKey`

@@ -30,7 +30,7 @@ References: only cells on the current row. No other data needed.
 
 Evaluation: walk the AST with a single-row scope, resolve each cell reference to the row's pre-loaded values.
 
-### Lookup-into-small-table
+### Lookup-into-loaded-sheet
 
 ```
 =VLOOKUP(Region, 'Region Info'!A:C, 2, FALSE)
@@ -40,7 +40,7 @@ Evaluation: walk the AST with a single-row scope, resolve each cell reference to
 
 References: cells on the current row + an entire lookup sheet or column range from a different sheet.
 
-Prerequisite: the lookup sheet must be loaded fully into memory and hash-indexed during prelude.
+Prerequisite: the lookup sheet must fit in memory so prelude can load it fully and build a hash index. "Fit in memory" is the real constraint — a 100k-row lookup sheet with narrow text keys is a few megabytes of heap, totally fine.
 
 Evaluation: at row time, compute the lookup key from current-row cells, probe the hash index, return the indexed value.
 
@@ -104,7 +104,7 @@ Multiple aggregates over the same column share the same pass (fold state).
 
 ### Lookup index pre-pass
 
-For each lookup sheet, load it fully (small by assumption). Build `HashMap<Key, RowIdx>` keyed by whichever columns are actually looked up.
+For each lookup sheet, load it fully. Build `HashMap<Key, RowIdx>` keyed by whichever column is actually looked up. "Lookup sheet" here means a sheet we've classified as cacheable: finite, fits in memory, no formulas that depend on main-sheet rows. Sizes in the wild range from a handful of rows (region-code tables) to hundreds of thousands (product masters) — all supported as long as RAM allows.
 
 Key types: single-value (`VLOOKUP(K, ...)`). Multi-key lookups use `&` at the call site (`VLOOKUP(A & B, sheet_with_concat_helper, ...)`), which we treat as a single-value text key. Hashes are type-aware (Excel: `1` and `"1"` are different lookup keys) but case-insensitive for strings (matches Excel default).
 

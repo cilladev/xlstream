@@ -59,7 +59,7 @@ Open with calamine. Enumerate sheets. For each sheet, determine:
 
 Classify every sheet:
 - **Main sheet**: the one whose formulas we're evaluating per-row. Large.
-- **Lookup sheet**: referenced by main-sheet lookup formulas. Small (typically < 10k rows).
+- **Lookup sheet**: referenced by main-sheet lookup formulas. Loaded fully into memory during prelude. Size bounded by RAM — tens of rows to hundreds of thousands is routine.
 - **Other**: passed through unchanged.
 
 If multiple sheets contain formula columns, we process each in its own streaming pass.
