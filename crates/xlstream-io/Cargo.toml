@@ -1,0 +1,21 @@
+[package]
+name = "xlstream-io"
+description = "xlsx reader + writer for the xlstream streaming Excel evaluator"
+keywords = ["excel", "xlsx", "streaming", "reader", "writer"]
+categories = ["encoding", "parser-implementations"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
+calamine.workspace = true
+rust_xlsxwriter.workspace = true
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }

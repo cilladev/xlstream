@@ -6,6 +6,7 @@ resolver = "2"
 members = [
     "crates/xlstream-core",
     "crates/xlstream-parse",
+    "crates/xlstream-io",
 ]
 
 [workspace.package]
