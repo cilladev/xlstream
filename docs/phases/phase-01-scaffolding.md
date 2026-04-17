@@ -12,7 +12,7 @@
 
 ### Create crates
 
-- [ ] `crates/xlstream-core/` with `Cargo.toml` + `src/lib.rs`.
+- [x] `crates/xlstream-core/` with `Cargo.toml` + `src/lib.rs`.
 - [ ] `crates/xlstream-parse/` with `Cargo.toml` + `src/lib.rs`.
 - [ ] `crates/xlstream-io/` with `Cargo.toml` + `src/lib.rs`.
 - [ ] `crates/xlstream-eval/` with `Cargo.toml` + `src/lib.rs`.
@@ -21,15 +21,15 @@
 
 ### `xlstream-core`
 
-- [ ] Empty public types:
-  - [ ] `pub enum Value { Empty, Number(f64), Integer(i64), Text(Box<str>), Bool(bool), Date(ExcelDate), Error(CellError) }` (stubs; full impl in later phases).
-  - [ ] `pub enum CellError { Div0, Value, Ref, Name, Na, Num, Null }`.
-  - [ ] `pub enum XlStreamError { ... }` — variants from `docs/architecture/errors.md`, using `thiserror`.
-  - [ ] `pub struct ExcelDate { pub serial: f64 }` — just a newtype for now.
-- [ ] Every type `#[derive(Debug, Clone, PartialEq)]` where it makes sense.
-- [ ] Rustdoc on every public item.
-- [ ] One doctest per type.
-- [ ] Unit tests verifying construction and basic equality.
+- [x] Empty public types:
+  - [x] `pub enum Value { Empty, Number(f64), Integer(i64), Text(Box<str>), Bool(bool), Date(ExcelDate), Error(CellError) }` (stubs; full impl in later phases).
+  - [x] `pub enum CellError { Div0, Value, Ref, Name, Na, Num, Null }`.
+  - [x] `pub enum XlStreamError { ... }` — variants from `docs/architecture/errors.md`, using `thiserror`.
+  - [x] `pub struct ExcelDate { pub serial: f64 }` — just a newtype for now.
+- [x] Every type `#[derive(Debug, Clone, PartialEq)]` where it makes sense.
+- [x] Rustdoc on every public item.
+- [x] One doctest per type.
+- [x] Unit tests verifying construction and basic equality.
 
 ### `xlstream-parse`
 
