@@ -92,11 +92,12 @@ xlstream/
 
 ### When you finish
 
-1. **Let pre-commit do the heavy lifting.** If you've installed it (see [`CONTRIBUTING.md`](CONTRIBUTING.md#one-time-setup)), the `pre-push` hook already runs `cargo fmt --check && cargo clippy -D warnings && cargo test --all-features && cargo test --doc` before every push. Don't bypass it; fix the underlying issue.
-2. **Manual full check** (if you skipped pre-commit for any reason): `pre-commit run --all-files --hook-stage pre-push`. Failing that: `cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --all-features && cargo test --doc`.
+1. **Run `make check`.** That's `cargo fmt --check && clippy -D warnings && cargo test --all-features && cargo test --doc` in one go. Nothing ships unless this passes.
+2. **Let pre-commit do the heavy lifting.** If you ran `make install` on first clone, hooks fire automatically: `pre-commit` on commit, `pre-push` on push. Don't bypass them; fix the underlying issue.
 3. **Update the phase checklist.** Tick the box you completed. Do not tick boxes you didn't actually finish.
 4. **Update any doc that's now stale.** If you changed a public API, the rustdoc and any mention in `docs/` must be updated in the same PR.
-5. **One PR per checkbox** unless the doc says otherwise.
+5. **If you landed a builtin function, tick it in [`docs/functions.md`](docs/functions.md) too.** Same PR.
+6. **One PR per checkbox** unless the doc says otherwise.
 
 ### Do NOT
 

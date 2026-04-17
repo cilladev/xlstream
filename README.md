@@ -25,13 +25,39 @@ import xlstream
 xlstream.evaluate("input.xlsx", "output.xlsx")
 ```
 
+## Development setup
+
+Clone the repo, then from the project root:
+
+```bash
+make install
+```
+
+That's it. One command does everything:
+
+- Verifies prerequisites (`git`, `python3`, `rustup`) are on PATH.
+- Creates a Python virtualenv at `.venv/`.
+- Installs the Rust toolchain + components from `rust-toolchain.toml`.
+- Installs `maturin`, `pytest`, `ruff`, `pre-commit` into the venv.
+- Installs git hooks (pre-commit, commit-msg, pre-push).
+
+Then:
+
+```bash
+source .venv/bin/activate   # activate the venv
+make check                  # validate: cargo fmt + clippy + tests + doctests
+make help                   # see every available command
+```
+
+Prerequisites: `rustup` (https://rustup.rs), Python 3.9+, `git`, GNU make. Linux / macOS primary; Windows works via WSL.
+
 ## Documentation
 
 - **Product brief:** [`docs/brief.md`](docs/brief.md)
 - **Architecture:** [`docs/architecture/`](docs/architecture/)
 - **Phased roadmap:** [`docs/phases/`](docs/phases/)
 - **Research / competitive analysis:** [`docs/research/`](docs/research/)
-- **Contributing:** [`docs/standards/`](docs/standards/)
+- **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md) + [`docs/standards/`](docs/standards/)
 
 ## Licence
 

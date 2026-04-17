@@ -1,13 +1,19 @@
 # xlstream — developer commands.
 #
+# New to the project? Just run: `make install`
+# Then: `make check` to validate, `make help` to see everything.
+#
 # Requires GNU make (bundled on Linux, `brew install make` on macOS if you
 # want the newer one; Apple's /usr/bin/make also works for our targets).
-#
-# Run `make help` for the list.
 
 .DEFAULT_GOAL := help
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
+
+VENV := .venv
+VENV_BIN := $(VENV)/bin
+PIP := $(VENV_BIN)/pip
+PRECOMMIT := $(VENV_BIN)/pre-commit
 
 # Colours for `make help`. Set NO_COLOR=1 to disable.
 ifdef NO_COLOR
@@ -33,27 +39,60 @@ help: ## show this help
 	     /^[a-zA-Z_-]+:.*?## / {printf "  $(BOLD)%-22s$(RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 
-## setup
+## install — one command to set up everything
 
-.PHONY: setup
-setup: setup-rust setup-precommit setup-python ## install toolchain + hooks + Python dev deps
-	@echo "✓ setup complete. Run 'make check' to validate."
+.PHONY: install
+install: check-prereqs $(VENV)/.stamp install-rust install-python install-precommit  ## new dev? run this. creates .venv, installs Rust + Python deps + pre-commit hooks
+	@echo ""
+	@printf "$(BOLD)✓ install complete$(RESET)\n"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  source $(VENV)/bin/activate    # activate the Python venv"
+	@echo "  make check                     # validate your setup (fmt + clippy + tests)"
+	@echo "  cat docs/phases/README.md      # find the current phase"
+	@echo ""
 
-.PHONY: setup-rust
-setup-rust: ## install Rust toolchain from rust-toolchain.toml (rustup auto-handles it)
-	@rustup show >/dev/null || (echo "rustup not found; install from https://rustup.rs"; exit 1)
-	@rustup component add rustfmt clippy rust-src
+.PHONY: check-prereqs
+check-prereqs: ## verify required binaries are on PATH (git, python3, rustup)
+	@command -v git     >/dev/null || { echo "✗ git not found" >&2; exit 1; }
+	@command -v python3 >/dev/null || { echo "✗ python3 not found (need 3.9+)" >&2; exit 1; }
+	@command -v rustup  >/dev/null || { echo "✗ rustup not found. Install: https://rustup.rs" >&2; exit 1; }
+	@printf "  %-14s %s\n" "git:"     "$$(git --version)"
+	@printf "  %-14s %s\n" "python3:" "$$(python3 --version)"
+	@printf "  %-14s %s\n" "rustup:"  "$$(rustup --version | head -n1)"
 
-.PHONY: setup-precommit
-setup-precommit: ## install pre-commit hooks (commit, commit-msg, pre-push)
-	@command -v pre-commit >/dev/null || pip install --user pre-commit
-	pre-commit install --install-hooks
-	pre-commit install --hook-type commit-msg
-	pre-commit install --hook-type pre-push
+# Create .venv on first install. Stamp file avoids re-running on every `make install`.
+$(VENV)/.stamp:
+	@echo "→ creating Python venv at $(VENV)/"
+	python3 -m venv $(VENV)
+	$(PIP) install --upgrade --quiet pip
+	@touch $(VENV)/.stamp
 
-.PHONY: setup-python
-setup-python: ## install maturin + pytest + ruff into the current venv
-	pip install maturin pytest ruff
+.PHONY: install-rust
+install-rust: ## install Rust toolchain from rust-toolchain.toml + rustfmt + clippy + rust-src
+	@echo "→ installing Rust toolchain (from rust-toolchain.toml)"
+	rustup show
+	rustup component add rustfmt clippy rust-src
+
+.PHONY: install-python
+install-python: $(VENV)/.stamp ## install maturin + pytest + ruff + pre-commit into .venv
+	@echo "→ installing Python dev dependencies into $(VENV)/"
+	$(PIP) install --quiet --upgrade maturin pytest ruff pre-commit
+
+.PHONY: install-precommit
+install-precommit: $(VENV)/.stamp install-python ## install git hooks (pre-commit, commit-msg, pre-push)
+	@echo "→ installing git hooks"
+	$(PRECOMMIT) install --install-hooks
+	$(PRECOMMIT) install --hook-type commit-msg
+	$(PRECOMMIT) install --hook-type pre-push
+
+.PHONY: uninstall
+uninstall: ## remove .venv, git hooks, and cargo target
+	$(PRECOMMIT) uninstall --hook-type pre-commit || true
+	$(PRECOMMIT) uninstall --hook-type commit-msg || true
+	$(PRECOMMIT) uninstall --hook-type pre-push   || true
+	rm -rf $(VENV) target
+	@echo "✓ uninstall complete. Cloned files are untouched."
 
 # -----------------------------------------------------------------------------
 # Rust

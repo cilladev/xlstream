@@ -32,11 +32,12 @@
 - [x] `[workspace.package]` defines shared metadata: version `0.1.0`, edition `2021`, rust-version `1.82`, licence `MIT OR Apache-2.0`, repository URL.
 - [x] `[workspace.dependencies]` declares shared dependency pins (calamine, rust_xlsxwriter with features, formualizer-parse, pyo3, rayon, crossbeam-channel, smallvec, thiserror, tracing, phf, memory-stats, proptest, criterion, tempfile). See `docs/operations/repo-structure.md` for the list.
 
-### Pre-commit
+### Pre-commit + onboarding
 
-- [x] `.pre-commit-config.yaml` at repo root with: generic hygiene hooks, typos, cargo fmt, cargo check, cargo clippy (pre-push), cargo test (pre-push), ruff for Python, commit-msg format validator.
+- [x] `.pre-commit-config.yaml` at repo root: hygiene hooks, `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` + `cargo test --doc` on pre-push, `ruff` for Python, commit-msg format validator.
 - [x] `scripts/check-commit-msg.sh` validates the `<prefix>: <imperative>` format and rejects Claude trailers.
-- [x] Contributor install instructions in `CONTRIBUTING.md`.
+- [x] `Makefile` target `make install` — creates `.venv`, installs Rust toolchain components, installs Python dev deps (maturin, pytest, ruff, pre-commit), installs all three git hook types. Single command for new-dev onboarding.
+- [x] README.md and CONTRIBUTING.md point every new contributor at `make install` as the single onboarding command.
 
 ### CI
 

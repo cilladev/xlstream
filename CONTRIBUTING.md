@@ -11,16 +11,26 @@ Thanks for the interest. xlstream is early — the fastest way to help is to rea
 
 ## One-time setup
 
-Install `pre-commit` so local commits, commit messages, and pushes are checked automatically. This is **required** — CI re-runs the same checks and will block PRs that skip them.
-
 ```bash
-pip install pre-commit
-pre-commit install --install-hooks
-pre-commit install --hook-type commit-msg
-pre-commit install --hook-type pre-push
+make install
 ```
 
-What runs when:
+That single command:
+
+- Checks prereqs (`git`, `python3`, `rustup`) are on PATH.
+- Creates `.venv/` with Python dev deps (maturin, pytest, ruff, pre-commit).
+- Installs the Rust toolchain + `rustfmt`, `clippy`, `rust-src` from `rust-toolchain.toml`.
+- Installs git hooks: `pre-commit`, `commit-msg`, `pre-push`.
+
+Then activate the venv before working:
+
+```bash
+source .venv/bin/activate
+```
+
+**Do not skip `make install`.** CI re-runs the same hooks and will block PRs from anyone who pushed without them.
+
+### What runs when
 
 | Stage | Checks |
 |---|---|
@@ -28,14 +38,16 @@ What runs when:
 | commit-msg | commit message matches `<prefix>: <imperative, lowercase>` format and contains no forbidden trailers |
 | pre-push | `cargo test --all-features`, `cargo test --doc` |
 
-Manual run on everything:
+Manual:
 
 ```bash
-pre-commit run --all-files                             # pre-commit stage only
-pre-commit run --all-files --hook-stage pre-push       # everything, including clippy + tests
+make check              # fmt + clippy + tests + doctests (full local gate)
+make pre-commit         # all pre-commit hooks on every file
+make pre-commit-all     # pre-commit + pre-push hooks on every file
+make help               # everything else
 ```
 
-If a hook is broken or you need to bypass (rare; you should usually fix the issue): `git commit --no-verify` — but don't push without having run the checks first, or CI will reject the PR.
+If a hook is broken or you genuinely need to bypass (rare; usually fix the root cause): `git commit --no-verify`. But don't push without having run the checks first — CI will reject the PR.
 
 ## Workflow
 
