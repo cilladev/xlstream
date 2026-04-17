@@ -1,0 +1,29 @@
+[package]
+name = "xlstream-cli"
+description = "Development CLI for the xlstream streaming Excel evaluator"
+keywords = ["excel", "xlsx", "streaming", "formula", "cli"]
+categories = ["command-line-utilities"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "xlstream"
+path = "src/main.rs"
+
+[dependencies]
+xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
+xlstream-eval = { path = "../xlstream-eval", version = "0.1.0" }
+xlstream-io = { path = "../xlstream-io", version = "0.1.0" }
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
