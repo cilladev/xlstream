@@ -150,6 +150,42 @@ Every PR requires approval from at least one reviewer before merge. Self-merges 
 
 No merging with failing CI. If CI is broken due to infra, fix it before merging.
 
+## PR workflow rules
+
+These cover the "process questions" agents keep asking. Read them; don't ask again.
+
+### Who merges
+
+- **Substantive PRs** (code, docs changes that shift a contract or design decision) — author opens the PR, links it in the kickoff chat, reviewer approves, then author or reviewer merges. No self-merge without approval.
+- **Trivial PRs** — typo fixes, pure formatting, dependency bumps from Dependabot — can self-merge after CI goes green. When in doubt, ask.
+
+### Turnaround expectation
+
+Review within 2 hours during work hours. If the reviewer goes quiet longer, the agent can proceed with the "stacked PR" fallback below. Don't sit idle waiting.
+
+### Stacked PRs — avoid by default
+
+Branch each PR off `main`, wait for the prior PR to merge, then branch the next. Linear history. Each PR is independently reviewable.
+
+**Exception:** if a PR has been in review > 2 hours and the agent is idle, they may branch the next PR off the pending PR's branch. Mark the second PR description with `"stacked on #N, will rebase onto main after #N merges."` Ping the reviewer.
+
+**Hard limit:** never go more than one layer deep. If PR 1 and PR 2 are both pending review, stop and wait. Do not stack PR 3.
+
+### When review surfaces an architectural concern
+
+Stop all in-flight work on that phase until the concern is resolved. Do not keep opening PRs on the same design while an earlier one is contested.
+
+### When blocked
+
+One clarifying question in the kickoff chat, with:
+1. Which doc you read.
+2. What you tried.
+3. Where you got stuck.
+4. What options you considered.
+
+Then wait for an answer. Don't guess.
+
+
 ## Tagging releases
 
 Semver. Start at `0.1.0`.

@@ -111,7 +111,11 @@ xlstream/
 
 ### When you're stuck
 
-Prefer asking over guessing. A five-line clarifying question is cheaper than a fifty-line PR revert.
+Prefer asking over guessing. A five-line clarifying question is cheaper than a fifty-line PR revert. Follow the "When blocked" format in [`docs/standards/commits.md`](docs/standards/commits.md#when-blocked).
+
+### PR workflow — read it, don't ask
+
+All the recurring process questions (who merges, stacked PRs, turnaround, what to do when review surfaces an architectural concern) are answered in [`docs/standards/commits.md`](docs/standards/commits.md#pr-workflow-rules). Read that section once; don't ask again.
 
 ## Performance budgets (enforced by CI, eventually)
 
