@@ -1,6 +1,6 @@
 # Phase 1 — Scaffolding
 
-**Goal:** all crates exist, compile, and export empty-but-valid public APIs. Dependency graph wired.
+**Goal:** all crates exist, compile, and export empty-but-valid public APIs. Cargo workspace dep graph wired (crate-to-crate, not formula-to-formula — xlstream does not build a formula dependency graph; see [`../architecture/streaming-model.md`](../architecture/streaming-model.md)).
 
 **Estimated effort:** 1 day.
 
@@ -76,7 +76,7 @@
 
 - [ ] Verify workflows run and pass on the scaffolding commit.
 
-## Dependency graph check
+## Cargo crate dependency graph check
 
 After this phase, `cargo tree -p xlstream-eval` should show:
 
