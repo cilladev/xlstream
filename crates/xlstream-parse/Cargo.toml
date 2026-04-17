@@ -1,0 +1,22 @@
+[package]
+name = "xlstream-parse"
+description = "Formula parser adapter for the xlstream streaming Excel evaluator"
+keywords = ["excel", "xlsx", "streaming", "formula", "parser"]
+categories = ["parser-implementations"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
+# formualizer-parse: deferred to Phase 2 per plan Task 2.3 fallback.
+# Workspace pin is commented out pending MSRV compatibility — see
+# Cargo.toml comment at the workspace root.
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }

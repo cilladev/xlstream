@@ -5,6 +5,7 @@
 resolver = "2"
 members = [
     "crates/xlstream-core",
+    "crates/xlstream-parse",
 ]
 
 [workspace.package]
@@ -22,7 +23,12 @@ calamine = "0.34"
 rust_xlsxwriter = { version = "0.94", features = ["constant_memory", "zlib", "ryu"] }
 
 # formula parser — reused from formualizer
-formualizer-parse = "0.5"
+# formualizer-parse: upstream 0.5.x does not exist; 1.x pulls in
+# formualizer-common 1.1.2 which uses Rust 1.88 `let` chains, incompatible
+# with our 1.85 toolchain pin. Re-evaluated in Phase 2 (see
+# docs/phases/phase-02-parser.md). Phase 1 ships the Ast as a self-contained
+# stub per the plan's Task 2.3 fallback guidance.
+# formualizer-parse = "0.5"
 
 # Python binding
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
