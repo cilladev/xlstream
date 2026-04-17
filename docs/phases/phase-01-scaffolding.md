@@ -13,8 +13,8 @@
 ### Create crates
 
 - [x] `crates/xlstream-core/` with `Cargo.toml` + `src/lib.rs`.
-- [ ] `crates/xlstream-parse/` with `Cargo.toml` + `src/lib.rs`.
-- [ ] `crates/xlstream-io/` with `Cargo.toml` + `src/lib.rs`.
+- [x] `crates/xlstream-parse/` with `Cargo.toml` + `src/lib.rs`.
+- [x] `crates/xlstream-io/` with `Cargo.toml` + `src/lib.rs`.
 - [ ] `crates/xlstream-eval/` with `Cargo.toml` + `src/lib.rs`.
 - [ ] `crates/xlstream-cli/` with `Cargo.toml` + `src/main.rs`.
 - [ ] Register all five in workspace root `Cargo.toml` `[workspace] members`.
@@ -33,24 +33,24 @@
 
 ### `xlstream-parse`
 
-- [ ] Dep on `formualizer-parse` (pin exact: `formualizer-parse = "=0.5.0"` or whatever latest 0.5 is).
-- [ ] Dep on `xlstream-core`.
-- [ ] Stub functions:
-  - [ ] `pub fn parse(expr: &str) -> Result<Ast, XlStreamError>` — stub returns `Err(Internal("unimplemented"))`.
-  - [ ] `pub enum Classification { RowLocal, AggregateOnly, LookupOnly, Mixed, Unsupported(String) }`.
-  - [ ] `pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification` — stub returns `Unsupported`.
-  - [ ] Placeholder `pub struct Ast` — wraps `formualizer_parse::Ast` once integration lands (Phase 2).
-- [ ] Rustdoc + one stub doctest per item.
+- [ ] Dep on `formualizer-parse` (pin exact: `formualizer-parse = "=0.5.0"` or whatever latest 0.5 is). *Deferred to Phase 2: upstream 0.5.x does not exist on crates.io, and 1.x pulls in `formualizer-common` 1.1.2 which requires Rust 1.88 (we're pinned at 1.85). Per plan Task 2.3 fallback, Ast ships as a self-contained stub.*
+- [x] Dep on `xlstream-core`.
+- [x] Stub functions:
+  - [x] `pub fn parse(expr: &str) -> Result<Ast, XlStreamError>` — stub returns `Err(Internal("unimplemented"))`.
+  - [x] `pub enum Classification { RowLocal, AggregateOnly, LookupOnly, Mixed, Unsupported(String) }`.
+  - [x] `pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification` — stub returns `Unsupported`.
+  - [x] Placeholder `pub struct Ast` — wraps `formualizer_parse::Ast` once integration lands (Phase 2).
+- [x] Rustdoc + one stub doctest per item.
 
 ### `xlstream-io`
 
-- [ ] Deps: `calamine`, `rust_xlsxwriter` (with `constant_memory`, `zlib`, `ryu` features), `xlstream-core`.
-- [ ] Stub types:
-  - [ ] `pub struct Reader;` with `open(path)` stub.
-  - [ ] `pub struct Writer;` with `create(path)` stub.
-  - [ ] `pub struct CellStream;` with `next_row()` stub.
-- [ ] Stubs return `Err(Internal("unimplemented"))`.
-- [ ] Rustdoc.
+- [x] Deps: `calamine`, `rust_xlsxwriter` (with `constant_memory`, `zlib`, `ryu` features), `xlstream-core`.
+- [x] Stub types:
+  - [x] `pub struct Reader;` with `open(path)` stub.
+  - [x] `pub struct Writer;` with `create(path)` stub.
+  - [x] `pub struct CellStream;` with `next_row()` stub.
+- [x] Stubs return `Err(Internal("unimplemented"))`.
+- [x] Rustdoc.
 
 ### `xlstream-eval`
 
