@@ -31,6 +31,10 @@ jobs:
 
   # Platform matrix for the Python wheel + pytest. abi3-py39 means one Python
   # version in CI is enough; the wheel works on 3.9-3.14+.
+  #
+  # Gated on `bindings/python/pyproject.toml` existing. The binding lands in
+  # Phase 11; until then every step after the guard is skipped and the job
+  # reports success (a "green skip", not a red failure).
   python:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -39,16 +43,32 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - id: guard
+        name: Check for bindings/python
+        shell: bash
+        run: |
+          if [ -f bindings/python/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::bindings/python/pyproject.toml not present — skipping (lands in Phase 11)"
+          fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-python@v6
         with: { python-version: "3.12" }
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Install maturin + pytest
+      - if: steps.guard.outputs.present == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      - if: steps.guard.outputs.present == 'true'
+        uses: Swatinem/rust-cache@v2
+      - if: steps.guard.outputs.present == 'true'
+        name: Install maturin + pytest
         run: pip install maturin pytest
-      - name: Build and install wheel
+      - if: steps.guard.outputs.present == 'true'
+        name: Build and install wheel
         working-directory: bindings/python
         run: maturin develop --release
-      - name: Run pytest
+      - if: steps.guard.outputs.present == 'true'
+        name: Run pytest
         working-directory: bindings/python
         run: pytest -v
 
