@@ -14,11 +14,12 @@ Separately: **Python tests** in `bindings/python/tests/` via `pytest`.
 ## Golden rules
 
 1. **Every public function has at least one test.**
-2. **Every bug fix has a regression test.** The test is added before the fix. The test fails, then the fix lands, then the test passes.
-3. **No test is "too trivial."** Trivial code is where bugs hide.
-4. **Tests are code.** Reviewed as rigorously as library code. Poorly named or unassertive tests are rejected.
-5. **Tests must be deterministic.** No `std::thread::sleep`, no time-of-day dependence, no unseeded RNG.
-6. **Tests must be fast.** Anything over 100 ms is flagged. Over 1 s requires a `#[cfg_attr(not(feature = "slow-tests"), ignore)]` marker.
+2. **Every builtin function has at least one integration test that exercises it via the evaluator.** Unit tests that call the builtin directly (`fn sum(&[Value]) -> ...`) are necessary but not sufficient. Integration tests must feed a formula *through the parser, classifier, and evaluator* — the same path a real user hits. A builtin with only direct-call tests is not considered complete.
+3. **Every bug fix has a regression test.** The test is added before the fix. The test fails, then the fix lands, then the test passes.
+4. **No test is "too trivial."** Trivial code is where bugs hide.
+5. **Tests are code.** Reviewed as rigorously as library code. Poorly named or unassertive tests are rejected.
+6. **Tests must be deterministic.** No `std::thread::sleep`, no time-of-day dependence, no unseeded RNG.
+7. **Tests must be fast.** Anything over 100 ms is flagged. Over 1 s requires a `#[cfg_attr(not(feature = "slow-tests"), ignore)]` marker.
 
 ## Unit test rules
 
@@ -59,6 +60,29 @@ crates/xlstream-eval/tests/
 ```
 
 Fixtures (small .xlsx files) live in `fixtures/canonical/`. Committed to the repo, each < 50 KB. Large fixtures go in `fixtures/generated/` and are reproduced by a build script.
+
+### The two layers of integration testing
+
+Every builtin lands with both:
+
+1. **Evaluator-level integration** — drive the builtin via `xlstream_eval::Interpreter::eval` with a real AST node. Proves the builtin is reachable through dispatch, argument coercion, and error propagation. Lives in `crates/xlstream-eval/tests/<family>.rs`.
+2. **End-to-end integration** (at least once per feature area) — drive the builtin via `xlstream_eval::evaluate(input, output, None)` on a tiny committed xlsx fixture. Proves the builtin works through the full pipeline: read → classify → prelude → stream → write. Lives in `tests/end_to_end.rs` at the repo root.
+
+Evaluator-level integration is per-builtin. End-to-end is per-feature-area (one `IF` fixture covers all logical builtins conceptually; one `VLOOKUP` fixture covers the lookup family).
+
+### Minimum bar per builtin PR
+
+A PR that lands a new builtin is not mergeable until it includes:
+
+- **≥ 1 unit test** at the builtin function level (direct `fn` call with a `&[Value]` slice).
+- **≥ 1 evaluator-level integration test** that parses a formula string, evaluates it through `Interpreter`, and asserts the result.
+- **Coverage of the five "shapes"** (happy path, empty args / edge case, error-in-argument propagation, coercion path, type mismatch → appropriate `CellError`). Can be split across unit + integration, but all five must appear somewhere for each builtin.
+
+A PR that lands a new **feature area** (arithmetic, aggregates, lookups, etc.) adds:
+
+- **≥ 1 end-to-end test** that evaluates a fixture xlsx containing formulas from that area and asserts the output matches an Excel-computed golden.
+
+No exceptions without a design note in the PR explaining why.
 
 ## Workspace integration tests
 
