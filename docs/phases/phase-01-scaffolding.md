@@ -54,7 +54,7 @@
 
 ### `xlstream-eval`
 
-- [ ] Deps: `xlstream-core`, `xlstream-parse`, `xlstream-io`, `rayon`, `tracing`, `phf`.
+- [ ] Deps: `xlstream-core`, `xlstream-parse`, `xlstream-io`, `tracing`. (`rayon` lands in Phase 10, `phf` lands in Phase 7 — each phase declares only what it uses.)
 - [ ] Stubs:
   - [ ] `pub fn evaluate(input: &Path, output: &Path, workers: Option<usize>) -> Result<EvaluateSummary, XlStreamError>`.
   - [ ] `pub struct EvaluateSummary { pub rows_processed: u32, pub duration_ms: u64, pub peak_rss_bytes: u64 }`.
@@ -84,18 +84,17 @@ After this phase, `cargo tree -p xlstream-eval` should show:
 xlstream-eval v0.1.0
 ├── xlstream-core v0.1.0
 ├── xlstream-parse v0.1.0
-│   ├── xlstream-core
-│   └── formualizer-parse v0.5.x
+│   └── xlstream-core
 ├── xlstream-io v0.1.0
 │   ├── xlstream-core
 │   ├── calamine v0.34.x
 │   └── rust_xlsxwriter v0.94.x
-├── rayon v1.10.x
-├── tracing
-└── phf
+└── tracing
 ```
 
 No cycles. Arrows upward only.
+
+`rayon` and `phf` are absent — they land in Phase 10 and Phase 7 respectively, in the PR that first imports them. `formualizer-parse` is also absent: crates.io 0.5.x does not exist, and 1.x transitively requires Rust 1.88+ (`let` chains in `formualizer-common` 1.1.2). Phase 2 picks a resolution (toolchain bump, version pair, or fork).
 
 ## Verification
 
