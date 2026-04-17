@@ -1,0 +1,50 @@
+# Rust
+/target
+**/target
+Cargo.lock.bak
+*.rs.bk
+*.orig
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+build/
+dist/
+wheels/
+*.whl
+
+# maturin
+/bindings/python/target
+/bindings/python/*.so
+/bindings/python/*.pyd
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Local config
+.env
+.envrc
+
+# Benchmark artefacts
+/benchmarks/results/*.json
+/benchmarks/results/*.html
+
+# Large fixture xlsx files — keep generators, not artefacts
+/fixtures/generated/*.xlsx
+
+# Coverage
+tarpaulin-report.html
+/lcov.info

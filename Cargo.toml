@@ -1,0 +1,50 @@
+# xlstream workspace root.
+# Crates are added in Phase 1 — see docs/phases/phase-01-scaffolding.md.
+
+[workspace]
+resolver = "2"
+members = []
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cilladev/xlstream"
+homepage = "https://github.com/cilladev/xlstream"
+authors = ["Priscilla Emasoga"]
+
+[workspace.dependencies]
+# xlsx I/O
+calamine = "0.34"
+rust_xlsxwriter = { version = "0.94", features = ["constant_memory", "zlib", "ryu"] }
+
+# formula parser — reused from formualizer
+formualizer-parse = "0.5"
+
+# Python binding
+pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
+
+# Concurrency + utilities
+rayon = "1.10"
+crossbeam-channel = "0.5"
+smallvec = "1.13"
+thiserror = "2.0"
+tracing = "0.1"
+phf = { version = "0.11", features = ["macros"] }
+memory-stats = "1.2"
+
+# Dev-only
+proptest = "1.5"
+criterion = "0.5"
+tempfile = "3.14"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+strip = true
+
+[profile.bench]
+lto = "fat"
+codegen-units = 1

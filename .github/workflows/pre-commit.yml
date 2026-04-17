@@ -1,0 +1,26 @@
+name: pre-commit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: pre-commit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt, clippy }
+      - uses: Swatinem/rust-cache@v2
+      - uses: pre-commit/action@v3.0.1
+        with:
+          # Run all stages — commit, commit-msg, AND pre-push — so CI catches
+          # everything contributors' local hooks catch.
+          extra_args: --all-files --hook-stage pre-push

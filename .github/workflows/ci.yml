@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Platform matrix for the Rust test suite. Format + clippy + doctests run in
+  # pre-commit.yml — this workflow's job is to catch OS-specific regressions.
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-features
+      - run: cargo test --workspace --doc
+
+  # Platform matrix for the Python wheel + pytest. abi3-py39 means one Python
+  # version in CI is enough; the wheel works on 3.9-3.14+.
+  python:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install maturin + pytest
+        run: pip install maturin pytest
+      - name: Build and install wheel
+        working-directory: bindings/python
+        run: maturin develop --release
+      - name: Run pytest
+        working-directory: bindings/python
+        run: pytest -v
+
+  # Security audit on dependency tree.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
+  # Per-PR benchmark smoke test. Fast; full runs are in nightly.yml.
+  bench-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench --bench quick -- --sample-size 10
+        # The `quick` bench crate is created in Phase 12. Until then, this job
+        # no-ops via `continue-on-error`. Remove once Phase 12 lands.
+        continue-on-error: true

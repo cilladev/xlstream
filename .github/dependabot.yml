@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust"
+    # Security updates are applied immediately regardless of this schedule.
+
+  - package-ecosystem: pip
+    directory: /bindings/python
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
