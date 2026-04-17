@@ -21,7 +21,7 @@
 
 ### Toolchain
 
-- [x] `rust-toolchain.toml` pins Rust 1.82 stable.
+- [x] `rust-toolchain.toml` pins Rust 1.85 stable.
 - [x] `rustfmt.toml` with project conventions (see `docs/standards/code-style.md`).
 - [x] `clippy.toml` with project conventions.
 - [x] `.editorconfig` for cross-editor consistency.
@@ -29,7 +29,7 @@
 ### Workspace
 
 - [x] Root `Cargo.toml` declares `[workspace]` with `members = []` initially. Members added in Phase 1.
-- [x] `[workspace.package]` defines shared metadata: version `0.1.0`, edition `2021`, rust-version `1.82`, licence `MIT OR Apache-2.0`, repository URL.
+- [x] `[workspace.package]` defines shared metadata: version `0.1.0`, edition `2021`, rust-version `1.85`, licence `MIT OR Apache-2.0`, repository URL.
 - [x] `[workspace.dependencies]` declares shared dependency pins (calamine, rust_xlsxwriter with features, formualizer-parse, pyo3, rayon, crossbeam-channel, smallvec, thiserror, tracing, phf, memory-stats, proptest, criterion, tempfile). See `docs/operations/repo-structure.md` for the list.
 
 ### Pre-commit + onboarding
@@ -77,7 +77,7 @@ See [`docs/operations/github-setup.md`](../operations/github-setup.md) for the s
 
 ```toml
 [toolchain]
-channel = "1.82.0"
+channel = "1.85.0"
 components = ["rustfmt", "clippy", "rust-src"]
 profile = "default"
 ```
@@ -92,7 +92,7 @@ members = []
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cilladev/xlstream"
 authors = ["Priscilla Emasoga"]

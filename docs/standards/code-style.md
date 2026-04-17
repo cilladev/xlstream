@@ -27,7 +27,7 @@ Clippy with `-D warnings` in CI. Zero tolerance.
 
 ```toml
 # clippy.toml
-msrv = "1.82"
+msrv = "1.85"
 avoid-breaking-exported-api = true
 ```
 

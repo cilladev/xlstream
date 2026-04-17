@@ -54,7 +54,7 @@ jobs:
 
   # Security audit on dependency tree. Uses taiki-e/install-action which
   # downloads a prebuilt cargo-audit binary from the cargo-audit release page
-  # — no source compile, so our pinned rust-toolchain.toml (1.82) doesn't
+  # — no source compile, so our pinned rust-toolchain.toml doesn't
   # collide with newer cargo-audit MSRVs (cargo-audit 0.22+ needs rustc 1.85).
   audit:
     runs-on: ubuntu-latest
