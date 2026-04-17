@@ -52,14 +52,15 @@ jobs:
         working-directory: bindings/python
         run: pytest -v
 
-  # Security audit on dependency tree.
+  # Security audit on dependency tree. Uses the prebuilt audit-check binary so
+  # our pinned rust-toolchain.toml (1.82) doesn't block newer cargo-audit MSRVs.
   audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-audit --locked
-      - run: cargo audit
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   # Per-PR benchmark smoke test. Fast; full runs are in nightly.yml.
   bench-smoke:
