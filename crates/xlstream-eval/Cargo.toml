@@ -1,0 +1,22 @@
+[package]
+name = "xlstream-eval"
+description = "Streaming Excel formula evaluator for the xlstream workspace"
+keywords = ["excel", "xlsx", "streaming", "formula", "evaluator"]
+categories = ["parser-implementations"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
+xlstream-parse = { path = "../xlstream-parse", version = "0.1.0" }
+xlstream-io = { path = "../xlstream-io", version = "0.1.0" }
+tracing.workspace = true
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }

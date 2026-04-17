@@ -7,6 +7,8 @@ members = [
     "crates/xlstream-core",
     "crates/xlstream-parse",
     "crates/xlstream-io",
+    "crates/xlstream-eval",
+    "crates/xlstream-cli",
 ]
 
 [workspace.package]
@@ -41,6 +43,8 @@ smallvec = "1.13"
 thiserror = "2.0"
 tracing = "0.1"
 phf = { version = "0.11", features = ["macros"] }
+clap = { version = "4.5", features = ["derive"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 memory-stats = "1.2"
 
 # Dev-only
