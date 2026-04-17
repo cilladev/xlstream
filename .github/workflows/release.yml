@@ -26,7 +26,7 @@ jobs:
           - os: windows-latest
             target: x64
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - uses: PyO3/maturin-action@v1
@@ -43,7 +43,7 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo publish -p xlstream-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
       - run: cargo publish -p xlstream-parse --token ${{ secrets.CARGO_REGISTRY_TOKEN }}

@@ -9,7 +9,7 @@ jobs:
   benchmarks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench --workspace
@@ -29,7 +29,7 @@ jobs:
       matrix:
         target: [fuzz_parser, fuzz_xlsx_reader, fuzz_classifier]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo install cargo-fuzz --locked
       - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600
