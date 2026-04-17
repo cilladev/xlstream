@@ -15,9 +15,9 @@
 - [x] `crates/xlstream-core/` with `Cargo.toml` + `src/lib.rs`.
 - [x] `crates/xlstream-parse/` with `Cargo.toml` + `src/lib.rs`.
 - [x] `crates/xlstream-io/` with `Cargo.toml` + `src/lib.rs`.
-- [ ] `crates/xlstream-eval/` with `Cargo.toml` + `src/lib.rs`.
-- [ ] `crates/xlstream-cli/` with `Cargo.toml` + `src/main.rs`.
-- [ ] Register all five in workspace root `Cargo.toml` `[workspace] members`.
+- [x] `crates/xlstream-eval/` with `Cargo.toml` + `src/lib.rs`.
+- [x] `crates/xlstream-cli/` with `Cargo.toml` + `src/main.rs`.
+- [x] Register all five in workspace root `Cargo.toml` `[workspace] members`.
 
 ### `xlstream-core`
 
@@ -54,27 +54,27 @@
 
 ### `xlstream-eval`
 
-- [ ] Deps: `xlstream-core`, `xlstream-parse`, `xlstream-io`, `tracing`. (`rayon` lands in Phase 10, `phf` lands in Phase 7 — each phase declares only what it uses.)
-- [ ] Stubs:
-  - [ ] `pub fn evaluate(input: &Path, output: &Path, workers: Option<usize>) -> Result<EvaluateSummary, XlStreamError>`.
-  - [ ] `pub struct EvaluateSummary { pub rows_processed: u32, pub duration_ms: u64, pub peak_rss_bytes: u64 }`.
-  - [ ] Stubs return an error or zero summary.
-- [ ] Rustdoc.
+- [x] Deps: `xlstream-core`, `xlstream-parse`, `xlstream-io`, `tracing`. (`rayon` lands in Phase 10, `phf` lands in Phase 7 — each phase declares only what it uses.)
+- [x] Stubs:
+  - [x] `pub fn evaluate(input: &Path, output: &Path, workers: Option<usize>) -> Result<EvaluateSummary, XlStreamError>`.
+  - [x] `pub struct EvaluateSummary { pub rows_processed: u32, pub duration_ms: u64, pub peak_rss_bytes: u64 }`.
+  - [x] Stubs return an error or zero summary.
+- [x] Rustdoc.
 
 ### `xlstream-cli`
 
-- [ ] Dep on `clap` (derive feature), `xlstream-eval`, `xlstream-io`, `tracing-subscriber`.
-- [ ] Stub binary with a single `evaluate` subcommand.
-- [ ] `cargo run -p xlstream-cli -- evaluate --help` works.
+- [x] Dep on `clap` (derive feature), `xlstream-eval`, `xlstream-io`, `tracing-subscriber`.
+- [x] Stub binary with a single `evaluate` subcommand.
+- [x] `cargo run -p xlstream-cli -- evaluate --help` works.
 
 ### Tests
 
-- [ ] Each crate has `#[cfg(test)]` unit tests — at least one passing test, even if it just asserts `2 + 2 == 4`. Establishes the test harness runs.
-- [ ] Run `cargo test --workspace` — all green.
+- [x] Each crate has `#[cfg(test)]` unit tests — at least one passing test, even if it just asserts `2 + 2 == 4`. Establishes the test harness runs.
+- [x] Run `cargo test --workspace` — all green.
 
 ### CI
 
-- [ ] Verify workflows run and pass on the scaffolding commit.
+- [x] Verify workflows run and pass on the scaffolding commit.
 
 ## Cargo crate dependency graph check
 
