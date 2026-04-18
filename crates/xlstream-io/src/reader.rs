@@ -88,7 +88,8 @@ impl Reader {
     }
 
     /// Open a streaming cell reader for the named sheet. Cells are yielded
-    /// row-by-row via [`CellStream::next_row`].
+    /// row-by-row via [`CellStream::next_row`]. Each call opens a fresh
+    /// read from the start of the sheet.
     ///
     /// # Errors
     ///
@@ -113,8 +114,7 @@ impl Reader {
             .worksheet_cells_reader(sheet)
             .map_err(|e| XlStreamError::Xlsx(e.to_string()))?;
         let dims = cell_reader.dimensions();
-        // max_col is end col + 1 (dimensions are 0-based inclusive).
-        let max_col = (dims.end.1 as usize) + 1;
+        let capacity_hint = (dims.end.1 as usize) + 1;
 
         // Capture the cell reader in a closure. This erases the concrete
         // XlsxCellReader type (which calamine does not publicly export)
@@ -129,12 +129,13 @@ impl Reader {
             Err(e) => Err(XlStreamError::Xlsx(e.to_string())),
         });
 
-        Ok(CellStream::new(Box::new(source), max_col))
+        Ok(CellStream::new(Box::new(source), capacity_hint))
     }
 
     /// Collect all formula cells for the named sheet. Returns a vec of
     /// `(row, col, formula_text)` tuples. Only cells that contain a
-    /// non-empty formula are included.
+    /// non-empty formula are included. Each call opens a fresh read
+    /// from the start of the sheet.
     ///
     /// Formulas are typically sparse, so eagerly collecting them is
     /// acceptable for memory.

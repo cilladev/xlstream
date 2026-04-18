@@ -14,18 +14,20 @@ fn open_reads_sheet_names() {
 }
 
 #[test]
-fn cells_yields_dense_rows() {
+fn cells_yields_dense_rows_with_row_index() {
     let tmp = helpers::generate_simple_fixture();
     let mut reader = Reader::open(tmp.path()).unwrap();
     let mut stream = reader.cells("Sheet1").unwrap();
 
-    let row0 = stream.next_row().unwrap().expect("expected row 0");
+    let (idx, row0) = stream.next_row().unwrap().expect("expected row 0");
+    assert_eq!(idx, 0);
     assert_eq!(row0.len(), 3);
     assert_eq!(row0[0], Value::Number(1.0));
     assert_eq!(row0[1], Value::Text("hello".into()));
     assert_eq!(row0[2], Value::Bool(true));
 
-    let row1 = stream.next_row().unwrap().expect("expected row 1");
+    let (idx, row1) = stream.next_row().unwrap().expect("expected row 1");
+    assert_eq!(idx, 1);
     assert_eq!(row1.len(), 3);
     assert_eq!(row1[0], Value::Number(2.0));
     assert_eq!(row1[1], Value::Text("world".into()));
@@ -40,7 +42,7 @@ fn cells_pads_missing_cells_with_empty() {
     let mut reader = Reader::open(tmp.path()).unwrap();
     let mut stream = reader.cells("Sheet1").unwrap();
 
-    let row = stream.next_row().unwrap().expect("expected row 0");
+    let (_, row) = stream.next_row().unwrap().expect("expected row 0");
     assert_eq!(row.len(), 3);
     assert_eq!(row[0], Value::Number(1.0));
     assert_eq!(row[1], Value::Empty);
@@ -53,10 +55,7 @@ fn cells_returns_none_after_last_row() {
     let mut reader = Reader::open(tmp.path()).unwrap();
     let mut stream = reader.cells("Sheet1").unwrap();
 
-    // Drain all rows.
     while stream.next_row().unwrap().is_some() {}
-
-    // Subsequent calls should return None.
     assert!(stream.next_row().unwrap().is_none());
     assert!(stream.next_row().unwrap().is_none());
 }
@@ -78,7 +77,6 @@ fn formulas_returns_formula_text() {
     let mut reader = Reader::open(tmp.path()).unwrap();
     let formulas = reader.formulas("Sheet1").unwrap();
 
-    // Only C1 has a formula.
     assert_eq!(formulas.len(), 1);
     let (row, col, text) = &formulas[0];
     assert_eq!(*row, 0);
@@ -92,11 +90,10 @@ fn cells_reads_formula_cell_cached_value() {
     let mut reader = Reader::open(tmp.path()).unwrap();
     let mut stream = reader.cells("Sheet1").unwrap();
 
-    let row = stream.next_row().unwrap().expect("expected row 0");
+    let (_, row) = stream.next_row().unwrap().expect("expected row 0");
     assert_eq!(row.len(), 3);
     assert_eq!(row[0], Value::Number(1.0));
     assert_eq!(row[1], Value::Number(2.0));
-    // Formula cell reads the cached value (3.0).
     assert_eq!(row[2], Value::Number(3.0));
 }
 
@@ -106,12 +103,11 @@ fn cells_multi_sheet_reads_correct_sheet() {
     let mut reader = Reader::open(tmp.path()).unwrap();
 
     let mut stream = reader.cells("Alpha").unwrap();
-    let row = stream.next_row().unwrap().expect("expected Alpha row 0");
+    let (_, row) = stream.next_row().unwrap().expect("expected Alpha row 0");
     assert_eq!(row[0], Value::Number(10.0));
-    // Must drop stream before opening another (borrow).
     drop(stream);
 
     let mut stream = reader.cells("Beta").unwrap();
-    let row = stream.next_row().unwrap().expect("expected Beta row 0");
+    let (_, row) = stream.next_row().unwrap().expect("expected Beta row 0");
     assert_eq!(row[0], Value::Number(20.0));
 }
