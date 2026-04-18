@@ -59,8 +59,6 @@ pub(crate) enum Node {
 #[derive(Debug, Clone)]
 pub struct Ast {
     /// Original upstream tree, retained for `visit_refs` etc.
-    /// Read by `as_upstream()` in Chunk 1 (`extract_references`).
-    #[allow(dead_code)]
     pub(crate) upstream: formualizer_parse::ASTNode,
     /// Our mirror tree. Used by classify + rewrite.
     pub(crate) root: Node,
@@ -75,9 +73,7 @@ impl PartialEq for Ast {
 
 impl Ast {
     /// Crate-internal accessor for the raw upstream tree.
-    /// Used by `extract_references` in Chunk 1.
     #[must_use]
-    #[allow(dead_code)]
     pub(crate) fn as_upstream(&self) -> &formualizer_parse::ASTNode {
         &self.upstream
     }

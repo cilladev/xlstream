@@ -22,13 +22,13 @@
 
 ### Reference extraction
 
-- [ ] `extract_references(ast: &Ast) -> References` walks the AST and returns:
-  - [ ] All `CellRef`s.
-  - [ ] All `RangeRef`s.
-  - [ ] All `SheetRef`s.
-  - [ ] All function names called (for classification).
-- [ ] `References` uses `SmallVec<[T; N]>` with N sized to the P99 case.
-- [ ] Tests cover: single cell, range, cross-sheet, whole-column, nested functions.
+- [x] `extract_references(ast: &Ast) -> References` walks the AST and returns:
+  - [x] All `CellRef`s.
+  - [x] All `RangeRef`s.
+  - [x] All `SheetRef`s.
+  - [x] All function names called (for classification).
+- [x] `References` uses `SmallVec<[T; N]>` with N sized to the P99 case.
+- [x] Tests cover: single cell, range, cross-sheet, whole-column, nested functions.
 
 ### Classification
 

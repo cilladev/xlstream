@@ -28,4 +28,4 @@ mod references;
 pub use ast::Ast;
 pub use classify::{classify, Classification, ClassificationContext};
 pub use parser::parse;
-pub use references::{Reference, References};
+pub use references::{extract_references, Reference, References};
