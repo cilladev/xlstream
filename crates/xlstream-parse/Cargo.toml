@@ -16,6 +16,7 @@ xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
 formualizer-parse = { workspace = true }
 formualizer-common = { workspace = true }
 smallvec = { workspace = true }
+phf = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

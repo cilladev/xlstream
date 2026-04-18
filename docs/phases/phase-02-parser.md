@@ -38,11 +38,12 @@
   - [ ] `LookupOnly` — supported lookup function with cross-sheet range into a lookup sheet.
   - [ ] `Mixed` — recurses; ok if every sub-expression classifies.
   - [ ] `Unsupported(UnsupportedReason)` — with a specific reason.
-- [ ] `UnsupportedReason` enum: `ForwardRowRef`, `CircularRef`, `UnsupportedFunction(String)`, `UnboundedRange`, `NonStaticCriteria`, `DynamicArray`, `VolatileUnsupported`, `TableReference`, `NamedRange`, `ExternalReference`, etc.
-- [ ] Support-set constants:
-  - [ ] `UNSUPPORTED_FUNCTIONS`: `OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`, `SORTBY`, `SEQUENCE`, `RANDARRAY`, `LAMBDA`, `LET`, `HYPERLINK` (as function), `WEBSERVICE`, `CUBEVALUE`, ...
-  - [ ] `AGGREGATE_FUNCTIONS`: `SUM`, `COUNT`, `COUNTA`, `AVERAGE`, `MIN`, `MAX`, `PRODUCT`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMIFS`, `COUNTIFS`, `AVERAGEIFS`, `MINIFS`, `MAXIFS`, `MEDIAN`.
-  - [ ] `LOOKUP_FUNCTIONS`: `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `MATCH`, `XMATCH`, `INDEX`, `CHOOSE`. Pure Excel only — no custom extensions.
+- [x] `UnsupportedReason` enum: `NonCurrentRowRef`, `CircularRef`, `UnsupportedFunction(String)`, `UnboundedRange`, `NonStaticCriteria`, `DynamicArray`, `VolatileUnsupported`, `TableReference`, `NamedRange`, `ExternalReference`, `NestedUnsupported`, `LookupSheetNotPrepared`, `LookupIntoStreamingSheet`.
+- [x] Support-set constants:
+  - [x] `UNSUPPORTED_FUNCTIONS`: `OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`, `SORTBY`, `SEQUENCE`, `RANDARRAY`, `LAMBDA`, `LET`, `HYPERLINK`, `WEBSERVICE`, `CUBEVALUE`, `CUBEMEMBER`, `CUBESET`, `RAND`, `RANDBETWEEN`.
+  - [x] `AGGREGATE_FUNCTIONS`: `SUM`, `COUNT`, `COUNTA`, `AVERAGE`, `MIN`, `MAX`, `PRODUCT`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMIFS`, `COUNTIFS`, `AVERAGEIFS`, `MINIFS`, `MAXIFS`, `MEDIAN`.
+  - [x] `LOOKUP_FUNCTIONS`: `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `MATCH`, `XMATCH`, `INDEX`, `CHOOSE`.
+  - [x] `VOLATILE_STREAMING_OK`: `TODAY`, `NOW`.
 
 ### AST rewrite
 
@@ -60,7 +61,7 @@
   - [ ] `Deal Value / SUM(Deal Value:Deal Value)` — Mixed.
   - [ ] `OFFSET(A1, 1, 0)` — Unsupported.
   - [ ] `INDIRECT("A1")` — Unsupported.
-  - [ ] `A3` where current row is 5 — Unsupported (forward ref from past row).
+  - [ ] `A3` where current row is 5 — Unsupported (non-current-row ref).
   - [ ] `FILTER(A:A, B:B>0)` — Unsupported (dynamic array).
   - [ ] Circular reference — Unsupported.
   - [ ] `VLOOKUP(A&B, Sheet2!D:E, 2, FALSE)` — LookupOnly, concatenated-key via helper column on lookup sheet.

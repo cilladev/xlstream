@@ -24,8 +24,9 @@ mod ast;
 mod classify;
 mod parser;
 mod references;
+pub mod sets;
 
 pub use ast::Ast;
-pub use classify::{classify, Classification, ClassificationContext};
+pub use classify::{classify, Classification, ClassificationContext, UnsupportedReason};
 pub use parser::parse;
 pub use references::{extract_references, Reference, References};
