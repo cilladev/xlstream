@@ -6,8 +6,9 @@ use crate::ast::Ast;
 
 /// The verdict returned by [`classify`] for a single formula.
 ///
-/// Phase 1 ships this enum shape; Phase 2 replaces `Unsupported(String)`
-/// with a structured reason type (see `docs/phases/phase-02-parser.md`).
+/// Phase 1 ships this enum shape; Phase 2 (Chunk 2) replaces
+/// `Unsupported(String)` with a structured `UnsupportedReason` type
+/// (see `docs/phases/phase-02-parser.md`).
 ///
 /// # Examples
 ///
@@ -31,8 +32,8 @@ pub enum Classification {
     Unsupported(String),
 }
 
-/// Context passed to [`classify`]. Phase 1 is a placeholder; Phase 2 fills
-/// it with workbook metadata (sheet names, header maps, prelude plans).
+/// Context passed to [`classify`]. Chunk 2 fills this with workbook
+/// metadata (sheet names, header maps, prelude plans).
 ///
 /// # Examples
 ///
@@ -45,21 +46,20 @@ pub struct ClassificationContext {
     _private: (),
 }
 
-/// Classify a parsed formula. Phase 1 always returns
-/// [`Classification::Unsupported`] with a note that real classification
-/// lands in Phase 2.
+/// Classify a parsed formula. Stub: always returns
+/// [`Classification::Unsupported`]. Real implementation lands in Chunk 3.
 ///
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{classify, Ast, Classification, ClassificationContext};
-/// let ast = Ast::default();
+/// use xlstream_parse::{classify, parse, Classification, ClassificationContext};
+/// let ast = parse("1+2").unwrap();
 /// let ctx = ClassificationContext::default();
 /// matches!(classify(&ast, &ctx), Classification::Unsupported(_));
 /// ```
 #[must_use]
 pub fn classify(_ast: &Ast, _ctx: &ClassificationContext) -> Classification {
-    Classification::Unsupported("classification not implemented until Phase 2".into())
+    Classification::Unsupported("classification not implemented until Phase 2 Chunk 3".into())
 }
 
 #[cfg(test)]
@@ -67,15 +67,14 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
-    use crate::Ast;
 
     #[test]
     fn classify_returns_unsupported_stub() {
-        let ast = Ast::default();
+        let ast = crate::parse("1+2").unwrap();
         let ctx = ClassificationContext::default();
         match classify(&ast, &ctx) {
             Classification::Unsupported(msg) => {
-                assert!(msg.contains("Phase 2"), "expected Phase 2 note, got: {msg}");
+                assert!(msg.contains("Chunk 3"), "expected Chunk 3 note, got: {msg}");
             }
             other => panic!("expected Unsupported, got {other:?}"),
         }

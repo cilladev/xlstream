@@ -45,8 +45,9 @@ pub enum XlStreamError {
     #[error("xlsx write error: {0}")]
     XlsxWrite(#[from] rust_xlsxwriter::XlsxError),
 
-    #[error("formula parse error at {address}: {message}\n  formula: {formula}")]
-    FormulaParse { address: String, formula: String, message: String },
+    #[error("formula parse error at {address}{}: {message}\n  formula: {formula}",
+        position.map_or(String::new(), |p| format!(" (position {p})")))]
+    FormulaParse { address: String, formula: String, message: String, position: Option<usize> },
 
     #[error("unsupported formula at {address}: {reason}\n  formula: {formula}\n  see: {doc_link}")]
     Unsupported {
