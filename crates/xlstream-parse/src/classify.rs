@@ -2,7 +2,11 @@
 //! evaluator whether a formula can be streamed, needs prelude-only data, or
 //! must be refused.
 
-use crate::ast::Ast;
+use std::collections::{HashMap, HashSet};
+
+use crate::ast::{Ast, Node};
+use crate::references::Reference;
+use crate::sets;
 
 /// The specific reason a formula was rejected.
 ///
@@ -134,33 +138,347 @@ pub enum Classification {
     Unsupported(UnsupportedReason),
 }
 
-/// Context passed to [`classify`]. Real fields land in Chunk 3.
+/// Context passed to [`classify`]. Carries the cell address and workbook
+/// metadata needed for streaming classification.
 ///
 /// # Examples
 ///
 /// ```
 /// use xlstream_parse::ClassificationContext;
-/// let _ctx = ClassificationContext::default();
+/// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
+/// assert_eq!(ctx.current_sheet(), "Sheet1");
+/// assert_eq!(ctx.current_row(), 1);
+/// assert_eq!(ctx.current_col(), 1);
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ClassificationContext {
-    _private: (),
+    current_sheet: String,
+    current_row: u32,
+    current_col: u32,
+    lookup_sheets: HashSet<String>,
+    column_headers: HashMap<String, u32>,
 }
 
-/// Classify a parsed formula. Stub: always returns
-/// [`Classification::Unsupported`]. Real implementation lands in Chunk 3.
+impl ClassificationContext {
+    /// Build a context positioned at `(sheet, row, col)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
+    /// assert_eq!(ctx.current_sheet(), "Sheet1");
+    /// ```
+    #[must_use]
+    pub fn for_cell(sheet: &str, row: u32, col: u32) -> Self {
+        Self {
+            current_sheet: sheet.to_owned(),
+            current_row: row,
+            current_col: col,
+            lookup_sheets: HashSet::new(),
+            column_headers: HashMap::new(),
+        }
+    }
+
+    /// Register a sheet as pre-loaded for lookups.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1)
+    ///     .with_lookup_sheet("Region Info");
+    /// assert!(ctx.is_lookup_sheet("Region Info"));
+    /// ```
+    #[must_use]
+    pub fn with_lookup_sheet(mut self, sheet: &str) -> Self {
+        self.lookup_sheets.insert(sheet.to_owned());
+        self
+    }
+
+    /// Register a column header mapping (reserved for v0.2).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1)
+    ///     .with_header("Amount", 3);
+    /// assert_eq!(ctx.headers().get("Amount"), Some(&3));
+    /// ```
+    #[must_use]
+    pub fn with_header(mut self, header: &str, col: u32) -> Self {
+        self.column_headers.insert(header.to_owned(), col);
+        self
+    }
+
+    /// Name of the sheet being streamed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Data", 1, 1);
+    /// assert_eq!(ctx.current_sheet(), "Data");
+    /// ```
+    #[must_use]
+    pub fn current_sheet(&self) -> &str {
+        &self.current_sheet
+    }
+
+    /// 1-based row of the cell being classified.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 5, 1);
+    /// assert_eq!(ctx.current_row(), 5);
+    /// ```
+    #[must_use]
+    pub fn current_row(&self) -> u32 {
+        self.current_row
+    }
+
+    /// 1-based column of the cell being classified.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 7);
+    /// assert_eq!(ctx.current_col(), 7);
+    /// ```
+    #[must_use]
+    pub fn current_col(&self) -> u32 {
+        self.current_col
+    }
+
+    /// `true` if `sheet` was registered via [`Self::with_lookup_sheet`].
+    /// Case-insensitive comparison.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1)
+    ///     .with_lookup_sheet("Tax Rates");
+    /// assert!(ctx.is_lookup_sheet("Tax Rates"));
+    /// assert!(ctx.is_lookup_sheet("tax rates"));
+    /// assert!(!ctx.is_lookup_sheet("Other"));
+    /// ```
+    #[must_use]
+    pub fn is_lookup_sheet(&self, sheet: &str) -> bool {
+        self.lookup_sheets.iter().any(|s| s.eq_ignore_ascii_case(sheet))
+    }
+
+    /// The set of registered lookup sheet names.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
+    /// assert!(ctx.lookup_sheets().is_empty());
+    /// ```
+    #[must_use]
+    pub fn lookup_sheets(&self) -> &HashSet<String> {
+        &self.lookup_sheets
+    }
+
+    /// Column header mappings (reserved for v0.2).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::ClassificationContext;
+    /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
+    /// assert!(ctx.headers().is_empty());
+    /// ```
+    #[must_use]
+    pub fn headers(&self) -> &HashMap<String, u32> {
+        &self.column_headers
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Internal disposition types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+enum Disposition {
+    RowLocal,
+    Aggregate,
+    Lookup,
+    Mixed,
+    Unsupported(UnsupportedReason),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FnKind {
+    Aggregate,
+    Lookup,
+}
+
+/// Classify a parsed formula for streaming evaluation.
+///
+/// Walks the AST to determine whether each sub-expression is row-local,
+/// aggregate-only, lookup-only, mixed, or unsupported.
 ///
 /// # Examples
 ///
 /// ```
 /// use xlstream_parse::{classify, parse, Classification, ClassificationContext};
 /// let ast = parse("1+2").unwrap();
-/// let ctx = ClassificationContext::default();
-/// assert!(matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+/// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
+/// assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
 /// ```
 #[must_use]
-pub fn classify(_ast: &Ast, _ctx: &ClassificationContext) -> Classification {
-    Classification::Unsupported(UnsupportedReason::NestedUnsupported)
+pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification {
+    let d = disposition(&ast.root, ctx, None);
+    match d {
+        Disposition::RowLocal => Classification::RowLocal,
+        Disposition::Aggregate => Classification::AggregateOnly,
+        Disposition::Lookup => Classification::LookupOnly,
+        Disposition::Mixed => Classification::Mixed,
+        Disposition::Unsupported(r) => Classification::Unsupported(r),
+    }
+}
+
+fn disposition(node: &Node, ctx: &ClassificationContext, parent: Option<FnKind>) -> Disposition {
+    match node {
+        Node::Literal(_) | Node::Text(_) | Node::Error(_) => Disposition::RowLocal,
+        Node::Reference(r) => classify_reference(r, ctx, parent),
+        Node::UnaryOp { expr, .. } => disposition(expr, ctx, parent),
+        Node::BinaryOp { left, right, .. } => {
+            fold(disposition(left, ctx, parent), disposition(right, ctx, parent))
+        }
+        Node::Function { name, args } => classify_function(name, args, ctx),
+        Node::Array(rows) => {
+            let mut acc = Disposition::RowLocal;
+            for row in rows {
+                for cell in row {
+                    acc = fold(acc, disposition(cell, ctx, parent));
+                    if matches!(acc, Disposition::Unsupported(_)) {
+                        return acc;
+                    }
+                }
+            }
+            acc
+        }
+    }
+}
+
+fn classify_reference(
+    r: &Reference,
+    ctx: &ClassificationContext,
+    parent: Option<FnKind>,
+) -> Disposition {
+    match r {
+        Reference::Cell { sheet, row, col } => {
+            let resolved = sheet.as_deref().unwrap_or(ctx.current_sheet());
+            if resolved.eq_ignore_ascii_case(ctx.current_sheet())
+                && *row == ctx.current_row()
+                && *col == ctx.current_col()
+            {
+                return Disposition::Unsupported(UnsupportedReason::CircularRef);
+            }
+            if resolved.eq_ignore_ascii_case(ctx.current_sheet()) && *row == ctx.current_row() {
+                Disposition::RowLocal
+            } else {
+                Disposition::Unsupported(UnsupportedReason::NonCurrentRowRef)
+            }
+        }
+
+        Reference::Range { sheet, .. } => {
+            let resolved = sheet.as_deref().unwrap_or(ctx.current_sheet());
+            match parent {
+                Some(FnKind::Aggregate) => Disposition::Aggregate,
+                Some(FnKind::Lookup) => {
+                    if resolved.eq_ignore_ascii_case(ctx.current_sheet()) {
+                        Disposition::Unsupported(UnsupportedReason::LookupIntoStreamingSheet)
+                    } else if ctx.is_lookup_sheet(resolved) {
+                        Disposition::Lookup
+                    } else {
+                        Disposition::Unsupported(UnsupportedReason::LookupSheetNotPrepared)
+                    }
+                }
+                None => Disposition::Unsupported(UnsupportedReason::UnboundedRange),
+            }
+        }
+
+        Reference::Named(_) => Disposition::Unsupported(UnsupportedReason::NamedRange),
+        Reference::External { .. } => {
+            Disposition::Unsupported(UnsupportedReason::ExternalReference)
+        }
+        Reference::Table { .. } => Disposition::Unsupported(UnsupportedReason::TableReference),
+    }
+}
+
+fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> Disposition {
+    if sets::is_unsupported(name) {
+        return Disposition::Unsupported(UnsupportedReason::UnsupportedFunction(
+            name.to_uppercase(),
+        ));
+    }
+
+    if sets::is_volatile_streaming_ok(name) {
+        return Disposition::RowLocal;
+    }
+
+    if sets::is_aggregate(name) {
+        return fold_fn_args(args, ctx, FnKind::Aggregate);
+    }
+
+    if sets::is_lookup(name) {
+        return fold_fn_args(args, ctx, FnKind::Lookup);
+    }
+
+    fold_args(args, ctx, None)
+}
+
+/// For aggregate/lookup functions, the function's own kind determines the
+/// disposition. `RowLocal` args (criteria, column indices, match type) are
+/// absorbed — only `Unsupported` propagates.
+fn fold_fn_args(args: &[Node], ctx: &ClassificationContext, kind: FnKind) -> Disposition {
+    let target = match kind {
+        FnKind::Aggregate => Disposition::Aggregate,
+        FnKind::Lookup => Disposition::Lookup,
+    };
+    for arg in args {
+        let d = disposition(arg, ctx, Some(kind));
+        if let Disposition::Unsupported(_) = d {
+            return d;
+        }
+    }
+    target
+}
+
+fn fold_args(args: &[Node], ctx: &ClassificationContext, parent: Option<FnKind>) -> Disposition {
+    let mut iter = args.iter();
+    let mut acc = match iter.next() {
+        Some(first) => disposition(first, ctx, parent),
+        None => return Disposition::RowLocal,
+    };
+    for arg in iter {
+        if matches!(acc, Disposition::Unsupported(_)) {
+            return acc;
+        }
+        acc = fold(acc, disposition(arg, ctx, parent));
+    }
+    acc
+}
+
+fn fold(a: Disposition, b: Disposition) -> Disposition {
+    match (a, b) {
+        (Disposition::Unsupported(r), _) | (_, Disposition::Unsupported(r)) => {
+            Disposition::Unsupported(r)
+        }
+        (Disposition::RowLocal, Disposition::RowLocal) => Disposition::RowLocal,
+        (Disposition::Aggregate, Disposition::Aggregate) => Disposition::Aggregate,
+        (Disposition::Lookup, Disposition::Lookup) => Disposition::Lookup,
+        _ => Disposition::Mixed,
+    }
 }
 
 #[cfg(test)]
@@ -170,16 +488,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn classify_returns_unsupported_stub() {
+    fn classify_literal_is_row_local() {
         let ast = crate::parse("1+2").unwrap();
-        let ctx = ClassificationContext::default();
-        match classify(&ast, &ctx) {
-            Classification::Unsupported(reason) => {
-                assert!(matches!(reason, UnsupportedReason::NestedUnsupported));
-                assert!(reason.doc_link().starts_with("https://"));
-            }
-            other => panic!("expected Unsupported, got {other:?}"),
-        }
+        let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
 
     #[test]
@@ -210,5 +522,40 @@ mod tests {
             b.doc_link(),
             "distinct lookup-failure modes should deep-link to distinct sections"
         );
+    }
+
+    #[test]
+    fn context_builder_round_trips() {
+        let ctx = ClassificationContext::for_cell("Sheet1", 5, 3)
+            .with_lookup_sheet("Lookup1")
+            .with_header("Amount", 4);
+        assert_eq!(ctx.current_sheet(), "Sheet1");
+        assert_eq!(ctx.current_row(), 5);
+        assert_eq!(ctx.current_col(), 3);
+        assert!(ctx.is_lookup_sheet("Lookup1"));
+        assert!(ctx.is_lookup_sheet("lookup1"));
+        assert!(!ctx.is_lookup_sheet("Other"));
+        assert_eq!(ctx.headers().get("Amount"), Some(&4));
+    }
+
+    #[test]
+    fn fold_same_kinds_stay_same() {
+        assert_eq!(fold(Disposition::RowLocal, Disposition::RowLocal), Disposition::RowLocal);
+        assert_eq!(fold(Disposition::Aggregate, Disposition::Aggregate), Disposition::Aggregate);
+        assert_eq!(fold(Disposition::Lookup, Disposition::Lookup), Disposition::Lookup);
+    }
+
+    #[test]
+    fn fold_different_supported_kinds_become_mixed() {
+        assert_eq!(fold(Disposition::RowLocal, Disposition::Aggregate), Disposition::Mixed);
+        assert_eq!(fold(Disposition::RowLocal, Disposition::Lookup), Disposition::Mixed);
+        assert_eq!(fold(Disposition::Aggregate, Disposition::Lookup), Disposition::Mixed);
+    }
+
+    #[test]
+    fn fold_unsupported_absorbs_all() {
+        let u = Disposition::Unsupported(UnsupportedReason::CircularRef);
+        assert!(matches!(fold(u.clone(), Disposition::RowLocal), Disposition::Unsupported(_)));
+        assert!(matches!(fold(Disposition::Aggregate, u), Disposition::Unsupported(_)));
     }
 }
