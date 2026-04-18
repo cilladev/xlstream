@@ -16,8 +16,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use tracing::error;
+use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
+use xlstream_core::col_row_to_a1;
 
 /// xlstream CLI — streaming Excel formula evaluator.
 #[derive(Debug, Parser)]
@@ -40,7 +41,7 @@ enum Command {
         /// Number of parallel workers (default: auto).
         #[arg(long, short = 'w', value_name = "N")]
         workers: Option<usize>,
-        /// Increase log verbosity.
+        /// Print phase timings and evaluation summary.
         #[arg(long, short = 'v')]
         verbose: bool,
     },
@@ -92,21 +93,16 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
     match cli.command {
-        Command::Evaluate { input, output, .. } => {
-            let mut reader = xlstream_io::Reader::open(&input)?;
-            let sheet_names = reader.sheet_names();
-            let mut writer = xlstream_io::Writer::create(&output)?;
-            for name in &sheet_names {
-                let mut stream = reader.cells(name)?;
-                let mut handle = writer.add_sheet(name)?;
-                while let Some((row_idx, row)) = stream.next_row()? {
-                    handle.write_row(row_idx, &row)?;
-                }
-                // Drop handle to release mutable borrow before next sheet.
-                drop(handle);
-                drop(stream);
+        Command::Evaluate { input, output, workers, verbose } => {
+            let summary = xlstream_eval::evaluate(&input, &output, workers)?;
+            if verbose {
+                info!(
+                    rows = summary.rows_processed,
+                    formulas = summary.formulas_evaluated,
+                    duration_ms = summary.duration.as_millis(),
+                    "evaluate complete"
+                );
             }
-            writer.finish()?;
             Ok(())
         }
         Command::Classify { formula, sheet, row, col, lookup_sheets, .. } => {
@@ -126,7 +122,7 @@ fn run_classify(
     let ast = xlstream_parse::parse(formula).map_err(|e| match e {
         xlstream_core::XlStreamError::FormulaParse { formula: f, message, position, .. } => {
             xlstream_core::XlStreamError::FormulaParse {
-                address: format!("{sheet}!{}", col_to_a1(col, row)),
+                address: format!("{sheet}!{}", col_row_to_a1(col, row)),
                 formula: f,
                 message,
                 position,
@@ -143,17 +139,6 @@ fn run_classify(
     let verdict = xlstream_parse::classify(&ast, &ctx);
     println!("{formula}\t{verdict:?}");
     Ok(())
-}
-
-fn col_to_a1(col: u32, row: u32) -> String {
-    let mut letters = String::new();
-    let mut c = col;
-    while c > 0 {
-        c -= 1;
-        letters.insert(0, (b'A' + u8::try_from(c % 26).unwrap_or(0)) as char);
-        c /= 26;
-    }
-    format!("{letters}{row}")
 }
 
 #[cfg(test)]
@@ -220,13 +205,5 @@ mod tests {
             }
             Command::Evaluate { .. } => panic!("expected Classify"),
         }
-    }
-
-    #[test]
-    fn col_to_a1_converts_correctly() {
-        assert_eq!(col_to_a1(1, 1), "A1");
-        assert_eq!(col_to_a1(3, 5), "C5");
-        assert_eq!(col_to_a1(26, 1), "Z1");
-        assert_eq!(col_to_a1(27, 1), "AA1");
     }
 }
