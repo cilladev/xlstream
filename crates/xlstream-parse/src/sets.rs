@@ -2,19 +2,44 @@
 //!
 //! Sets are stored in upper-case; lookups normalise the incoming name to
 //! upper-case to give Excel-style case-insensitivity.
+//!
+//! # Precedence
+//!
+//! Some functions appear in `UNSUPPORTED_FUNCTIONS` despite having a more
+//! specific `UnsupportedReason` variant (`DynamicArray` for FILTER/UNIQUE/
+//! SORT/SORTBY/SEQUENCE/RANDARRAY; `VolatileUnsupported` for RAND/
+//! RANDBETWEEN). The classifier checks the specific variant first and
+//! emits the more descriptive reason; `is_unsupported` is the catch-all
+//! for anything that doesn't match a specific category.
 
 use phf::{phf_set, Set};
 
-/// Functions xlstream cannot stream.
-pub static UNSUPPORTED_FUNCTIONS: Set<&'static str> = phf_set! {
+/// Functions xlstream cannot stream. Superset: includes dynamic-array
+/// and volatile entries for catch-all lookup. The classifier checks
+/// `DYNAMIC_ARRAY_FUNCTIONS` and `VOLATILE_UNSUPPORTED` first for a
+/// more specific `UnsupportedReason`.
+pub(crate) static UNSUPPORTED_FUNCTIONS: Set<&'static str> = phf_set! {
     "OFFSET", "INDIRECT", "FILTER", "UNIQUE", "SORT", "SORTBY",
     "SEQUENCE", "RANDARRAY", "LAMBDA", "LET", "HYPERLINK",
     "WEBSERVICE", "CUBEVALUE", "CUBEMEMBER", "CUBESET",
     "RAND", "RANDBETWEEN",
 };
 
+/// Dynamic-array functions that spill to multiple cells.
+/// Classifier emits `UnsupportedReason::DynamicArray`.
+pub(crate) static DYNAMIC_ARRAY_FUNCTIONS: Set<&'static str> = phf_set! {
+    "FILTER", "UNIQUE", "SORT", "SORTBY", "SEQUENCE", "RANDARRAY",
+};
+
+/// Volatile functions whose per-cell semantics don't fit
+/// single-evaluation-per-run. Classifier emits
+/// `UnsupportedReason::VolatileUnsupported`.
+pub(crate) static VOLATILE_UNSUPPORTED: Set<&'static str> = phf_set! {
+    "RAND", "RANDBETWEEN",
+};
+
 /// Functions evaluable in a single column pre-pass.
-pub static AGGREGATE_FUNCTIONS: Set<&'static str> = phf_set! {
+pub(crate) static AGGREGATE_FUNCTIONS: Set<&'static str> = phf_set! {
     "SUM", "COUNT", "COUNTA", "AVERAGE", "MIN", "MAX", "PRODUCT",
     "SUMIF", "COUNTIF", "AVERAGEIF",
     "SUMIFS", "COUNTIFS", "AVERAGEIFS", "MINIFS", "MAXIFS",
@@ -22,13 +47,13 @@ pub static AGGREGATE_FUNCTIONS: Set<&'static str> = phf_set! {
 };
 
 /// Lookup functions allowed against pre-loaded lookup sheets.
-pub static LOOKUP_FUNCTIONS: Set<&'static str> = phf_set! {
+pub(crate) static LOOKUP_FUNCTIONS: Set<&'static str> = phf_set! {
     "VLOOKUP", "HLOOKUP", "XLOOKUP", "MATCH", "XMATCH", "INDEX", "CHOOSE",
 };
 
 /// Volatile functions whose semantics fit single-evaluation-per-run
 /// (the evaluator memoises in Phase 4).
-pub static VOLATILE_STREAMING_OK: Set<&'static str> = phf_set! {
+pub(crate) static VOLATILE_STREAMING_OK: Set<&'static str> = phf_set! {
     "TODAY", "NOW",
 };
 
@@ -84,6 +109,32 @@ pub fn is_volatile_streaming_ok(name: &str) -> bool {
     VOLATILE_STREAMING_OK.contains(name.to_uppercase().as_str())
 }
 
+/// `true` if `name` is in [`DYNAMIC_ARRAY_FUNCTIONS`] (case-insensitive).
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::sets::is_dynamic_array;
+/// assert!(is_dynamic_array("FILTER"));
+/// ```
+#[must_use]
+pub fn is_dynamic_array(name: &str) -> bool {
+    DYNAMIC_ARRAY_FUNCTIONS.contains(name.to_uppercase().as_str())
+}
+
+/// `true` if `name` is in [`VOLATILE_UNSUPPORTED`] (case-insensitive).
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::sets::is_volatile_unsupported;
+/// assert!(is_volatile_unsupported("RAND"));
+/// ```
+#[must_use]
+pub fn is_volatile_unsupported(name: &str) -> bool {
+    VOLATILE_UNSUPPORTED.contains(name.to_uppercase().as_str())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -118,5 +169,38 @@ mod tests {
         assert!(is_volatile_streaming_ok("TODAY"));
         assert!(is_volatile_streaming_ok("NOW"));
         assert!(!is_volatile_streaming_ok("RAND"));
+    }
+
+    #[test]
+    fn dynamic_array_set_lists_filter_unique_sort() {
+        assert!(is_dynamic_array("FILTER"));
+        assert!(is_dynamic_array("UNIQUE"));
+        assert!(is_dynamic_array("SORT"));
+        assert!(is_dynamic_array("RANDARRAY"));
+        assert!(!is_dynamic_array("SUM"));
+    }
+
+    #[test]
+    fn volatile_unsupported_set_lists_rand() {
+        assert!(is_volatile_unsupported("RAND"));
+        assert!(is_volatile_unsupported("RANDBETWEEN"));
+        assert!(!is_volatile_unsupported("TODAY"));
+    }
+
+    #[test]
+    #[allow(clippy::explicit_iter_loop)]
+    fn all_set_entries_are_uppercase() {
+        for set in [
+            &UNSUPPORTED_FUNCTIONS,
+            &AGGREGATE_FUNCTIONS,
+            &LOOKUP_FUNCTIONS,
+            &VOLATILE_STREAMING_OK,
+            &DYNAMIC_ARRAY_FUNCTIONS,
+            &VOLATILE_UNSUPPORTED,
+        ] {
+            for &entry in set.iter() {
+                assert_eq!(entry, entry.to_uppercase(), "set entry {entry:?} must be uppercase");
+            }
+        }
     }
 }
