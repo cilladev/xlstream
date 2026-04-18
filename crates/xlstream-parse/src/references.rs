@@ -1,6 +1,8 @@
-//! Reference types and (in Chunk 1) the [`extract_references`] walker.
+//! Reference types and the [`extract_references`] walker.
 
 use smallvec::SmallVec;
+
+use crate::ast::Ast;
 
 /// One Excel reference: cell, range, named range, external workbook ref,
 /// or table ref.
@@ -87,6 +89,100 @@ pub struct References {
     /// Every function name called (case-preserved, case-insensitively
     /// de-duplicated).
     pub functions: SmallVec<[String; 8]>,
+}
+
+/// Walk `ast` and collect every reference, sheet name, and function name.
+///
+/// Uses upstream's zero-alloc `visit_refs` walker for references; walks
+/// the upstream tree once more for function names. Both passes are
+/// stack-based.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::{extract_references, parse};
+/// let ast = parse("SUM(A:A)").unwrap();
+/// let refs = extract_references(&ast);
+/// assert_eq!(refs.ranges.len(), 1);
+/// ```
+#[must_use]
+pub fn extract_references(ast: &Ast) -> References {
+    let mut out = References::default();
+    ast.as_upstream().visit_refs(|rv| collect_view(rv, &mut out));
+    walk_functions(ast.as_upstream(), &mut out);
+    out
+}
+
+fn collect_view(rv: formualizer_parse::parser::RefView<'_>, out: &mut References) {
+    use formualizer_parse::parser::RefView as V;
+    match rv {
+        V::Cell { sheet, row, col, .. } => {
+            push_sheet(sheet, out);
+            out.cells.push(Reference::Cell { sheet: sheet.map(str::to_owned), row, col });
+        }
+        V::Range { sheet, start_row, end_row, start_col, end_col, .. } => {
+            push_sheet(sheet, out);
+            out.ranges.push(Reference::Range {
+                sheet: sheet.map(str::to_owned),
+                start_row,
+                end_row,
+                start_col,
+                end_col,
+            });
+        }
+        V::External { raw, book, sheet, .. } => {
+            push_sheet(Some(sheet), out);
+            out.ranges.push(Reference::External {
+                raw: raw.to_owned(),
+                book: book.to_owned(),
+                sheet: sheet.to_owned(),
+            });
+        }
+        V::Table { name, specifier } => {
+            out.ranges.push(Reference::Table {
+                name: name.to_owned(),
+                specifier: specifier.map(|s| format!("{s}")),
+            });
+        }
+        V::NamedRange { name } => {
+            out.ranges.push(Reference::Named(name.to_owned()));
+        }
+    }
+}
+
+fn push_sheet(sheet: Option<&str>, out: &mut References) {
+    if let Some(s) = sheet {
+        if !out.sheets.iter().any(|existing| existing == s) {
+            out.sheets.push(s.to_owned());
+        }
+    }
+}
+
+fn walk_functions(node: &formualizer_parse::ASTNode, out: &mut References) {
+    use formualizer_parse::ASTNodeType as T;
+    match &node.node_type {
+        T::Literal(_) | T::Reference { .. } => {}
+        T::UnaryOp { expr, .. } => walk_functions(expr, out),
+        T::BinaryOp { left, right, .. } => {
+            walk_functions(left, out);
+            walk_functions(right, out);
+        }
+        T::Function { name, args } => {
+            if !out.functions.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                out.functions.push(name.clone());
+            }
+            for a in args {
+                walk_functions(a, out);
+            }
+        }
+        T::Array(rows) => {
+            for row in rows {
+                for cell in row {
+                    walk_functions(cell, out);
+                }
+            }
+        }
+    }
 }
 
 impl Reference {
