@@ -39,11 +39,11 @@ pub enum XlStreamError {
     #[error("I/O error reading {path}: {source}")]
     Io { path: PathBuf, #[source] source: std::io::Error },
 
-    #[error("xlsx parse error: {0}")]
-    Xlsx(#[from] calamine::XlsxError),
+    #[error("xlsx error: {0}")]
+    Xlsx(String),  // stringified calamine::XlsxError — keeps xlstream-core free of I/O deps
 
     #[error("xlsx write error: {0}")]
-    XlsxWrite(#[from] rust_xlsxwriter::XlsxError),
+    XlsxWrite(String),  // stringified rust_xlsxwriter::XlsxError
 
     #[error("formula parse error at {address}{}: {message}\n  formula: {formula}",
         position.map_or(String::new(), |p| format!(" (position {p})")))]
