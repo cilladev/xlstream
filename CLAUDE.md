@@ -75,6 +75,7 @@ xlstream/
 
 ### Before you touch code
 
+0. **Use `/rust-skills` before writing any Rust code.** Covers idiomatic patterns, error handling, type design, and common pitfalls. Use it alongside (not instead of) any other applicable skills.
 1. **Read the current phase doc.** Find it via [`docs/phases/README.md`](docs/phases/README.md). You are implementing a specific checkbox in a specific phase. Don't free-lance.
 2. **Read the architecture doc that covers your area.** Unclear architecture → stop and ask. Do not invent.
 3. **Search for existing patterns.** If three other builtins handle errors a given way, yours does too. Consistency outranks cleverness.

@@ -63,3 +63,5 @@ refs/
 # completes. Real decisions go in docs/decisions/ (ADRs). Real design goes
 # in docs/architecture/.
 docs/superpowers/
+
+.claude
