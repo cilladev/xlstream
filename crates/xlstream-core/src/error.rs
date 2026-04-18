@@ -45,7 +45,8 @@ pub enum XlStreamError {
     },
 
     /// The formula parser rejected the input as malformed.
-    #[error("formula parse error at {address}: {message}\n  formula: {formula}")]
+    #[error("formula parse error at {address}{}: {message}\n  formula: {formula}",
+        position.map_or(String::new(), |p| format!(" (position {p})")))]
     FormulaParse {
         /// The cell address that held the formula.
         address: String,
@@ -53,6 +54,9 @@ pub enum XlStreamError {
         formula: String,
         /// Parser-supplied diagnostic.
         message: String,
+        /// Byte offset into `formula` where the parser failed, if upstream
+        /// reported one.
+        position: Option<usize>,
     },
 
     /// The classifier could not assign a [`Classification`] to a formula.
@@ -89,6 +93,30 @@ mod tests {
     fn internal_variant_formats_with_message() {
         let e = XlStreamError::Internal("oops".into());
         assert_eq!(e.to_string(), "internal invariant violation: oops");
+    }
+
+    #[test]
+    fn formula_parse_includes_position_in_message_when_present() {
+        let e = XlStreamError::FormulaParse {
+            address: "Sheet1!A1".into(),
+            formula: "SUM(A1:".into(),
+            message: "expected closing paren".into(),
+            position: Some(7),
+        };
+        let msg = e.to_string();
+        assert!(msg.contains("position 7"), "expected position in message: {msg}");
+    }
+
+    #[test]
+    fn formula_parse_omits_position_when_absent() {
+        let e = XlStreamError::FormulaParse {
+            address: "Sheet1!A1".into(),
+            formula: "SUM(".into(),
+            message: "unexpected end of input".into(),
+            position: None,
+        };
+        let msg = e.to_string();
+        assert!(!msg.contains("position"), "did not expect 'position' in: {msg}");
     }
 
     #[test]

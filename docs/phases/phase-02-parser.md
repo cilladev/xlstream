@@ -14,11 +14,11 @@
 
 ### Parser
 
-- [ ] Integrate `formualizer-parse`: call its parser, map its AST to our `Ast` type.
-  - [ ] Define our `Ast` as either a re-export of the upstream type or a thin wrapper. Keep wrapper if we'll extend with extra fields (source spans, rewritten nodes).
-- [ ] `parse(expr: &str)` returns `Result<Ast, XlStreamError>` with `FormulaParse` variant on error.
-- [ ] Include source-error context: line/column if available from upstream, otherwise the offending substring.
-- [ ] Rustdoc + doctest.
+- [x] Integrate `formualizer-parse`: call its parser, map its AST to our `Ast` type.
+  - [x] Define our `Ast` as either a re-export of the upstream type or a thin wrapper. Keep wrapper if we'll extend with extra fields (source spans, rewritten nodes).
+- [x] `parse(expr: &str)` returns `Result<Ast, XlStreamError>` with `FormulaParse` variant on error.
+- [x] Include source-error context: line/column if available from upstream, otherwise the offending substring.
+- [x] Rustdoc + doctest.
 
 ### Reference extraction
 

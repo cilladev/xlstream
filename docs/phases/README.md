@@ -1,6 +1,6 @@
 # Phases — roadmap
 
-> **Current phase: 0 — Foundation.** See [`phase-00-foundation.md`](phase-00-foundation.md).
+> **Current phase: 2 — Parser integration.** See [`phase-02-parser.md`](phase-02-parser.md).
 
 ## How this works
 
@@ -55,7 +55,7 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 
 | # | Phase | File | Status |
 |---|---|---|---|
-| 0 | Foundation | [`phase-00-foundation.md`](phase-00-foundation.md) | in progress |
+| 0 | Foundation | [`phase-00-foundation.md`](phase-00-foundation.md) | ✓ complete |
 | 1 | Scaffolding | [`phase-01-scaffolding.md`](phase-01-scaffolding.md) | ✓ complete |
 | 2 | Parser integration | [`phase-02-parser.md`](phase-02-parser.md) | in progress |
 | 3 | I/O layer | [`phase-03-io.md`](phase-03-io.md) | not started |

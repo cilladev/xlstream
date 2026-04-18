@@ -1,33 +1,122 @@
-//! The [`Ast`] placeholder.
+//! The opaque [`Ast`] — wraps the raw upstream `ASTNode` plus our internal
+//! tree of [`Node`]s mirroring it.
+//!
+//! Why both: `extract_references` (Chunk 1) uses upstream's zero-alloc
+//! `visit_refs` walker via [`Ast::as_upstream`]; classification + rewrite
+//! (Chunks 3-4) use the mirror so we can splice in `Node::PreludeRef`
+//! (Chunk 4) without leaking upstream types in our public API.
 
-/// Parsed-formula AST. Phase 1 ships this as an opaque placeholder; Phase 2
-/// replaces the internals with a wrapper around `formualizer_parse::Ast`.
+use xlstream_core::CellError;
+
+use crate::references::Reference;
+
+/// Numeric or boolean literal carried by [`Node::Literal`].
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum NumLiteral {
+    /// An `f64` numeric value.
+    Number(f64),
+    /// A boolean literal (`TRUE` / `FALSE`).
+    Bool(bool),
+}
+
+/// One node in the parsed-formula tree. Mirrors upstream's
+/// `formualizer_parse::ASTNodeType` so we can splice in `PreludeRef`
+/// (Chunk 4) and so error literals are first-class via `Node::Error`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Node {
+    /// A scalar literal.
+    Literal(NumLiteral),
+    /// A text literal.
+    Text(String),
+    /// An error literal (`=#REF!`, `=#DIV/0!`, etc.).
+    Error(CellError),
+    /// A reference to one or more cells.
+    Reference(Reference),
+    /// Unary operator (`-`, `%`).
+    UnaryOp { op: String, expr: Box<Node> },
+    /// Binary operator (`+ - * / ^ & = <> < > <= >= :`).
+    BinaryOp { op: String, left: Box<Node>, right: Box<Node> },
+    /// Function call.
+    Function { name: String, args: Vec<Node> },
+    /// Array constant `{1,2;3,4}`. `Vec` instead of `SmallVec` because
+    /// inline `Node` storage would create a layout cycle.
+    Array(Vec<Vec<Node>>),
+    // PreludeRef variant added in Chunk 4 (rewrite.rs).
+}
+
+/// Parsed formula. Opaque by design — internals are crate-internal so we
+/// can evolve the tree across phases without breaking semver.
+///
+/// Build one with [`crate::parse`].
 ///
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::Ast;
-/// let a = Ast::default();
-/// let b = Ast::default();
-/// assert_eq!(a, b);
+/// use xlstream_parse::parse;
+/// let ast = parse("1+2").unwrap();
+/// assert!(format!("{ast:?}").contains("BinaryOp"));
 /// ```
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Ast {
-    // Intentionally private and empty in Phase 1. Phase 2 adds the
-    // upstream-AST field.
-    _private: (),
+    /// Original upstream tree, retained for `visit_refs` etc.
+    /// Read by `as_upstream()` in Chunk 1 (`extract_references`).
+    #[allow(dead_code)]
+    pub(crate) upstream: formualizer_parse::ASTNode,
+    /// Our mirror tree. Used by classify + rewrite.
+    pub(crate) root: Node,
+}
+
+impl PartialEq for Ast {
+    /// Equality compares the mirror tree only.
+    fn eq(&self, other: &Self) -> bool {
+        self.root == other.root
+    }
+}
+
+impl Ast {
+    /// Test-only constructor that builds trees without going through
+    /// [`crate::parse`].
+    #[doc(hidden)]
+    #[must_use]
+    #[allow(private_interfaces)]
+    pub fn from_root_for_tests(root: Node) -> Self {
+        let upstream = formualizer_parse::parse("=0").unwrap_or_else(|_| unreachable!());
+        Self { upstream, root }
+    }
+
+    /// Crate-internal accessor for the raw upstream tree.
+    /// Used by `extract_references` in Chunk 1.
+    #[must_use]
+    #[allow(dead_code)]
+    pub(crate) fn as_upstream(&self) -> &formualizer_parse::ASTNode {
+        &self.upstream
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
 
     use super::*;
 
     #[test]
-    fn default_constructs_empty_placeholder() {
-        let a = Ast::default();
-        let b = Ast::default();
-        assert_eq!(a, b);
+    fn ast_carries_both_upstream_and_mirror() {
+        let ast = Ast::from_root_for_tests(Node::Literal(NumLiteral::Number(42.0)));
+        assert!(format!("{ast:?}").contains("42"), "expected literal in debug: {ast:?}");
+    }
+
+    #[test]
+    fn node_literal_compares_by_value() {
+        assert_eq!(Node::Literal(NumLiteral::Bool(true)), Node::Literal(NumLiteral::Bool(true)));
+        assert_ne!(Node::Literal(NumLiteral::Bool(true)), Node::Literal(NumLiteral::Bool(false)));
+    }
+
+    #[test]
+    fn node_error_variant_carries_cell_error() {
+        let n = Node::Error(CellError::Ref);
+        match n {
+            Node::Error(CellError::Ref) => (),
+            other => panic!("expected Error(Ref), got {other:?}"),
+        }
     }
 }
