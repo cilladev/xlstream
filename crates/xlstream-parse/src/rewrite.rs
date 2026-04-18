@@ -52,7 +52,7 @@ pub enum LookupKind {
     HLookup,
     /// `XLOOKUP`
     XLookup,
-    /// `INDEX` + `MATCH` combo
+    /// `INDEX` + `MATCH` combo (reserved for Phase 8; not constructed today).
     IndexMatch,
 }
 
@@ -77,6 +77,9 @@ pub struct AggregateKey {
 
 /// Key identifying a prelude-loaded lookup index.
 ///
+/// `key_index` and `value_index` are 1-based. For `VLookup`/`XLookup`
+/// they are column indices; for `HLookup` they are row indices.
+///
 /// # Examples
 ///
 /// ```
@@ -84,8 +87,8 @@ pub struct AggregateKey {
 /// let k = LookupKey {
 ///     kind: LookupKind::VLookup,
 ///     sheet: "Region Info".into(),
-///     key_column: 1,
-///     value_column: 2,
+///     key_index: 1,
+///     value_index: 2,
 /// };
 /// assert_eq!(k.sheet, "Region Info");
 /// ```
@@ -95,10 +98,10 @@ pub struct LookupKey {
     pub kind: LookupKind,
     /// Sheet name the lookup reads from.
     pub sheet: String,
-    /// 1-based column used as the search key.
-    pub key_column: u32,
-    /// 1-based column from which the result value is returned.
-    pub value_column: u32,
+    /// 1-based index of the search key (column for VLOOKUP, row for HLOOKUP).
+    pub key_index: u32,
+    /// 1-based index of the return value (column for VLOOKUP, row for HLOOKUP).
+    pub value_index: u32,
 }
 
 /// Discriminant for prelude data: either an aggregate scalar or a lookup
@@ -194,14 +197,19 @@ fn recurse_function(node: Node, ctx: &ClassificationContext) -> Node {
 }
 
 /// Try to extract an [`AggKind`] from a function name.
+///
+/// Conditional aggregates (SUMIF, COUNTIF, AVERAGEIF, *IFS) are
+/// excluded — they carry criteria the prelude can't discard. They fall
+/// through to `recurse_function_owned` and keep their Function node
+/// intact. Phase 7 handles them with per-criteria groupby tables.
 fn agg_kind_for(name: &str) -> Option<AggKind> {
     match name.to_uppercase().as_str() {
-        "SUM" | "SUMIF" | "SUMIFS" => Some(AggKind::Sum),
-        "COUNT" | "COUNTIF" | "COUNTIFS" => Some(AggKind::Count),
+        "SUM" => Some(AggKind::Sum),
+        "COUNT" => Some(AggKind::Count),
         "COUNTA" => Some(AggKind::CountA),
-        "AVERAGE" | "AVERAGEIF" | "AVERAGEIFS" => Some(AggKind::Average),
-        "MIN" | "MINIFS" => Some(AggKind::Min),
-        "MAX" | "MAXIFS" => Some(AggKind::Max),
+        "AVERAGE" => Some(AggKind::Average),
+        "MIN" => Some(AggKind::Min),
+        "MAX" => Some(AggKind::Max),
         "PRODUCT" => Some(AggKind::Product),
         "MEDIAN" => Some(AggKind::Median),
         _ => None,
@@ -281,8 +289,8 @@ fn rewrite_vlookup(args: &[Node], _ctx: &ClassificationContext) -> Option<Node> 
     Some(Node::PreludeRef(PreludeKey::Lookup(LookupKey {
         kind: LookupKind::VLookup,
         sheet,
-        key_column,
-        value_column,
+        key_index: key_column,
+        value_index: value_column,
     })))
 }
 
@@ -298,8 +306,8 @@ fn rewrite_hlookup(args: &[Node], _ctx: &ClassificationContext) -> Option<Node> 
     Some(Node::PreludeRef(PreludeKey::Lookup(LookupKey {
         kind: LookupKind::HLookup,
         sheet,
-        key_column,
-        value_column,
+        key_index: key_column,
+        value_index: value_column,
     })))
 }
 
@@ -315,8 +323,8 @@ fn rewrite_xlookup(args: &[Node], _ctx: &ClassificationContext) -> Option<Node> 
     Some(Node::PreludeRef(PreludeKey::Lookup(LookupKey {
         kind: LookupKind::XLookup,
         sheet,
-        key_column,
-        value_column,
+        key_index: key_column,
+        value_index: value_column,
     })))
 }
 

@@ -135,16 +135,16 @@ fn nested_aggregates_both_collapse() {
 }
 
 #[test]
-fn vlookup_key_and_value_columns_are_correct() {
+fn vlookup_key_and_value_indices_are_correct() {
     // VLOOKUP(A2, 'Lookup'!A:D, 3, FALSE)
-    // key_column = 1 (A), value_column = 1 + 3 - 1 = 3
+    // key_index = 1 (A), value_index = 1 + 3 - 1 = 3
     let ast = parse("VLOOKUP(A2, 'Lookup'!A:D, 3, FALSE)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5).with_lookup_sheet("Lookup");
     let verdict = classify(&ast, &ctx);
     let rewritten = rewrite(ast, &ctx, &verdict);
     let dbg = root_dbg(&rewritten);
-    assert!(dbg.contains("key_column: 1"), "expected key_column 1: {dbg}");
-    assert!(dbg.contains("value_column: 3"), "expected value_column 3: {dbg}");
+    assert!(dbg.contains("key_index: 1"), "expected key_index 1: {dbg}");
+    assert!(dbg.contains("value_index: 3"), "expected value_index 3: {dbg}");
 }
 
 #[test]
@@ -159,14 +159,14 @@ fn prelude_key_lookup_equality() {
     let a = PreludeKey::Lookup(LookupKey {
         kind: LookupKind::VLookup,
         sheet: "S".into(),
-        key_column: 1,
-        value_column: 2,
+        key_index: 1,
+        value_index: 2,
     });
     let b = PreludeKey::Lookup(LookupKey {
         kind: LookupKind::VLookup,
         sheet: "S".into(),
-        key_column: 1,
-        value_column: 2,
+        key_index: 1,
+        value_index: 2,
     });
     assert_eq!(a, b);
 }
