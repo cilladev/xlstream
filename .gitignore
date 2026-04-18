@@ -57,3 +57,9 @@ MANAGER.md
 # committed. Recreate with the clone commands in CLAUDE.md (or just
 # `git clone` manually; the list is small).
 refs/
+
+# Per-phase implementation plans written by the dev agent. Ephemeral —
+# they describe intent at phase-kickoff time and rot the moment the phase
+# completes. Real decisions go in docs/decisions/ (ADRs). Real design goes
+# in docs/architecture/.
+docs/superpowers/
