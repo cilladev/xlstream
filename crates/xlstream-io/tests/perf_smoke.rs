@@ -1,21 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![cfg(not(debug_assertions))]
 
 #[allow(dead_code)]
 mod helpers;
 
 use xlstream_core::Value;
 use xlstream_io::{Reader, Writer};
-
-/// Debug builds are ~4-5x slower than release. Apply a multiplier so the
-/// smoke tests pass in both profiles. The *real* budget is the release number;
-/// the debug multiplier just keeps `cargo test` green.
-const fn time_limit(release_secs: u64) -> u64 {
-    if cfg!(debug_assertions) {
-        release_secs * 5
-    } else {
-        release_secs
-    }
-}
 
 fn generate_large_fixture(rows: u32, cols: u16) -> tempfile::NamedTempFile {
     let f = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
@@ -34,7 +24,6 @@ fn generate_large_fixture(rows: u32, cols: u16) -> tempfile::NamedTempFile {
 #[test]
 fn read_100k_rows_under_5_seconds() {
     let f = generate_large_fixture(100_000, 20);
-    let limit = time_limit(5);
     let start = std::time::Instant::now();
     let mut reader = Reader::open(f.path()).unwrap();
     let mut stream = reader.cells("Data").unwrap();
@@ -44,13 +33,12 @@ fn read_100k_rows_under_5_seconds() {
     }
     let elapsed = start.elapsed();
     assert_eq!(count, 100_000);
-    assert!(elapsed.as_secs() < limit, "read took {elapsed:?}, expected < {limit}s");
+    assert!(elapsed.as_secs() < 5, "read took {elapsed:?}, expected < 5s");
     eprintln!("read_100k: {elapsed:?}");
 }
 
 #[test]
 fn write_100k_rows_under_3_seconds() {
-    let limit = time_limit(3);
     let f = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
     let start = std::time::Instant::now();
     let mut writer = Writer::create(f.path()).unwrap();
@@ -62,13 +50,12 @@ fn write_100k_rows_under_3_seconds() {
     drop(sheet);
     writer.finish().unwrap();
     let elapsed = start.elapsed();
-    assert!(elapsed.as_secs() < limit, "write took {elapsed:?}, expected < {limit}s");
+    assert!(elapsed.as_secs() < 3, "write took {elapsed:?}, expected < 3s");
     eprintln!("write_100k: {elapsed:?}");
 }
 
 #[test]
 fn round_trip_100k_under_10_seconds() {
-    let limit = time_limit(10);
     let input = generate_large_fixture(100_000, 20);
     let output = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
     let start = std::time::Instant::now();
@@ -85,6 +72,6 @@ fn round_trip_100k_under_10_seconds() {
     writer.finish().unwrap();
 
     let elapsed = start.elapsed();
-    assert!(elapsed.as_secs() < limit, "round-trip took {elapsed:?}, expected < {limit}s");
+    assert!(elapsed.as_secs() < 10, "round-trip took {elapsed:?}, expected < 10s");
     eprintln!("round_trip_100k: {elapsed:?}");
 }
