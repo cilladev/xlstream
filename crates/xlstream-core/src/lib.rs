@@ -21,11 +21,13 @@
 )]
 #![allow(clippy::module_name_repetitions, clippy::cargo_common_metadata)]
 
+mod address;
 mod cell_error;
 mod date;
 mod error;
 mod value;
 
+pub use address::col_row_to_a1;
 pub use cell_error::CellError;
 pub use date::ExcelDate;
 pub use error::XlStreamError;

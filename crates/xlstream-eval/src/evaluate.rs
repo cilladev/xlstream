@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
 
-use xlstream_core::{Value, XlStreamError};
+use xlstream_core::{col_row_to_a1, Value, XlStreamError};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
     classify, extract_references, parse, Ast, Classification, ClassificationContext, Reference,
@@ -199,20 +199,6 @@ fn build_eval_plan(
     Ok((topo_order, col_asts))
 }
 
-/// Convert 1-based column + row to A1 notation (e.g. col=3, row=2 → "C2").
-#[must_use]
-fn col_row_to_a1(col: u32, row: u32) -> String {
-    let mut letters = String::new();
-    let mut c = col;
-    while c > 0 {
-        c -= 1;
-        let ch = char::from(b'A' + u8::try_from(c % 26).unwrap_or(0));
-        letters.insert(0, ch);
-        c /= 26;
-    }
-    format!("{letters}{row}")
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -225,19 +211,6 @@ mod tests {
         assert_eq!(s.rows_processed, 0);
         assert_eq!(s.formulas_evaluated, 0);
         assert_eq!(s.duration, std::time::Duration::ZERO);
-    }
-
-    #[test]
-    fn col_row_to_a1_single_letter() {
-        assert_eq!(col_row_to_a1(1, 1), "A1");
-        assert_eq!(col_row_to_a1(3, 5), "C5");
-        assert_eq!(col_row_to_a1(26, 1), "Z1");
-    }
-
-    #[test]
-    fn col_row_to_a1_two_letters() {
-        assert_eq!(col_row_to_a1(27, 1), "AA1");
-        assert_eq!(col_row_to_a1(28, 2), "AB2");
     }
 
     #[test]
