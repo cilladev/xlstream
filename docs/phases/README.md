@@ -1,6 +1,6 @@
 # Phases — roadmap
 
-> **Current phase: 2 — Parser integration.** See [`phase-02-parser.md`](phase-02-parser.md).
+> **Current phase: 3 — I/O layer.** See [`phase-03-io.md`](phase-03-io.md).
 
 ## How this works
 
@@ -57,7 +57,7 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 |---|---|---|---|
 | 0 | Foundation | [`phase-00-foundation.md`](phase-00-foundation.md) | ✓ complete |
 | 1 | Scaffolding | [`phase-01-scaffolding.md`](phase-01-scaffolding.md) | ✓ complete |
-| 2 | Parser integration | [`phase-02-parser.md`](phase-02-parser.md) | in progress |
+| 2 | Parser integration | [`phase-02-parser.md`](phase-02-parser.md) | ✓ complete |
 | 3 | I/O layer | [`phase-03-io.md`](phase-03-io.md) | not started |
 | 4 | Streaming core | [`phase-04-streaming-core.md`](phase-04-streaming-core.md) | not started |
 | 5 | Arithmetic, comparison, concat | [`phase-05-arithmetic.md`](phase-05-arithmetic.md) | not started |
