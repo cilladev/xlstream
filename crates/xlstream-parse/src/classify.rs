@@ -95,13 +95,14 @@ impl UnsupportedReason {
     #[must_use]
     pub fn doc_link(&self) -> &'static str {
         match self {
-            Self::NonCurrentRowRef | Self::CircularRef => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#classification-algorithm",
+            Self::NonCurrentRowRef
+            | Self::CircularRef
+            | Self::LookupIntoStreamingSheet
+            | Self::ExternalReference => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#classification-algorithm",
             Self::UnsupportedFunction(_) | Self::DynamicArray | Self::VolatileUnsupported => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#why-offset-and-indirect-are-unsupported",
             Self::UnboundedRange => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-of-a-column",
             Self::NonStaticCriteria => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-pre-pass",
             Self::LookupSheetNotPrepared => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#lookup-index-pre-pass",
-            Self::LookupIntoStreamingSheet => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#lookup-into-loaded-sheet",
-            Self::ExternalReference => "https://github.com/cilladev/xlstream/blob/main/MANAGER.md#permanent-exclusions",
             Self::TableReference | Self::NamedRange => "https://github.com/cilladev/xlstream/blob/main/docs/backlog/v0.2.md",
             Self::NestedUnsupported => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md",
         }
@@ -128,13 +129,9 @@ pub enum Classification {
     /// Formula mixes row-local, aggregate, and/or lookup reads — still
     /// streamable via prelude + row data.
     Mixed,
-    /// Formula cannot be streamed.
-    Unsupported {
-        /// Specific reason for refusal.
-        reason: UnsupportedReason,
-        /// Stable documentation URL explaining the refusal class.
-        doc_link: &'static str,
-    },
+    /// Formula cannot be streamed. Use [`UnsupportedReason::doc_link`] for
+    /// the stable documentation URL.
+    Unsupported(UnsupportedReason),
 }
 
 /// Context passed to [`classify`]. Real fields land in Chunk 3.
@@ -159,13 +156,11 @@ pub struct ClassificationContext {
 /// use xlstream_parse::{classify, parse, Classification, ClassificationContext};
 /// let ast = parse("1+2").unwrap();
 /// let ctx = ClassificationContext::default();
-/// assert!(matches!(classify(&ast, &ctx), Classification::Unsupported { .. }));
+/// assert!(matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
 /// ```
 #[must_use]
 pub fn classify(_ast: &Ast, _ctx: &ClassificationContext) -> Classification {
-    let reason = UnsupportedReason::NestedUnsupported;
-    let doc_link = reason.doc_link();
-    Classification::Unsupported { reason, doc_link }
+    Classification::Unsupported(UnsupportedReason::NestedUnsupported)
 }
 
 #[cfg(test)]
@@ -179,9 +174,9 @@ mod tests {
         let ast = crate::parse("1+2").unwrap();
         let ctx = ClassificationContext::default();
         match classify(&ast, &ctx) {
-            Classification::Unsupported { reason, doc_link } => {
+            Classification::Unsupported(reason) => {
                 assert!(matches!(reason, UnsupportedReason::NestedUnsupported));
-                assert!(doc_link.starts_with("https://"));
+                assert!(reason.doc_link().starts_with("https://"));
             }
             other => panic!("expected Unsupported, got {other:?}"),
         }
