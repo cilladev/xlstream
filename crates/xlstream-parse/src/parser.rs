@@ -24,6 +24,7 @@ use crate::references::Reference;
 /// let ast = parse("SUM(A1:A10)").expect("parse failed");
 /// assert!(format!("{ast:?}").contains("Function"));
 /// ```
+#[must_use = "parsing a formula is useless without inspecting the result"]
 pub fn parse(expr: &str) -> Result<Ast, XlStreamError> {
     let with_eq = format!("={expr}");
     let upstream = formualizer_parse::parse(&with_eq).map_err(|e| XlStreamError::FormulaParse {

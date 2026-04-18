@@ -48,6 +48,7 @@ impl CellStream {
     /// let mut s = CellStream::empty();
     /// assert!(s.next_row().is_err());
     /// ```
+    #[must_use = "advancing the stream is useless without inspecting the result"]
     pub fn next_row(&mut self) -> Result<Option<Vec<Value>>, XlStreamError> {
         Err(XlStreamError::Internal(
             "unimplemented: CellStream::next_row — lands in Phase 3".into(),

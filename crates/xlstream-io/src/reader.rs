@@ -39,6 +39,7 @@ impl Reader {
     /// use xlstream_io::Reader;
     /// assert!(Reader::open(Path::new("x.xlsx")).is_err());
     /// ```
+    #[must_use = "opening a reader is useless without inspecting the result"]
     pub fn open(_path: &Path) -> Result<Self, XlStreamError> {
         Err(XlStreamError::Internal("unimplemented: Reader::open — lands in Phase 3".into()))
     }

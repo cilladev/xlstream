@@ -45,6 +45,7 @@ pub struct EvaluateSummary {
 /// let err = evaluate(Path::new("in.xlsx"), Path::new("out.xlsx"), None).unwrap_err();
 /// assert!(err.to_string().contains("unimplemented"));
 /// ```
+#[must_use = "evaluation results must be inspected for errors"]
 pub fn evaluate(
     _input: &Path,
     _output: &Path,

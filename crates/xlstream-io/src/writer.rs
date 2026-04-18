@@ -37,6 +37,7 @@ impl Writer {
     /// use xlstream_io::Writer;
     /// assert!(Writer::create(Path::new("x.xlsx")).is_err());
     /// ```
+    #[must_use = "creating a writer is useless without inspecting the result"]
     pub fn create(_path: &Path) -> Result<Self, XlStreamError> {
         Err(XlStreamError::Internal("unimplemented: Writer::create — lands in Phase 3".into()))
     }
