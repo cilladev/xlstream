@@ -71,6 +71,9 @@ For each formula found in the main sheet, walk the AST. Record every `CellRef`, 
 | Self-reference (`A2` in cell `A2`) | **Unsupported** (circular) |
 | Function in the `VOLATILE_STREAMING_OK` set (`TODAY`, `NOW`, `RAND`) | **Supported** with single-evaluation-per-run semantics |
 | Function in the `UNSUPPORTED` set (`OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`) | **Unsupported** |
+| Named range (`MyRange`) | **Unsupported** (v0.2 candidate; requires name-resolution layer) |
+| Table reference (`Table1[Column]`) | **Unsupported** (v0.2 candidate; requires table-definition loading) |
+| External reference (`[Book2.xlsx]Sheet1!A1`) | **Unsupported** (permanent; violates single-file model) |
 
 A formula is **Supported** iff it is RowLocal, AggregateOnly, LookupOnly, or a mixture whose sub-expressions each fall into one of those shapes. Otherwise **Unsupported** → refused with a clear error.
 

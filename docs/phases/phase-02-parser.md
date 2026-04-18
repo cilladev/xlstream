@@ -37,8 +37,8 @@
   - [ ] `AggregateOnly` — root is a supported aggregate function; all range args are whole-column or fixed.
   - [ ] `LookupOnly` — supported lookup function with cross-sheet range into a lookup sheet.
   - [ ] `Mixed` — recurses; ok if every sub-expression classifies.
-  - [ ] `Unsupported(UnsupportedReason)` — with a specific reason + doc link.
-- [ ] `UnsupportedReason` enum: `ForwardRowRef`, `CircularRef`, `UnsupportedFunction(String)`, `UnboundedRange`, `NonStaticCriteria`, `DynamicArray`, `VolatileUnsupported`, etc.
+  - [ ] `Unsupported(UnsupportedReason)` — with a specific reason.
+- [ ] `UnsupportedReason` enum: `ForwardRowRef`, `CircularRef`, `UnsupportedFunction(String)`, `UnboundedRange`, `NonStaticCriteria`, `DynamicArray`, `VolatileUnsupported`, `TableReference`, `NamedRange`, `ExternalReference`, etc.
 - [ ] Support-set constants:
   - [ ] `UNSUPPORTED_FUNCTIONS`: `OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`, `SORTBY`, `SEQUENCE`, `RANDARRAY`, `LAMBDA`, `LET`, `HYPERLINK` (as function), `WEBSERVICE`, `CUBEVALUE`, ...
   - [ ] `AGGREGATE_FUNCTIONS`: `SUM`, `COUNT`, `COUNTA`, `AVERAGE`, `MIN`, `MAX`, `PRODUCT`, `SUMIF`, `COUNTIF`, `AVERAGEIF`, `SUMIFS`, `COUNTIFS`, `AVERAGEIFS`, `MINIFS`, `MAXIFS`, `MEDIAN`.
@@ -65,6 +65,9 @@
   - [ ] Circular reference — Unsupported.
   - [ ] `VLOOKUP(A&B, Sheet2!D:E, 2, FALSE)` — LookupOnly, concatenated-key via helper column on lookup sheet.
   - [ ] Nested functions mixing supported + unsupported → Unsupported.
+  - [ ] `Table1[Column]` — Unsupported (table reference).
+  - [ ] `MyNamedRange` — Unsupported (named range).
+  - [ ] `[Book2.xlsx]Sheet1!A1` — Unsupported (external reference).
 - [ ] Reference-extraction tests for each variant.
 - [ ] AST rewrite golden tests.
 
@@ -73,24 +76,27 @@
 - [ ] Every `Unsupported` path produces a user-facing message that:
   - [ ] Quotes the formula text.
   - [ ] Names the specific reason.
-  - [ ] Includes a doc link (static `&'static str`).
+  - [ ] Includes a doc link (placeholder URL for v0.1; real links land with the docs site in Phase 13/14).
 - [ ] Tests assert on message substrings.
 
 ### CLI integration
 
-- [ ] `xlstream-cli classify path.xlsx` lists every formula + classification.
-- [ ] Useful smoke test for development: "what would xlstream do with this workbook?"
+- [ ] `xlstream-cli classify "FORMULA"` parses and classifies a formula string passed as argument.
+- [ ] Useful smoke test for development: "what would xlstream do with this formula?"
+- [ ] File-level classification (`classify path.xlsx`) defers to Phase 3 when I/O is wired up.
 
 ## Verification
 
 ```bash
 cargo test -p xlstream-parse --all-features
 cargo test --doc -p xlstream-parse
-cargo run -p xlstream-cli -- classify fixtures/canonical/benchmark_small.xlsx
+cargo run -p xlstream-cli -- classify "SUM(A:A)"
+cargo run -p xlstream-cli -- classify "VLOOKUP(A1, Sheet2!A:C, 2, FALSE)"
+cargo run -p xlstream-cli -- classify "OFFSET(A1, 1, 0)"
 ```
 
-The `classify` subcommand should print ~20 lines, one per formula, each with address + text + classification.
+Each `classify` invocation should print the formula text + classification verdict.
 
 ## Done when
 
-All classification tests pass. Reference extraction covers every AST shape. CLI `classify` works on a real fixture.
+All classification tests pass (30+, including table/named-range/external refusals). Reference extraction covers every AST shape. CLI `classify` works on formula strings.
