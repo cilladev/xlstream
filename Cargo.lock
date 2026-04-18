@@ -1199,6 +1199,8 @@ dependencies = [
 name = "xlstream-eval"
 version = "0.1.0"
 dependencies = [
+ "rust_xlsxwriter",
+ "tempfile",
  "tracing",
  "xlstream-core",
  "xlstream-io",
