@@ -82,9 +82,7 @@
 
 ### CLI integration
 
-- [ ] `xlstream-cli classify "FORMULA"` parses and classifies a formula string passed as argument.
-- [ ] Useful smoke test for development: "what would xlstream do with this formula?"
-- [ ] File-level classification (`classify path.xlsx`) defers to Phase 3 when I/O is wired up.
+- [x] `xlstream-cli classify "<formula>"` parses + classifies a single formula string. Useful smoke test: "what would xlstream say about this expression?". File-level classification (`classify path.xlsx`) lands in Phase 3 with the I/O layer.
 
 ## Verification
 

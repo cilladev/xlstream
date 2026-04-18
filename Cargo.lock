@@ -1185,6 +1185,7 @@ dependencies = [
  "xlstream-core",
  "xlstream-eval",
  "xlstream-io",
+ "xlstream-parse",
 ]
 
 [[package]]

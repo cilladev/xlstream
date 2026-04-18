@@ -1,8 +1,4 @@
-//! xlstream development CLI. Phase 1 exposes a single `evaluate` subcommand
-//! that wires through to [`xlstream_eval::evaluate`] — which is itself a
-//! stub, so this binary currently exits with an `Internal("unimplemented
-//! ...")` error. Useful only to verify that `--help` works and the argument
-//! surface is correct.
+//! xlstream development CLI.
 
 #![warn(missing_docs, rust_2018_idioms, clippy::pedantic, clippy::cargo)]
 #![deny(
@@ -48,18 +44,40 @@ enum Command {
         #[arg(long, short = 'v')]
         verbose: bool,
     },
+    /// Parse and classify a single Excel formula expression.
+    Classify {
+        /// The formula text (without leading `=`).
+        formula: String,
+        /// Sheet name to use as the streaming sheet.
+        #[arg(long, default_value = "Sheet1")]
+        sheet: String,
+        /// 1-based row to use as the formula's anchor.
+        #[arg(long, default_value_t = 1)]
+        row: u32,
+        /// 1-based column to use as the formula's anchor.
+        #[arg(long, default_value_t = 1)]
+        col: u32,
+        /// Register a sheet as a prelude-loaded lookup sheet (repeatable).
+        #[arg(long = "lookup-sheet", value_name = "SHEET")]
+        lookup_sheets: Vec<String>,
+        /// Increase log verbosity.
+        #[arg(long, short = 'v')]
+        verbose: bool,
+    },
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    let filter = match &cli.command {
-        Command::Evaluate { verbose: true, .. } => "debug",
-        Command::Evaluate { verbose: false, .. } => "info",
+    let verbose = match &cli.command {
+        Command::Evaluate { verbose, .. } | Command::Classify { verbose, .. } => *verbose,
     };
 
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_new(filter).unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_new(if verbose { "debug" } else { "info" })
+                .unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_target(false)
         .init();
 
@@ -78,7 +96,51 @@ fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
             let _summary = xlstream_eval::evaluate(&input, &output, workers)?;
             Ok(())
         }
+        Command::Classify { formula, sheet, row, col, lookup_sheets, .. } => {
+            run_classify(&formula, &sheet, row, col, &lookup_sheets)
+        }
     }
+}
+
+#[allow(clippy::print_stdout)]
+fn run_classify(
+    formula: &str,
+    sheet: &str,
+    row: u32,
+    col: u32,
+    lookup_sheets: &[String],
+) -> Result<(), xlstream_core::XlStreamError> {
+    let ast = xlstream_parse::parse(formula).map_err(|e| match e {
+        xlstream_core::XlStreamError::FormulaParse { formula: f, message, position, .. } => {
+            xlstream_core::XlStreamError::FormulaParse {
+                address: format!("{sheet}!{}", col_to_a1(col, row)),
+                formula: f,
+                message,
+                position,
+            }
+        }
+        other => other,
+    })?;
+
+    let mut ctx = xlstream_parse::ClassificationContext::for_cell(sheet, row, col);
+    for s in lookup_sheets {
+        ctx = ctx.with_lookup_sheet(s);
+    }
+
+    let verdict = xlstream_parse::classify(&ast, &ctx);
+    println!("{formula}\t{verdict:?}");
+    Ok(())
+}
+
+fn col_to_a1(col: u32, row: u32) -> String {
+    let mut letters = String::new();
+    let mut c = col;
+    while c > 0 {
+        c -= 1;
+        letters.insert(0, (b'A' + u8::try_from(c % 26).unwrap_or(0)) as char);
+        c /= 26;
+    }
+    format!("{letters}{row}")
 }
 
 #[cfg(test)]
@@ -110,6 +172,48 @@ mod tests {
                 assert_eq!(workers, Some(4));
                 assert!(verbose);
             }
+            Command::Classify { .. } => panic!("expected Evaluate"),
         }
+    }
+
+    #[test]
+    fn classify_subcommand_parses_formula_arg_with_defaults() {
+        let cli = Cli::try_parse_from(["xlstream", "classify", "SUM(A:A)"]).unwrap();
+        match cli.command {
+            Command::Classify { formula, sheet, row, col, lookup_sheets, .. } => {
+                assert_eq!(formula, "SUM(A:A)");
+                assert_eq!(sheet, "Sheet1");
+                assert_eq!(row, 1);
+                assert_eq!(col, 1);
+                assert!(lookup_sheets.is_empty());
+            }
+            Command::Evaluate { .. } => panic!("expected Classify"),
+        }
+    }
+
+    #[test]
+    fn classify_subcommand_accepts_lookup_sheet_flag() {
+        let cli = Cli::try_parse_from([
+            "xlstream",
+            "classify",
+            "VLOOKUP(A1, 'Region Info'!A:C, 2, FALSE)",
+            "--lookup-sheet",
+            "Region Info",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Classify { lookup_sheets, .. } => {
+                assert_eq!(lookup_sheets, vec!["Region Info"]);
+            }
+            Command::Evaluate { .. } => panic!("expected Classify"),
+        }
+    }
+
+    #[test]
+    fn col_to_a1_converts_correctly() {
+        assert_eq!(col_to_a1(1, 1), "A1");
+        assert_eq!(col_to_a1(3, 5), "C5");
+        assert_eq!(col_to_a1(26, 1), "Z1");
+        assert_eq!(col_to_a1(27, 1), "AA1");
     }
 }
