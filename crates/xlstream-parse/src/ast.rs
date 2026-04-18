@@ -41,7 +41,10 @@ pub(crate) enum Node {
     /// Array constant `{1,2;3,4}`. `Vec` instead of `SmallVec` because
     /// inline `Node` storage would create a layout cycle.
     Array(Vec<Vec<Node>>),
-    // PreludeRef variant added in Chunk 4 (rewrite.rs).
+    /// A reference to a prelude-computed value (aggregate scalar or lookup
+    /// index). Inserted by [`crate::rewrite::rewrite`] after classification;
+    /// never produced by the parser.
+    PreludeRef(crate::rewrite::PreludeKey),
 }
 
 /// Parsed formula. Opaque by design — internals are crate-internal so we

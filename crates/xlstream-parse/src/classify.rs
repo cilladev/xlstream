@@ -347,7 +347,9 @@ pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification {
 
 fn disposition(node: &Node, ctx: &ClassificationContext, parent: Option<FnKind>) -> Disposition {
     match node {
-        Node::Literal(_) | Node::Text(_) | Node::Error(_) => Disposition::RowLocal,
+        Node::Literal(_) | Node::Text(_) | Node::Error(_) | Node::PreludeRef(_) => {
+            Disposition::RowLocal
+        }
         Node::Reference(r) => classify_reference(r, ctx, parent),
         Node::UnaryOp { expr, .. } => disposition(expr, ctx, parent),
         Node::BinaryOp { left, right, .. } => {

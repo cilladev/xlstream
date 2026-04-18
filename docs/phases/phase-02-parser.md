@@ -47,10 +47,10 @@
 
 ### AST rewrite
 
-- [ ] After classification, rewrite the AST to replace supported aggregate/lookup sub-expressions with `PreludeRef(key)` nodes.
-- [ ] Add `AstNode::PreludeRef(PreludeKey)` variant.
-- [ ] `PreludeKey` encodes aggregate vs lookup plus parameters.
-- [ ] Rewriting is a pure function; golden tests for input → rewritten AST.
+- [x] After classification, rewrite the AST to replace supported aggregate/lookup sub-expressions with `PreludeRef(key)` nodes.
+- [x] Add `AstNode::PreludeRef(PreludeKey)` variant.
+- [x] `PreludeKey` encodes aggregate vs lookup plus parameters.
+- [x] Rewriting is a pure function; golden tests for input → rewritten AST.
 
 ### Tests
 
@@ -70,7 +70,7 @@
   - [x] `MyNamedRange` — Unsupported (named range).
   - [x] `[Book2.xlsx]Sheet1!A1` — Unsupported (external reference).
 - [x] Reference-extraction tests for each variant.
-- [ ] AST rewrite golden tests.
+- [x] AST rewrite golden tests.
 
 ### Error messages
 
