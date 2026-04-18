@@ -26,9 +26,11 @@ mod parser;
 mod references;
 pub mod rewrite;
 pub mod sets;
+mod view;
 
 pub use ast::Ast;
 pub use classify::{classify, Classification, ClassificationContext, UnsupportedReason};
 pub use parser::parse;
 pub use references::{extract_references, Reference, References};
 pub use rewrite::{rewrite, AggKind, AggregateKey, LookupKey, LookupKind, PreludeKey};
+pub use view::{NodeRef, NodeView};
