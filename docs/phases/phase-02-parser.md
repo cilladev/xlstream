@@ -32,12 +32,12 @@
 
 ### Classification
 
-- [ ] Implement `classify(ast, ctx) -> Classification`:
-  - [ ] `RowLocal` — references only current-row cells; no function in `UNSUPPORTED` or `REQUIRES_PRELUDE` sets.
-  - [ ] `AggregateOnly` — root is a supported aggregate function; all range args are whole-column or fixed.
-  - [ ] `LookupOnly` — supported lookup function with cross-sheet range into a lookup sheet.
-  - [ ] `Mixed` — recurses; ok if every sub-expression classifies.
-  - [ ] `Unsupported(UnsupportedReason)` — with a specific reason.
+- [x] Implement `classify(ast, ctx) -> Classification`:
+  - [x] `RowLocal` — references only current-row cells; no function in `UNSUPPORTED` or `REQUIRES_PRELUDE` sets.
+  - [x] `AggregateOnly` — root is a supported aggregate function; all range args are whole-column or fixed.
+  - [x] `LookupOnly` — supported lookup function with cross-sheet range into a lookup sheet.
+  - [x] `Mixed` — recurses; ok if every sub-expression classifies.
+  - [x] `Unsupported(UnsupportedReason)` — with a specific reason.
 - [x] `UnsupportedReason` enum: `NonCurrentRowRef`, `CircularRef`, `UnsupportedFunction(String)`, `UnboundedRange`, `NonStaticCriteria`, `DynamicArray`, `VolatileUnsupported`, `TableReference`, `NamedRange`, `ExternalReference`, `NestedUnsupported`, `LookupSheetNotPrepared`, `LookupIntoStreamingSheet`.
 - [x] Support-set constants:
   - [x] `UNSUPPORTED_FUNCTIONS`: `OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`, `SORTBY`, `SEQUENCE`, `RANDARRAY`, `LAMBDA`, `LET`, `HYPERLINK`, `WEBSERVICE`, `CUBEVALUE`, `CUBEMEMBER`, `CUBESET`, `RAND`, `RANDBETWEEN`.
@@ -54,31 +54,31 @@
 
 ### Tests
 
-- [ ] 30+ classification tests covering:
-  - [ ] Simple arithmetic — RowLocal.
-  - [ ] `SUM(A:A)` — AggregateOnly.
-  - [ ] `VLOOKUP(A, Sheet2!A:C, 2, FALSE)` — LookupOnly.
-  - [ ] `Deal Value / SUM(Deal Value:Deal Value)` — Mixed.
-  - [ ] `OFFSET(A1, 1, 0)` — Unsupported.
-  - [ ] `INDIRECT("A1")` — Unsupported.
-  - [ ] `A3` where current row is 5 — Unsupported (non-current-row ref).
-  - [ ] `FILTER(A:A, B:B>0)` — Unsupported (dynamic array).
-  - [ ] Circular reference — Unsupported.
-  - [ ] `VLOOKUP(A&B, Sheet2!D:E, 2, FALSE)` — LookupOnly, concatenated-key via helper column on lookup sheet.
-  - [ ] Nested functions mixing supported + unsupported → Unsupported.
-  - [ ] `Table1[Column]` — Unsupported (table reference).
-  - [ ] `MyNamedRange` — Unsupported (named range).
-  - [ ] `[Book2.xlsx]Sheet1!A1` — Unsupported (external reference).
-- [ ] Reference-extraction tests for each variant.
+- [x] 30+ classification tests covering:
+  - [x] Simple arithmetic — RowLocal.
+  - [x] `SUM(A:A)` — AggregateOnly.
+  - [x] `VLOOKUP(A, Sheet2!A:C, 2, FALSE)` — LookupOnly.
+  - [x] `Deal Value / SUM(Deal Value:Deal Value)` — Mixed.
+  - [x] `OFFSET(A1, 1, 0)` — Unsupported.
+  - [x] `INDIRECT("A1")` — Unsupported.
+  - [x] `A3` where current row is 5 — Unsupported (non-current-row ref).
+  - [x] `FILTER(A:A, B:B>0)` — Unsupported (dynamic array).
+  - [x] Circular reference — Unsupported.
+  - [x] `VLOOKUP(A&B, Sheet2!D:E, 2, FALSE)` — LookupOnly, concatenated-key via helper column on lookup sheet.
+  - [x] Nested functions mixing supported + unsupported → Unsupported.
+  - [x] `Table1[Column]` — Unsupported (table reference).
+  - [x] `MyNamedRange` — Unsupported (named range).
+  - [x] `[Book2.xlsx]Sheet1!A1` — Unsupported (external reference).
+- [x] Reference-extraction tests for each variant.
 - [ ] AST rewrite golden tests.
 
 ### Error messages
 
-- [ ] Every `Unsupported` path produces a user-facing message that:
-  - [ ] Quotes the formula text.
-  - [ ] Names the specific reason.
-  - [ ] Includes a doc link (placeholder URL for v0.1; real links land with the docs site in Phase 13/14).
-- [ ] Tests assert on message substrings.
+- [x] Every `Unsupported` path produces a user-facing message that:
+  - [x] Quotes the formula text.
+  - [x] Names the specific reason.
+  - [x] Includes a doc link (placeholder URL for v0.1; real links land with the docs site in Phase 13/14).
+- [x] Tests assert on message substrings.
 
 ### CLI integration
 
