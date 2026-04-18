@@ -65,3 +65,6 @@ refs/
 docs/superpowers/
 
 .claude
+
+# Git worktrees
+.worktrees/
