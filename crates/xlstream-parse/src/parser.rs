@@ -92,9 +92,9 @@ fn lower_literal(lv: &formualizer_common::LiteralValue) -> Node {
         L::Boolean(b) => Node::Literal(NumLiteral::Bool(*b)),
         L::Text(s) => Node::Text(s.clone()),
         L::Error(e) => Node::Error(map_excel_error(e)),
-        // Phase 4: first-class variants for Date / Time / DateTime /
+        // TODO(phase-4): first-class variants for Date / Time / DateTime /
         // Duration / Empty / Pending / Array literals.
-        other => Node::Text(format!("{other:?}")),
+        _other => Node::Error(xlstream_core::CellError::Value),
     }
 }
 
