@@ -74,22 +74,24 @@ impl PartialEq for Ast {
 }
 
 impl Ast {
-    /// Test-only constructor that builds trees without going through
-    /// [`crate::parse`].
-    #[doc(hidden)]
-    #[must_use]
-    #[allow(private_interfaces)]
-    pub fn from_root_for_tests(root: Node) -> Self {
-        let upstream = formualizer_parse::parse("=0").unwrap_or_else(|_| unreachable!());
-        Self { upstream, root }
-    }
-
     /// Crate-internal accessor for the raw upstream tree.
     /// Used by `extract_references` in Chunk 1.
     #[must_use]
     #[allow(dead_code)]
     pub(crate) fn as_upstream(&self) -> &formualizer_parse::ASTNode {
         &self.upstream
+    }
+}
+
+#[cfg(test)]
+impl Ast {
+    /// Test-only constructor that builds trees without going through
+    /// [`crate::parse`].
+    #[allow(clippy::unwrap_used, clippy::missing_panics_doc, private_interfaces)]
+    #[must_use]
+    pub fn from_root_for_tests(root: Node) -> Self {
+        let upstream = formualizer_parse::parse("=0").unwrap();
+        Self { upstream, root }
     }
 }
 
