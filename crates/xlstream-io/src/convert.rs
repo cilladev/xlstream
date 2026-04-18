@@ -4,7 +4,6 @@ use calamine::CellErrorType;
 use xlstream_core::{CellError, ExcelDate, Value};
 
 /// Convert a calamine [`DataRef`] to an xlstream [`Value`].
-#[allow(dead_code)]
 pub(crate) fn convert_data_ref(d: &calamine::DataRef<'_>) -> Value {
     use calamine::DataRef;
     match d {
