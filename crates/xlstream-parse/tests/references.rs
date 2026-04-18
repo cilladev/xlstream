@@ -17,6 +17,16 @@ fn range_extracts_one_range_ref() {
     let ast = parse("A1:B10").unwrap();
     let refs = extract_references(&ast);
     assert_eq!(refs.ranges.len(), 1);
+    assert!(matches!(
+        refs.ranges[0],
+        Reference::Range {
+            start_row: Some(1),
+            end_row: Some(10),
+            start_col: Some(1),
+            end_col: Some(2),
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -57,5 +67,50 @@ fn external_reference_lands_in_ranges() {
     let ast = parse("[Book2]Sheet1!A1").unwrap();
     let refs = extract_references(&ast);
     assert_eq!(refs.ranges.len(), 1);
-    assert!(matches!(refs.ranges[0], Reference::External { .. }));
+    match &refs.ranges[0] {
+        Reference::External { book, sheet, .. } => {
+            assert_eq!(book, "[Book2]");
+            assert_eq!(sheet, "Sheet1");
+        }
+        other => panic!("expected External, got {other:?}"),
+    }
+}
+
+#[test]
+fn named_range_lands_in_ranges() {
+    let ast = parse("MyRange").unwrap();
+    let refs = extract_references(&ast);
+    assert_eq!(refs.ranges.len(), 1);
+    assert!(matches!(refs.ranges[0], Reference::Named(ref n) if n == "MyRange"));
+}
+
+#[test]
+fn table_reference_lands_in_ranges() {
+    let ast = parse("Table1[Column1]").unwrap();
+    let refs = extract_references(&ast);
+    assert_eq!(refs.ranges.len(), 1);
+    match &refs.ranges[0] {
+        Reference::Table { name, specifier } => {
+            assert_eq!(name, "Table1");
+            assert!(specifier.is_some(), "expected specifier for Table1[Column1]");
+        }
+        other => panic!("expected Table, got {other:?}"),
+    }
+}
+
+#[test]
+fn literal_only_formula_returns_empty_references() {
+    let ast = parse("1+2").unwrap();
+    let refs = extract_references(&ast);
+    assert!(refs.cells.is_empty());
+    assert!(refs.ranges.is_empty());
+    assert!(refs.sheets.is_empty());
+    assert!(refs.functions.is_empty());
+}
+
+#[test]
+fn sheet_dedup_is_case_insensitive() {
+    let ast = parse("Sheet1!A1 + SHEET1!B2").unwrap();
+    let refs = extract_references(&ast);
+    assert_eq!(refs.sheets.len(), 1, "expected case-insensitive dedup: {:?}", refs.sheets);
 }

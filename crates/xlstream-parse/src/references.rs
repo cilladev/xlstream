@@ -94,8 +94,8 @@ pub struct References {
 /// Walk `ast` and collect every reference, sheet name, and function name.
 ///
 /// Uses upstream's zero-alloc `visit_refs` walker for references; walks
-/// the upstream tree once more for function names. Both passes are
-/// stack-based.
+/// the upstream tree with an explicit stack for function names. Both
+/// passes avoid recursion.
 ///
 /// # Examples
 ///
@@ -130,6 +130,8 @@ fn collect_view(rv: formualizer_parse::parser::RefView<'_>, out: &mut References
                 end_col,
             });
         }
+        // `kind` (ExternalRefKind) carries coordinate details we don't
+        // need — classification refuses all external refs wholesale.
         V::External { raw, book, sheet, .. } => {
             push_sheet(Some(sheet), out);
             out.ranges.push(Reference::External {
@@ -152,33 +154,36 @@ fn collect_view(rv: formualizer_parse::parser::RefView<'_>, out: &mut References
 
 fn push_sheet(sheet: Option<&str>, out: &mut References) {
     if let Some(s) = sheet {
-        if !out.sheets.iter().any(|existing| existing == s) {
+        if !out.sheets.iter().any(|existing| existing.eq_ignore_ascii_case(s)) {
             out.sheets.push(s.to_owned());
         }
     }
 }
 
-fn walk_functions(node: &formualizer_parse::ASTNode, out: &mut References) {
+fn walk_functions(root: &formualizer_parse::ASTNode, out: &mut References) {
     use formualizer_parse::ASTNodeType as T;
-    match &node.node_type {
-        T::Literal(_) | T::Reference { .. } => {}
-        T::UnaryOp { expr, .. } => walk_functions(expr, out),
-        T::BinaryOp { left, right, .. } => {
-            walk_functions(left, out);
-            walk_functions(right, out);
-        }
-        T::Function { name, args } => {
-            if !out.functions.iter().any(|n| n.eq_ignore_ascii_case(name)) {
-                out.functions.push(name.clone());
+    let mut stack: Vec<&formualizer_parse::ASTNode> = vec![root];
+    while let Some(node) = stack.pop() {
+        match &node.node_type {
+            T::Literal(_) | T::Reference { .. } => {}
+            T::UnaryOp { expr, .. } => stack.push(expr),
+            T::BinaryOp { left, right, .. } => {
+                stack.push(right);
+                stack.push(left);
             }
-            for a in args {
-                walk_functions(a, out);
+            T::Function { name, args } => {
+                if !out.functions.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                    out.functions.push(name.clone());
+                }
+                for a in args.iter().rev() {
+                    stack.push(a);
+                }
             }
-        }
-        T::Array(rows) => {
-            for row in rows {
-                for cell in row {
-                    walk_functions(cell, out);
+            T::Array(rows) => {
+                for row in rows.iter().rev() {
+                    for cell in row.iter().rev() {
+                        stack.push(cell);
+                    }
                 }
             }
         }
