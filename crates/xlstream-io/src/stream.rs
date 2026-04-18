@@ -12,8 +12,11 @@ pub(crate) trait CellSource {
 }
 
 /// Row-oriented stream of cells. Wraps a calamine `XlsxCellReader` and
-/// yields one dense `Vec<Value>` per row. Missing cells are padded with
-/// [`Value::Empty`] so every row has exactly `max_col` elements.
+/// yields `(row_index, Vec<Value>)` pairs. Missing cells within a row
+/// are padded with [`Value::Empty`]; rows with no data are skipped
+/// (callers use the row index to detect gaps).
+///
+/// Each call opens a fresh read from the start of the sheet.
 ///
 /// # Examples
 ///
@@ -31,7 +34,7 @@ pub struct CellStream<'a> {
 /// without a source.
 struct CellStreamInner<'a> {
     source: Box<dyn CellSource + 'a>,
-    max_col: usize,
+    initial_capacity: usize,
     buffer: Vec<Value>,
     pending_cell: Option<(u32, u32, Value)>,
     current_row: Option<u32>,
@@ -54,13 +57,15 @@ impl<'a> CellStream<'a> {
         Self { inner: None }
     }
 
-    /// Construct a stream backed by a cell source.
-    pub(crate) fn new(source: Box<dyn CellSource + 'a>, max_col: usize) -> Self {
+    /// Construct a stream backed by a cell source. `capacity_hint` is the
+    /// initial buffer size (typically from sheet dimensions); the buffer
+    /// grows on demand if cells exceed this.
+    pub(crate) fn new(source: Box<dyn CellSource + 'a>, capacity_hint: usize) -> Self {
         Self {
             inner: Some(CellStreamInner {
                 source,
-                max_col,
-                buffer: Vec::with_capacity(max_col),
+                initial_capacity: capacity_hint,
+                buffer: Vec::with_capacity(capacity_hint),
                 pending_cell: None,
                 current_row: None,
                 finished: false,
@@ -68,10 +73,13 @@ impl<'a> CellStream<'a> {
         }
     }
 
-    /// Yield the next row as a dense `Vec<Value>` (length == `max_col`),
-    /// or `Ok(None)` at end of sheet. Missing cells are [`Value::Empty`].
+    /// Yield the next row as `(row_index, values)` where `values` is a
+    /// dense `Vec<Value>` with missing cells padded as [`Value::Empty`].
+    /// Returns `Ok(None)` at end of sheet. Rows with no data are skipped;
+    /// use the row index to detect gaps.
     ///
-    /// Uses `std::mem::take` to hand off the buffer without cloning.
+    /// The buffer grows on demand if cells exist beyond the declared
+    /// sheet dimensions.
     ///
     /// # Errors
     ///
@@ -84,7 +92,7 @@ impl<'a> CellStream<'a> {
     /// let mut s = CellStream::empty();
     /// assert_eq!(s.next_row().unwrap(), None);
     /// ```
-    pub fn next_row(&mut self) -> Result<Option<Vec<Value>>, XlStreamError> {
+    pub fn next_row(&mut self) -> Result<Option<(u32, Vec<Value>)>, XlStreamError> {
         let Some(inner) = self.inner.as_mut() else {
             return Ok(None);
         };
@@ -93,22 +101,18 @@ impl<'a> CellStream<'a> {
 }
 
 impl CellStreamInner<'_> {
-    fn next_row(&mut self) -> Result<Option<Vec<Value>>, XlStreamError> {
+    fn next_row(&mut self) -> Result<Option<(u32, Vec<Value>)>, XlStreamError> {
         if self.finished {
             return Ok(None);
         }
 
-        // Prepare buffer for a new row.
         self.buffer.clear();
-        self.buffer.resize(self.max_col, Value::Empty);
+        self.buffer.resize(self.initial_capacity, Value::Empty);
         self.current_row = None;
 
-        // If we have a pending cell saved from the previous call, place it.
         if let Some((row, col, val)) = self.pending_cell.take() {
             self.current_row = Some(row);
-            if (col as usize) < self.max_col {
-                self.buffer[col as usize] = val;
-            }
+            self.place_cell(col, val);
         }
 
         loop {
@@ -117,29 +121,38 @@ impl CellStreamInner<'_> {
                     self.current_row = Some(row);
                 }
 
-                if row != self.current_row.unwrap_or(row) {
-                    // This cell belongs to the next row. Save it and
-                    // return the current buffer.
+                let Some(cr) = self.current_row else {
+                    return Err(XlStreamError::Internal(
+                        "current_row unexpectedly None after set".into(),
+                    ));
+                };
+
+                if row != cr {
                     self.pending_cell = Some((row, col, value));
-                    return Ok(Some(std::mem::take(&mut self.buffer)));
+                    let row_data = std::mem::take(&mut self.buffer);
+                    return Ok(Some((cr, row_data)));
                 }
 
-                if (col as usize) < self.max_col {
-                    self.buffer[col as usize] = value;
-                }
+                self.place_cell(col, value);
             } else {
                 self.finished = true;
-                return if self.current_row.is_some() {
-                    Ok(Some(std::mem::take(&mut self.buffer)))
-                } else {
-                    Ok(None)
+                return match self.current_row {
+                    Some(cr) => Ok(Some((cr, std::mem::take(&mut self.buffer)))),
+                    None => Ok(None),
                 };
             }
         }
     }
+
+    fn place_cell(&mut self, col: u32, value: Value) {
+        let idx = col as usize;
+        if idx >= self.buffer.len() {
+            self.buffer.resize(idx + 1, Value::Empty);
+        }
+        self.buffer[idx] = value;
+    }
 }
 
-// Implement Debug manually since the inner source is a trait object.
 impl std::fmt::Debug for CellStream<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CellStream").field("has_inner", &self.inner.is_some()).finish()
