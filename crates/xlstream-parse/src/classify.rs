@@ -192,7 +192,7 @@ impl ClassificationContext {
     /// ```
     #[must_use]
     pub fn with_lookup_sheet(mut self, sheet: &str) -> Self {
-        self.lookup_sheets.insert(sheet.to_owned());
+        self.lookup_sheets.insert(sheet.to_ascii_lowercase());
         self
     }
 
@@ -269,7 +269,7 @@ impl ClassificationContext {
     /// ```
     #[must_use]
     pub fn is_lookup_sheet(&self, sheet: &str) -> bool {
-        self.lookup_sheets.iter().any(|s| s.eq_ignore_ascii_case(sheet))
+        self.lookup_sheets.contains(&sheet.to_ascii_lowercase())
     }
 
     /// The set of registered lookup sheet names.
@@ -427,7 +427,7 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
     }
 
     if sets::is_aggregate(name) {
-        return fold_fn_args(args, ctx, FnKind::Aggregate);
+        return classify_aggregate(name, args, ctx);
     }
 
     if sets::is_lookup(name) {
@@ -437,8 +437,45 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
     fold_args(args, ctx, None)
 }
 
-/// For aggregate/lookup functions, the function's own kind determines the
-/// disposition. `RowLocal` args (criteria, column indices, match type) are
+fn classify_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) -> Disposition {
+    let upper = name.to_uppercase();
+    for (i, arg) in args.iter().enumerate() {
+        if is_criteria_arg(&upper, i) && contains_row_local_ref(arg, ctx) {
+            return Disposition::Unsupported(UnsupportedReason::NonStaticCriteria);
+        }
+        let d = disposition(arg, ctx, Some(FnKind::Aggregate));
+        if let Disposition::Unsupported(_) = d {
+            return d;
+        }
+    }
+    Disposition::Aggregate
+}
+
+fn is_criteria_arg(fn_upper: &str, index: usize) -> bool {
+    match fn_upper {
+        "SUMIF" | "COUNTIF" | "AVERAGEIF" => index == 1,
+        "SUMIFS" | "COUNTIFS" | "AVERAGEIFS" | "MINIFS" | "MAXIFS" => index >= 2 && index % 2 == 0,
+        _ => false,
+    }
+}
+
+fn contains_row_local_ref(node: &Node, ctx: &ClassificationContext) -> bool {
+    match node {
+        Node::Reference(Reference::Cell { sheet, row, .. }) => {
+            let resolved = sheet.as_deref().unwrap_or(ctx.current_sheet());
+            resolved.eq_ignore_ascii_case(ctx.current_sheet()) && *row == ctx.current_row()
+        }
+        Node::BinaryOp { left, right, .. } => {
+            contains_row_local_ref(left, ctx) || contains_row_local_ref(right, ctx)
+        }
+        Node::UnaryOp { expr, .. } => contains_row_local_ref(expr, ctx),
+        Node::Function { args, .. } => args.iter().any(|a| contains_row_local_ref(a, ctx)),
+        _ => false,
+    }
+}
+
+/// For lookup functions, the function's own kind determines the
+/// disposition. `RowLocal` args (keys, column indices, match type) are
 /// absorbed — only `Unsupported` propagates.
 fn fold_fn_args(args: &[Node], ctx: &ClassificationContext, kind: FnKind) -> Disposition {
     let target = match kind {

@@ -3,37 +3,33 @@
 //! Sets are stored in upper-case; lookups normalise the incoming name to
 //! upper-case to give Excel-style case-insensitivity.
 //!
-//! # Precedence
-//!
-//! Some functions appear in `UNSUPPORTED_FUNCTIONS` despite having a more
-//! specific `UnsupportedReason` variant (`DynamicArray` for FILTER/UNIQUE/
-//! SORT/SORTBY/SEQUENCE/RANDARRAY; `VolatileUnsupported` for RAND/
-//! RANDBETWEEN). The classifier checks the specific variant first and
-//! emits the more descriptive reason; `is_unsupported` is the catch-all
-//! for anything that doesn't match a specific category.
+//! The classifier checks `is_unsupported` first and emits
+//! `UnsupportedFunction(name)` for all entries. The sub-sets
+//! (`DYNAMIC_ARRAY_FUNCTIONS`, `VOLATILE_UNSUPPORTED`) exist for future
+//! use when the evaluator needs to distinguish refusal categories at
+//! runtime — the classifier itself does not use them today.
 
 use phf::{phf_set, Set};
 
-/// Functions xlstream cannot stream. Superset: includes dynamic-array
-/// and volatile entries for catch-all lookup. The classifier checks
-/// `DYNAMIC_ARRAY_FUNCTIONS` and `VOLATILE_UNSUPPORTED` first for a
-/// more specific `UnsupportedReason`.
+/// Functions xlstream cannot stream. The classifier emits
+/// `UnsupportedReason::UnsupportedFunction(name)` for any match.
 pub(crate) static UNSUPPORTED_FUNCTIONS: Set<&'static str> = phf_set! {
     "OFFSET", "INDIRECT", "FILTER", "UNIQUE", "SORT", "SORTBY",
     "SEQUENCE", "RANDARRAY", "LAMBDA", "LET", "HYPERLINK",
     "WEBSERVICE", "CUBEVALUE", "CUBEMEMBER", "CUBESET",
     "RAND", "RANDBETWEEN",
+    "CELL", "INFO", "ROWS", "COLUMNS", "AREAS", "SHEET", "SHEETS",
 };
 
-/// Dynamic-array functions that spill to multiple cells.
-/// Classifier emits `UnsupportedReason::DynamicArray`.
+/// Dynamic-array functions (subset of unsupported). Reserved for
+/// future evaluator use — classifier does not distinguish today.
 pub(crate) static DYNAMIC_ARRAY_FUNCTIONS: Set<&'static str> = phf_set! {
     "FILTER", "UNIQUE", "SORT", "SORTBY", "SEQUENCE", "RANDARRAY",
 };
 
 /// Volatile functions whose per-cell semantics don't fit
-/// single-evaluation-per-run. Classifier emits
-/// `UnsupportedReason::VolatileUnsupported`.
+/// single-evaluation-per-run (subset of unsupported). Reserved for
+/// future evaluator use — classifier does not distinguish today.
 pub(crate) static VOLATILE_UNSUPPORTED: Set<&'static str> = phf_set! {
     "RAND", "RANDBETWEEN",
 };

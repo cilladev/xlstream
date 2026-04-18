@@ -29,3 +29,24 @@ fn upper_left_year_text_concat_is_row_local() {
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
 }
+
+#[test]
+fn today_volatile_streaming_ok_is_row_local() {
+    let ast = parse("TODAY()").unwrap();
+    let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
+    assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+}
+
+#[test]
+fn round_is_row_local() {
+    let ast = parse("ROUND(A2, 2)").unwrap();
+    let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+    assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+}
+
+#[test]
+fn lowercase_function_name_classifies_correctly() {
+    let ast = parse("sum(A:A)").unwrap();
+    let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+}
