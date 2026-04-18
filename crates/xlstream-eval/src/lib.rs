@@ -23,5 +23,13 @@
 #![allow(clippy::multiple_crate_versions)]
 
 mod evaluate;
+mod interp;
+mod prelude;
+mod scope;
+pub mod topo;
 
 pub use evaluate::{evaluate, EvaluateSummary};
+pub use interp::Interpreter;
+pub use prelude::Prelude;
+pub use scope::RowScope;
+pub use topo::topo_sort;
