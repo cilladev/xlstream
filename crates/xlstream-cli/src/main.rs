@@ -92,8 +92,21 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
     match cli.command {
-        Command::Evaluate { input, output, workers, .. } => {
-            let _summary = xlstream_eval::evaluate(&input, &output, workers)?;
+        Command::Evaluate { input, output, .. } => {
+            let mut reader = xlstream_io::Reader::open(&input)?;
+            let sheet_names = reader.sheet_names();
+            let mut writer = xlstream_io::Writer::create(&output)?;
+            for name in &sheet_names {
+                let mut stream = reader.cells(name)?;
+                let mut handle = writer.add_sheet(name)?;
+                while let Some((row_idx, row)) = stream.next_row()? {
+                    handle.write_row(row_idx, &row)?;
+                }
+                // Drop handle to release mutable borrow before next sheet.
+                drop(handle);
+                drop(stream);
+            }
+            writer.finish()?;
             Ok(())
         }
         Command::Classify { formula, sheet, row, col, lookup_sheets, .. } => {

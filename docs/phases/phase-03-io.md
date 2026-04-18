@@ -14,28 +14,28 @@
 
 ### Reader
 
-- [ ] `Reader::open(path: &Path) -> Result<Self, XlStreamError>` wraps calamine's `open_workbook::<Xlsx<_>>`.
-- [ ] `Reader::sheet_names() -> Vec<String>`.
-- [ ] `Reader::cells(sheet: &str) -> Result<CellStream<'_>, XlStreamError>` returns a streaming iterator.
-- [ ] `CellStream::next_row() -> Result<Option<Vec<Value>>, XlStreamError>` yields one row at a time.
-  - [ ] Dense rows: missing cells become `Value::Empty`.
-  - [ ] Length: `max_col` for the sheet (detected during open).
-  - [ ] Reuses an internal buffer where possible; pay attention to hot-path allocation.
-- [ ] `Reader::formulas(sheet: &str)` streams formula cells (address + formula text).
-- [ ] Value conversion: calamine `DataRef` → our `Value` per the table in [`io.md`](../architecture/io.md).
-- [ ] Rustdoc + doctests.
+- [x] `Reader::open(path: &Path) -> Result<Self, XlStreamError>` wraps calamine's `open_workbook::<Xlsx<_>>`.
+- [x] `Reader::sheet_names() -> Vec<String>`.
+- [x] `Reader::cells(sheet: &str) -> Result<CellStream<'_>, XlStreamError>` returns a streaming iterator.
+- [x] `CellStream::next_row() -> Result<Option<Vec<Value>>, XlStreamError>` yields one row at a time.
+  - [x] Dense rows: missing cells become `Value::Empty`.
+  - [x] Length: `max_col` for the sheet (detected during open).
+  - [x] Reuses an internal buffer where possible; pay attention to hot-path allocation.
+- [x] `Reader::formulas(sheet: &str)` streams formula cells (address + formula text).
+- [x] Value conversion: calamine `DataRef` → our `Value` per the table in [`io.md`](../architecture/io.md).
+- [x] Rustdoc + doctests.
 
 ### Writer
 
-- [ ] `Writer::create(path: &Path) -> Result<Self, XlStreamError>` creates a new `Workbook`.
-- [ ] `Writer::add_sheet(name: &str) -> Result<SheetHandle, XlStreamError>` calls `add_worksheet_with_constant_memory`.
-- [ ] `SheetHandle::write_row(row_idx: u32, values: &[Value]) -> Result<(), XlStreamError>`:
-  - [ ] Enforces strictly-increasing `row_idx`.
-  - [ ] Dispatches on `Value` variant: `write_number`, `write_string`, `write_boolean`, `write_datetime`, `write_blank`.
-  - [ ] `Value::Error(e)` → writes the error's Excel string (e.g. `"#DIV/0!"`).
-- [ ] `SheetHandle::write_formula(row, col, formula, cached_value)` wraps `Formula::new().set_result(...)`.
-- [ ] `Writer::finish(self) -> Result<(), XlStreamError>` calls `workbook.save(path)`.
-- [ ] Rustdoc + doctests.
+- [x] `Writer::create(path: &Path) -> Result<Self, XlStreamError>` creates a new `Workbook`.
+- [x] `Writer::add_sheet(name: &str) -> Result<SheetHandle, XlStreamError>` calls `add_worksheet_with_constant_memory`.
+- [x] `SheetHandle::write_row(row_idx: u32, values: &[Value]) -> Result<(), XlStreamError>`:
+  - [x] Enforces strictly-increasing `row_idx`.
+  - [x] Dispatches on `Value` variant: `write_number`, `write_string`, `write_boolean`, `write_datetime`, `write_blank`.
+  - [x] `Value::Error(e)` → writes the error's Excel string (e.g. `"#DIV/0!"`).
+- [x] `SheetHandle::write_formula(row, col, formula, cached_value)` wraps `Formula::new().set_result(...)`.
+- [x] `Writer::finish(self) -> Result<(), XlStreamError>` calls `workbook.save(path)`.
+- [x] Rustdoc + doctests.
 
 ### Round-trip tests
 
@@ -70,10 +70,10 @@
 
 ### Performance smoke
 
-- [ ] Read a 100k-row xlsx: < 5 seconds.
-- [ ] Write the same: < 3 seconds (zlib + ryu).
-- [ ] Round-trip: < 10 seconds total.
-- [ ] Peak RSS: < 80 MB.
+- [x] Read a 100k-row xlsx: < 5 seconds.
+- [x] Write the same: < 3 seconds (zlib + ryu).
+- [x] Round-trip: < 10 seconds total.
+- [x] Peak RSS: < 80 MB (verified via manual `/usr/bin/time -l` on macOS; not asserted in-process).
 
 ### Date handling
 
