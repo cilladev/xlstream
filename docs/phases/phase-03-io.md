@@ -64,9 +64,9 @@
 
 ### Error paths
 
-- [ ] File not found → `XlStreamError::Io`.
-- [ ] Malformed xlsx → `XlStreamError::Xlsx`.
-- [ ] Writing out of order → `XlStreamError::Internal` (constant-memory constraint).
+- [x] File not found → `XlStreamError::Xlsx` (calamine wraps the I/O error).
+- [x] Malformed xlsx → `XlStreamError::Xlsx`.
+- [x] Writing out of order → `XlStreamError::Internal` (constant-memory constraint).
 
 ### Performance smoke
 
