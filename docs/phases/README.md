@@ -1,6 +1,6 @@
 # Phases — roadmap
 
-> **Current phase: 4 — Streaming core.** See [`phase-04-streaming-core.md`](phase-04-streaming-core.md).
+> **Current phase: 5 — Arithmetic, comparison, concat.** See [`phase-05-arithmetic.md`](phase-05-arithmetic.md).
 
 ## How this works
 
@@ -59,7 +59,7 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 | 1 | Scaffolding | [`phase-01-scaffolding.md`](phase-01-scaffolding.md) | ✓ complete |
 | 2 | Parser integration | [`phase-02-parser.md`](phase-02-parser.md) | ✓ complete |
 | 3 | I/O layer | [`phase-03-io.md`](phase-03-io.md) | ✓ complete |
-| 4 | Streaming core | [`phase-04-streaming-core.md`](phase-04-streaming-core.md) | not started |
+| 4 | Streaming core | [`phase-04-streaming-core.md`](phase-04-streaming-core.md) | ✓ complete |
 | 5 | Arithmetic, comparison, concat | [`phase-05-arithmetic.md`](phase-05-arithmetic.md) | not started |
 | 6 | Conditionals, logical | [`phase-06-conditional.md`](phase-06-conditional.md) | not started |
 | 7 | Aggregates | [`phase-07-aggregates.md`](phase-07-aggregates.md) | not started |
