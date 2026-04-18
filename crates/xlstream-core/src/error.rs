@@ -31,6 +31,16 @@ pub enum XlStreamError {
         source: std::io::Error,
     },
 
+    /// An xlsx parse/read error from `calamine` (stringified at conversion
+    /// site to keep xlstream-core free of I/O library deps).
+    #[error("xlsx error: {0}")]
+    Xlsx(String),
+
+    /// An xlsx write error from `rust_xlsxwriter` (stringified at conversion
+    /// site).
+    #[error("xlsx write error: {0}")]
+    XlsxWrite(String),
+
     /// A parsed formula could not be interpreted as a supported shape.
     #[error("unsupported formula at {address}: {reason}\n  formula: {formula}\n  see: {doc_link}")]
     Unsupported {
@@ -131,5 +141,21 @@ mod tests {
         assert!(msg.contains("Sheet1!A1"), "address missing: {msg}");
         assert!(msg.contains("OFFSET(A1,1,0)"), "formula missing: {msg}");
         assert!(msg.contains("OFFSET not streamable"), "reason missing: {msg}");
+    }
+
+    #[test]
+    fn xlsx_error_formats_with_source_message() {
+        let e = XlStreamError::Xlsx("file not found: Sheet1".into());
+        let msg = e.to_string();
+        assert!(msg.contains("xlsx error"), "expected xlsx error prefix: {msg}");
+        assert!(msg.contains("Sheet1"), "expected source message: {msg}");
+    }
+
+    #[test]
+    fn xlsx_write_error_formats_with_source_message() {
+        let e = XlStreamError::XlsxWrite("row order violated".into());
+        let msg = e.to_string();
+        assert!(msg.contains("xlsx write error"), "expected write prefix: {msg}");
+        assert!(msg.contains("row order"), "expected source message: {msg}");
     }
 }
