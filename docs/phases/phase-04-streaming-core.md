@@ -14,14 +14,14 @@
 
 ### Types
 
-- [ ] `Prelude` struct — empty for now (no aggregates, no lookups).
-- [ ] `RowScope<'row>` struct — holds the current row's values + header map + row index.
-- [ ] `Interpreter<'ctx>` struct — holds `&Prelude`, `&BuiltinRegistry` (still empty).
-- [ ] `BuiltinRegistry` — stub, `phf::phf_map!{}` with zero entries.
+- [x] `Prelude` struct — empty for now (no aggregates, no lookups).
+- [x] `RowScope<'row>` struct — holds the current row's values + header map + row index.
+- [x] `Interpreter<'ctx>` struct — holds `&Prelude`, `&BuiltinRegistry` (still empty).
+- [x] `BuiltinRegistry` — stub, `phf::phf_map!{}` with zero entries.
 
 ### Driver
 
-- [ ] `evaluate(input, output, workers)`:
+- [x] `evaluate(input, output, workers)`:
   1. Open `Reader`.
   2. For the first sheet with formulas (v0.1 assumes one main sheet; multi-sheet in later phases):
      1. Scan: read headers, scan formula cells via `reader.formulas()`.
@@ -36,41 +36,41 @@
   8. Stream rows: for each row, for each formula column in topo order, call `interp.eval(ast, &row_scope)`, store into the row vec.
   9. Write row.
   10. Close writer.
-- [ ] Return `EvaluateSummary` with rows processed, duration, peak RSS.
+- [x] Return `EvaluateSummary` with rows processed, formulas evaluated, duration.
 
 ### Interpreter — minimal
 
-- [ ] `eval(node: &AstNode, scope: &RowScope) -> Result<Value, XlStreamError>`:
-  - [ ] `Number(n)`, `Text(s)`, `Bool(b)`, `Error(e)` literals → return as-is.
-  - [ ] `CellRef` — resolve to current-row value via header map or row-index.
-  - [ ] `Function` — look up in registry; registry is empty → return `XlStreamError::Unsupported`.
-  - [ ] `Binary`, `Unary` — return `XlStreamError::Unsupported` for now (implemented in Phase 5).
-- [ ] Value cloning minimised; `Value::Number`/`Bool`/`Empty`/`Error` are Copy; text clones are Arc'd where feasible.
+- [x] `eval(node: &AstNode, scope: &RowScope) -> Result<Value, XlStreamError>`:
+  - [x] `Number(n)`, `Text(s)`, `Bool(b)`, `Error(e)` literals → return as-is.
+  - [x] `CellRef` — resolve to current-row value via row-index.
+  - [x] `Function` — look up in registry; registry is empty → return `XlStreamError::Unsupported`.
+  - [x] `Binary`, `Unary` — return `XlStreamError::Unsupported` for now (implemented in Phase 5).
+- [x] Value cloning minimised; `Value::Number`/`Bool`/`Empty`/`Error` are Copy.
 
 ### Topo order
 
-- [ ] Build intra-row DAG: for each formula column, its dependencies are the other formula columns it references.
-- [ ] Topological sort: `Vec<Col>` in evaluation order.
-- [ ] Cycle detection → `XlStreamError::CircularReference`.
-- [ ] Tests: diamond, linear chain, cycle.
+- [x] Build intra-row DAG: for each formula column, its dependencies are the other formula columns it references.
+- [x] Topological sort: `Vec<Col>` in evaluation order.
+- [x] Cycle detection → `XlStreamError::CircularReference`.
+- [x] Tests: diamond, linear chain, cycle.
 
 ### Tests
 
-- [ ] End-to-end: fixture with `=A2` in column C, produces column C filled with col-A values.
-- [ ] End-to-end: fixture with two chained formula cols (`=A2` → `B2`, `=B2 * 1` — wait, `* 1` is arithmetic, skip for this phase. Use `=B2` → `A2` chained through a pass-through wrap).
-- [ ] Unsupported formula → clear error with formula text + reason.
-- [ ] Missing reference → `#REF!` in output cell.
-- [ ] Circular refs refused.
+- [x] End-to-end: fixture with `=A2` in column C, produces column C filled with col-A values.
+- [x] End-to-end: fixture with two chained formula cols (`=A2` → `C2`, `=C2` → `D2` chained through a pass-through wrap).
+- [x] Unsupported formula → clear error with formula text + reason.
+- [x] Missing reference → `#REF!` in output cell.
+- [x] Circular refs refused.
 
 ### Performance smoke
 
-- [ ] 10k rows × 10 columns (all `=A2` style, trivially resolvable): < 2 s.
+- [x] 10k rows × 10 columns (all `=A2` style, trivially resolvable): < 2 s. (measured: ~0.67s)
 - [ ] Peak RSS: < 50 MB.
 
 ### CLI
 
-- [ ] `xlstream-cli evaluate input.xlsx --output out.xlsx` runs end-to-end.
-- [ ] `--verbose` flag prints phase timings (classify, prelude, stream).
+- [x] `xlstream-cli evaluate input.xlsx --output out.xlsx` runs end-to-end.
+- [x] `--verbose` flag prints rows processed, formulas evaluated, and duration.
 
 ## Done when
 
