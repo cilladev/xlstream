@@ -80,6 +80,21 @@ impl Ast {
     pub(crate) fn as_upstream(&self) -> &formualizer_parse::ASTNode {
         &self.upstream
     }
+
+    /// Public entry point for inspecting the AST tree.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_parse::{parse, NodeView};
+    /// let ast = parse("42").unwrap();
+    /// let root = ast.root();
+    /// assert!(matches!(root.view(), NodeView::Number(_)));
+    /// ```
+    #[must_use]
+    pub fn root(&self) -> crate::view::NodeRef<'_> {
+        crate::view::NodeRef(&self.root)
+    }
 }
 
 #[cfg(test)]
