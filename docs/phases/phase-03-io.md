@@ -39,8 +39,8 @@
 
 ### Round-trip tests
 
-- [ ] Create a small xlsx fixture with every `Value` variant: Empty, Number, Integer (as Number in xlsx), Text, Bool, Date, Error.
-- [ ] Round-trip test:
+- [x] Create a small xlsx fixture with every `Value` variant: Empty, Number, Integer (as Number in xlsx), Text, Bool, Date, Error.
+- [x] Round-trip test:
   ```rust
   let input = ...;
   let reader = Reader::open(&input)?;
@@ -55,12 +55,12 @@
   writer.finish()?;
   // Re-open output and assert equality with input.
   ```
-- [ ] Assertion: the output is round-trip-equivalent at the `Value` level for every cell.
+- [x] Assertion: the output is round-trip-equivalent at the `Value` level for every cell.
 
 ### Multi-sheet
 
-- [ ] Input with 3 sheets (main + 2 lookups). Round-trip preserves all three.
-- [ ] Test: sheet order is preserved.
+- [x] Input with 3 sheets (main + 2 lookups). Round-trip preserves all three.
+- [x] Test: sheet order is preserved.
 
 ### Error paths
 
@@ -77,14 +77,14 @@
 
 ### Date handling
 
-- [ ] `Value::Date` round-trips via `write_datetime`.
-- [ ] Tests for both pre-1900 dates (the 1900 leap bug is relevant) and contemporary dates.
-- [ ] 1900-02-29 (Excel serial 60) survives round-trip as serial 60.
+- [x] `Value::Date` round-trips via `write_datetime`.
+- [x] Tests for both pre-1900 dates (the 1900 leap bug is relevant) and contemporary dates.
+- [x] 1900-02-29 (Excel serial 60) survives round-trip as serial 60.
 
 ### Formula cell round-trip
 
-- [ ] When input has `=A1+B1` with cached `5.0`, reading gives us the formula string and cached value.
-- [ ] Writing the same formula + cached value via `write_formula` produces an output that, re-read, gives the same pair.
+- [x] When input has `=A1+B1` with cached `5.0`, reading gives us the formula string and cached value.
+- [x] Writing the same formula + cached value via `write_formula` produces an output that, re-read, gives the same pair.
 
 ## Verification
 

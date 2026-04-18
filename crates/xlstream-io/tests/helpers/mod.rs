@@ -81,3 +81,76 @@ pub fn generate_multi_sheet_fixture() -> NamedTempFile {
     wb.save(tmp.path()).unwrap();
     tmp
 }
+
+/// Every Value variant in a single row: Number, Text, Bool, Date, Error, Empty.
+///
+/// | A    | B       | C    | D (date serial 45000) | E (#DIV/0!) | F (empty) |
+/// |------|---------|------|-----------------------|-------------|-----------|
+/// | 42.0 | "hello" | true | 45000.0               | "#DIV/0!"   |           |
+pub fn generate_all_types_fixture() -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+
+    ws.write_number(0, 0, 42.0).unwrap();
+    ws.write_string(0, 1, "hello").unwrap();
+    ws.write_boolean(0, 2, true).unwrap();
+    let date_fmt = rust_xlsxwriter::Format::new().set_num_format("yyyy-mm-dd");
+    ws.write_number_with_format(0, 3, 45000.0, &date_fmt).unwrap();
+    // Error: written as string since rust_xlsxwriter has no error-cell API
+    ws.write_string(0, 4, "#DIV/0!").unwrap();
+    // Column F left empty
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
+
+/// Three sheets with distinct data: Main (numbers), Lookup1 (text), Lookup2 (mixed).
+pub fn generate_three_sheet_fixture() -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+
+    let ws1 = wb.add_worksheet();
+    ws1.set_name("Main").unwrap();
+    ws1.write_number(0, 0, 1.0).unwrap();
+    ws1.write_number(0, 1, 2.0).unwrap();
+    ws1.write_number(1, 0, 3.0).unwrap();
+    ws1.write_number(1, 1, 4.0).unwrap();
+
+    let ws2 = wb.add_worksheet();
+    ws2.set_name("Lookup1").unwrap();
+    ws2.write_string(0, 0, "apple").unwrap();
+    ws2.write_string(0, 1, "banana").unwrap();
+    ws2.write_string(1, 0, "cherry").unwrap();
+    ws2.write_string(1, 1, "date").unwrap();
+
+    let ws3 = wb.add_worksheet();
+    ws3.set_name("Lookup2").unwrap();
+    ws3.write_number(0, 0, 100.0).unwrap();
+    ws3.write_string(0, 1, "mixed").unwrap();
+    ws3.write_boolean(0, 2, false).unwrap();
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
+
+/// Single cell containing a date serial value with date formatting.
+pub fn generate_date_fixture(serial: f64) -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+    let date_fmt = rust_xlsxwriter::Format::new().set_num_format("yyyy-mm-dd");
+    ws.write_number_with_format(0, 0, serial, &date_fmt).unwrap();
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
+
+/// Empty sheet (no data written).
+pub fn generate_empty_sheet_fixture() -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+    ws.set_name("Empty").unwrap();
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
