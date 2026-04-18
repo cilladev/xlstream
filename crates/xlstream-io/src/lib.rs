@@ -24,9 +24,11 @@
 
 pub(crate) mod convert;
 mod reader;
+mod sheet_handle;
 mod stream;
 mod writer;
 
 pub use reader::Reader;
+pub use sheet_handle::SheetHandle;
 pub use stream::CellStream;
 pub use writer::Writer;

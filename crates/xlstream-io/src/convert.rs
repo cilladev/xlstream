@@ -33,7 +33,6 @@ fn convert_cell_error(e: &CellErrorType) -> CellError {
 }
 
 /// Render a [`CellError`] as the Excel error string.
-#[allow(dead_code)]
 pub(crate) fn cell_error_to_excel_string(e: CellError) -> &'static str {
     match e {
         CellError::Div0 => "#DIV/0!",
@@ -47,7 +46,6 @@ pub(crate) fn cell_error_to_excel_string(e: CellError) -> &'static str {
 }
 
 /// Render a [`Value`] as a result string for `Formula::set_result()`.
-#[allow(dead_code)]
 pub(crate) fn value_to_result_string(val: &Value) -> String {
     match val {
         Value::Number(n) => format!("{n}"),
