@@ -545,7 +545,7 @@ fn format_with_thousands(n: f64, decimals: usize) -> String {
 /// `TEXT(value, format)` — format number as text.
 ///
 /// v0.1 supported formats: `"0"`, `"0.0"`, `"0.00"`, `"0.000"`,
-/// `"#,##0"`, `"#,##0.00"`, `"0%"`, `"0.00%"`.
+/// `"#,##0"`, `"#,##0.00"`, `"0%"`, `"0.00%"`, `"yyyy-mm-dd"`.
 /// Unknown format emits `tracing::warn!` and returns `#VALUE!`.
 pub(crate) fn builtin_text(args: &[Value]) -> Value {
     if args.len() != 2 {
@@ -577,6 +577,11 @@ pub(crate) fn builtin_text(args: &[Value]) -> Value {
         "0.00%" => {
             let pct = n * 100.0;
             Value::Text(format!("{pct:.2}%").into())
+        }
+        "yyyy-mm-dd" => {
+            let date = xlstream_core::ExcelDate::from_serial(n);
+            let (y, m, d) = date.year_month_day();
+            Value::Text(format!("{y:04}-{m:02}-{d:02}").into())
         }
         _ => {
             tracing::warn!(format = %fmt, "TEXT: unsupported format string");
@@ -1522,8 +1527,17 @@ mod tests {
     #[test]
     fn text_unknown_format_returns_value_error() {
         assert_eq!(
-            builtin_text(&[Value::Number(1.0), Value::Text("yyyy-mm-dd".into())]),
+            builtin_text(&[Value::Number(1.0), Value::Text("dd/mm/yyyy".into())]),
             Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn text_date_format_yyyy_mm_dd() {
+        let serial = xlstream_core::ExcelDate::from_ymd(2026, 4, 15).serial;
+        assert_eq!(
+            builtin_text(&[Value::Number(serial), Value::Text("yyyy-mm-dd".into())]),
+            Value::Text("2026-04-15".into())
         );
     }
 
