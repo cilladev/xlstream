@@ -10,8 +10,9 @@ use crate::scope::RowScope;
 /// Formula evaluator. Walks the AST via [`NodeView`] and resolves values
 /// against the current row scope.
 ///
-/// Phase 4 handles literals and same-row cell references only. Operators
-/// and functions return `#VALUE!`; they land in Phase 5+.
+/// Handles literals, same-row cell references, and all operators
+/// (arithmetic, comparison, concatenation, unary). Functions return
+/// `#VALUE!` until Phase 6+.
 ///
 /// # Examples
 ///
@@ -64,6 +65,7 @@ impl<'ctx> Interpreter<'ctx> {
     /// assert_eq!(interp.eval(ast.root(), &scope), Value::Bool(true));
     /// ```
     #[must_use]
+    #[allow(clippy::only_used_in_recursion)]
     pub fn eval(&self, node: NodeRef<'_>, scope: &RowScope<'_>) -> Value {
         match node.view() {
             NodeView::Number(n) => Value::Number(n),
@@ -82,12 +84,26 @@ impl<'ctx> Interpreter<'ctx> {
                 Value::Error(CellError::Name)
             }
 
-            // Phase 5+: operators and functions
-            NodeView::BinaryOp { .. } | NodeView::UnaryOp { .. } | NodeView::Function { .. } => {
-                Value::Error(CellError::Value)
+            NodeView::BinaryOp { op } => {
+                let (Some(left_node), Some(right_node)) = (node.left(), node.right()) else {
+                    return Value::Error(CellError::Value);
+                };
+                let left = self.eval(left_node, scope);
+                let right = self.eval(right_node, scope);
+                crate::ops::eval_binary(op, &left, &right)
             }
 
-            NodeView::Array { .. } | NodeView::PreludeRef(_) => Value::Error(CellError::Value),
+            NodeView::UnaryOp { op } => {
+                let Some(operand_node) = node.operand() else {
+                    return Value::Error(CellError::Value);
+                };
+                let operand = self.eval(operand_node, scope);
+                crate::ops::eval_unary(op, &operand)
+            }
+
+            NodeView::Function { .. } | NodeView::Array { .. } | NodeView::PreludeRef(_) => {
+                Value::Error(CellError::Value)
+            }
         }
     }
 }
@@ -173,20 +189,20 @@ mod tests {
     }
 
     #[test]
-    fn eval_binary_op_returns_value_error() {
+    fn eval_binary_add() {
         let prelude = Prelude::empty();
         let interp = make_interp(&prelude);
         let ast = parse("1+2").unwrap();
         let scope = RowScope::new(&[], 0);
-        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value),);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(3.0));
     }
 
     #[test]
-    fn eval_unary_op_returns_value_error() {
+    fn eval_unary_negate() {
         let prelude = Prelude::empty();
         let interp = make_interp(&prelude);
         let ast = parse("-5").unwrap();
         let scope = RowScope::new(&[], 0);
-        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value),);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(-5.0));
     }
 }

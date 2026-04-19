@@ -24,6 +24,7 @@
 
 mod evaluate;
 mod interp;
+pub mod ops;
 mod prelude;
 mod scope;
 pub mod topo;
