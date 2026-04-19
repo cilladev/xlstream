@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.13,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "xlstream"
+requires-python = ">=3.9"
+dynamic = ["version"]
+description = "Streaming Excel formula evaluation engine"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Priscilla Emasoga" }]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "xlstream._xlstream"
+python-source = "py_src"
+features = ["pyo3/extension-module"]
+strip = true
