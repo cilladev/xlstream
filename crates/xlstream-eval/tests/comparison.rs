@@ -70,8 +70,27 @@ fn text_lexicographic_ten_vs_nine() {
 }
 
 #[test]
-fn numeric_text_compared_as_number() {
+fn number_less_than_text_by_tier() {
+    // Number < Text always in Excel (type ordering, not coercion)
     assert_eq!(eval_formula("1<\"2\"", &[]), Value::Bool(true));
+}
+
+#[test]
+fn number_not_equal_to_numeric_text() {
+    // 1 = "1" is FALSE — different type tiers
+    assert_eq!(eval_formula("1=\"1\"", &[]), Value::Bool(false));
+}
+
+#[test]
+fn bool_outranks_number() {
+    // TRUE > 1000 — boolean tier > number tier
+    assert_eq!(eval_formula("TRUE>1000", &[]), Value::Bool(true));
+}
+
+#[test]
+fn bool_not_equal_to_one() {
+    // TRUE = 1 is FALSE — different type tiers
+    assert_eq!(eval_formula("TRUE=1", &[]), Value::Bool(false));
 }
 
 #[test]

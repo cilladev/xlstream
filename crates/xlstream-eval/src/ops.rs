@@ -86,6 +86,9 @@ fn eval_arithmetic(op: &str, left: &Value, right: &Value) -> Value {
             a / b
         }
         "^" => {
+            if a == 0.0 && b < 0.0 {
+                return Value::Error(CellError::Div0);
+            }
             let r = a.powf(b);
             if r.is_nan() || r.is_infinite() {
                 return Value::Error(CellError::Num);
@@ -141,6 +144,26 @@ fn eval_comparison(op: &str, left: &Value, right: &Value) -> Value {
     Value::Bool(result)
 }
 
+/// Excel comparison type tier. Different tiers never coerce —
+/// they use fixed ordering: number < text < boolean.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum CompareTier {
+    Numeric = 0,
+    Text = 1,
+    Boolean = 2,
+}
+
+fn value_tier(v: &Value) -> CompareTier {
+    match v {
+        Value::Number(_) | Value::Integer(_) | Value::Date(_) | Value::Empty => {
+            CompareTier::Numeric
+        }
+        Value::Text(_) => CompareTier::Text,
+        Value::Bool(_) => CompareTier::Boolean,
+        Value::Error(_) => CompareTier::Numeric,
+    }
+}
+
 fn compare_values(left: &Value, right: &Value) -> std::cmp::Ordering {
     use std::cmp::Ordering;
 
@@ -152,46 +175,28 @@ fn compare_values(left: &Value, right: &Value) -> std::cmp::Ordering {
         _ => {}
     }
 
-    let left_is_text = matches!(left, Value::Text(_));
-    let right_is_text = matches!(right, Value::Text(_));
+    let left_tier = value_tier(left);
+    let right_tier = value_tier(right);
 
-    match (left_is_text, right_is_text) {
-        // Both Text: always compare as text, case-insensitive — even if
-        // both parse as numbers. "10" > "9" = FALSE (lexicographic).
-        (true, true) => {
+    if left_tier != right_tier {
+        return left_tier.cmp(&right_tier);
+    }
+
+    match left_tier {
+        CompareTier::Numeric => {
+            let a = as_compare_number(left);
+            let b = as_compare_number(right);
+            compare_numbers(a, b)
+        }
+        CompareTier::Text => {
             let a = coerce::to_text(left);
             let b = coerce::to_text(right);
             a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase())
         }
-        // Number-type vs Text: try to parse text as number. If it
-        // parses, compare numerically. If not, number < text (Excel).
-        (false, true) => {
-            let a = as_compare_number(left);
-            if let Value::Text(s) = right {
-                match s.trim().parse::<f64>() {
-                    Ok(b) => compare_numbers(a, b),
-                    Err(_) => Ordering::Less,
-                }
-            } else {
-                Ordering::Equal
-            }
-        }
-        (true, false) => {
-            let b = as_compare_number(right);
-            if let Value::Text(s) = left {
-                match s.trim().parse::<f64>() {
-                    Ok(a) => compare_numbers(a, b),
-                    Err(_) => Ordering::Greater,
-                }
-            } else {
-                Ordering::Equal
-            }
-        }
-        // Both non-text: compare as numbers with IEEE rounding
-        (false, false) => {
-            let a = as_compare_number(left);
-            let b = as_compare_number(right);
-            compare_numbers(a, b)
+        CompareTier::Boolean => {
+            let a = matches!(left, Value::Bool(true));
+            let b = matches!(right, Value::Bool(true));
+            a.cmp(&b)
         }
     }
 }
@@ -207,15 +212,8 @@ fn as_compare_number(v: &Value) -> f64 {
         Value::Number(n) => *n,
         #[allow(clippy::cast_precision_loss)]
         Value::Integer(i) => *i as f64,
-        Value::Bool(b) => {
-            if *b {
-                1.0
-            } else {
-                0.0
-            }
-        }
         Value::Date(d) => d.serial,
-        Value::Empty | Value::Text(_) | Value::Error(_) => 0.0,
+        Value::Empty | Value::Bool(_) | Value::Text(_) | Value::Error(_) => 0.0,
     }
 }
 
@@ -225,7 +223,12 @@ fn round_to_15_sig_digits(n: f64) -> f64 {
     }
     #[allow(clippy::cast_possible_truncation)]
     let d = n.abs().log10().floor() as i32 + 1;
-    let power = 10_f64.powi(15 - d);
+    let exp = 15 - d;
+    // Guard against 10^exp overflow for extreme exponents
+    if !(-308..=308).contains(&exp) {
+        return n;
+    }
+    let power = 10_f64.powi(exp);
     (n * power).round() / power
 }
 
@@ -812,10 +815,91 @@ mod tests {
     }
 
     #[test]
-    fn lt_number_and_numeric_text() {
+    fn lt_number_less_than_any_text_by_tier() {
+        // Number < Text always, regardless of text content (type ordering)
         assert_eq!(
-            eval_binary("<", &Value::Number(1.0), &Value::Text("2".into())),
+            eval_binary("<", &Value::Number(999.0), &Value::Text("1".into())),
             Value::Bool(true)
         );
+    }
+
+    #[test]
+    fn eq_number_and_numeric_text_different_tiers() {
+        // 1 = "1" is FALSE in Excel — different type tiers
+        assert_eq!(
+            eval_binary("=", &Value::Number(1.0), &Value::Text("1".into())),
+            Value::Bool(false)
+        );
+    }
+
+    // -- Boolean tier tests --
+
+    #[test]
+    fn eq_bool_true_and_number_one_different_tiers() {
+        // TRUE = 1 is FALSE in Excel — bool and number are different tiers
+        assert_eq!(eval_binary("=", &Value::Bool(true), &Value::Number(1.0)), Value::Bool(false));
+    }
+
+    #[test]
+    fn gt_bool_outranks_number() {
+        // TRUE > 1000 is TRUE in Excel — boolean tier > number tier
+        assert_eq!(eval_binary(">", &Value::Bool(true), &Value::Number(1000.0)), Value::Bool(true));
+    }
+
+    #[test]
+    fn gt_bool_outranks_text() {
+        // TRUE > "zzz" is TRUE in Excel — boolean tier > text tier
+        assert_eq!(
+            eval_binary(">", &Value::Bool(true), &Value::Text("zzz".into())),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn eq_bool_true_and_bool_true() {
+        assert_eq!(eval_binary("=", &Value::Bool(true), &Value::Bool(true)), Value::Bool(true));
+    }
+
+    #[test]
+    fn lt_bool_false_less_than_bool_true() {
+        assert_eq!(eval_binary("<", &Value::Bool(false), &Value::Bool(true)), Value::Bool(true));
+    }
+
+    // -- NaN/inf text --
+
+    #[test]
+    fn nan_text_is_non_numeric() {
+        // "NaN" should not parse as a number — Excel treats it as text
+        assert_eq!(
+            eval_binary("+", &Value::Number(1.0), &Value::Text("NaN".into())),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn inf_text_is_non_numeric() {
+        assert_eq!(
+            eval_binary("+", &Value::Number(1.0), &Value::Text("inf".into())),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // -- 0^negative --
+
+    #[test]
+    fn pow_zero_to_negative_returns_div0() {
+        assert_eq!(
+            eval_binary("^", &Value::Number(0.0), &Value::Number(-1.0)),
+            Value::Error(CellError::Div0)
+        );
+    }
+
+    // -- IEEE rounding edge case --
+
+    #[test]
+    fn ieee_round_very_small_number_does_not_overflow() {
+        let tiny = 1e-300_f64;
+        let rounded = round_to_15_sig_digits(tiny);
+        assert!(rounded.is_finite());
     }
 }
