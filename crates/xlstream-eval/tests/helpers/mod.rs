@@ -156,3 +156,33 @@ pub fn generate_conditional_fixture() -> NamedTempFile {
     wb.save(tmp.path()).unwrap();
     tmp
 }
+
+/// Fixture with aggregate formulas (pct of total).
+///
+/// Header `[Region, Deal Value, Pct of Total]`. 4 data rows.
+/// Col C: `=B{row}/SUM(B:B)*100` — requires prelude pass to compute SUM(B:B).
+#[allow(dead_code)]
+pub fn generate_aggregate_fixture() -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+
+    ws.write_string(0, 0, "Region").unwrap();
+    ws.write_string(0, 1, "Deal Value").unwrap();
+    ws.write_string(0, 2, "Pct of Total").unwrap();
+
+    let data = [("EMEA", 100.0), ("APAC", 200.0), ("EMEA", 300.0), ("AMER", 400.0)];
+
+    for (i, (region, value)) in data.iter().enumerate() {
+        let row = (i + 1) as u32;
+        let excel_row = row + 1;
+        ws.write_string(row, 0, *region).unwrap();
+        ws.write_number(row, 1, *value).unwrap();
+        let pct = *value / 1000.0 * 100.0;
+        let formula = format!("=B{excel_row}/SUM(B:B)*100");
+        ws.write_formula(row, 2, Formula::new(&formula).set_result(pct.to_string())).unwrap();
+    }
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}

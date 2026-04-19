@@ -33,6 +33,8 @@ pub enum AggKind {
     Product,
     /// `MEDIAN`
     Median,
+    /// `COUNTBLANK`
+    CountBlank,
 }
 
 /// Which lookup strategy the prelude must prepare.
@@ -212,6 +214,7 @@ fn agg_kind_for(name: &str) -> Option<AggKind> {
         "MAX" => Some(AggKind::Max),
         "PRODUCT" => Some(AggKind::Product),
         "MEDIAN" => Some(AggKind::Median),
+        "COUNTBLANK" => Some(AggKind::CountBlank),
         _ => None,
     }
 }

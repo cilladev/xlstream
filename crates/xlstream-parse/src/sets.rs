@@ -36,7 +36,7 @@ pub(crate) static VOLATILE_UNSUPPORTED: Set<&'static str> = phf_set! {
 
 /// Functions evaluable in a single column pre-pass.
 pub(crate) static AGGREGATE_FUNCTIONS: Set<&'static str> = phf_set! {
-    "SUM", "COUNT", "COUNTA", "AVERAGE", "MIN", "MAX", "PRODUCT",
+    "SUM", "COUNT", "COUNTA", "COUNTBLANK", "AVERAGE", "MIN", "MAX", "PRODUCT",
     "SUMIF", "COUNTIF", "AVERAGEIF",
     "SUMIFS", "COUNTIFS", "AVERAGEIFS", "MINIFS", "MAXIFS",
     "MEDIAN",

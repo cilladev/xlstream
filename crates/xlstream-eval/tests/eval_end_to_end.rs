@@ -173,3 +173,37 @@ fn conditional_if_short_circuit_and_ifs_tiered_match() {
     // Row 5 (A=5000): C="Bronze"
     assert_eq!(rows[5].1[2], Value::Text("Bronze".into()), "row 5: tier mismatch");
 }
+
+// ---------------------------------------------------------------------------
+// Aggregate prelude — pct of total (Phase 7)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn aggregate_pct_of_total_via_sum_prelude() {
+    let input = helpers::generate_aggregate_fixture();
+    let output = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+
+    let summary = evaluate(input.path(), output.path(), None).unwrap();
+    assert_eq!(summary.rows_processed, 5, "rows_processed: 1 header + 4 data");
+    assert_eq!(summary.formulas_evaluated, 4, "4 rows * 1 formula col");
+
+    let mut reader = Reader::open(output.path()).unwrap();
+    let rows = read_all_rows(&mut reader, "Sheet1");
+    assert_eq!(rows.len(), 5);
+
+    // Total = 100 + 200 + 300 + 400 = 1000
+    let expected_pcts = [10.0, 20.0, 30.0, 40.0];
+    for (i, &expected) in expected_pcts.iter().enumerate() {
+        let row = &rows[i + 1].1;
+        match &row[2] {
+            Value::Number(n) => {
+                assert!(
+                    (n - expected).abs() < 1e-10,
+                    "row {}: expected {expected}, got {n}",
+                    i + 1
+                );
+            }
+            other => panic!("row {}: expected Number, got {other:?}", i + 1),
+        }
+    }
+}

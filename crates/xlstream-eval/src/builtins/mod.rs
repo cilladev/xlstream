@@ -4,6 +4,7 @@
 //! `NodeView::Function` node. Returns `Some(value)` if the function is
 //! known, `None` otherwise (caller falls back to `#VALUE!`).
 
+pub mod aggregate;
 mod conditional;
 
 use xlstream_core::Value;
