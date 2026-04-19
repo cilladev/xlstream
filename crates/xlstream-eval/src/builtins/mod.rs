@@ -28,6 +28,54 @@ fn eval_args(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_
     args.iter().map(|a| interp.eval(*a, scope)).collect()
 }
 
+/// Expand a single AST node into a `Vec<Value>`.
+///
+/// For `RangeRef` nodes this resolves from lookup sheets or the prelude
+/// bounded range cache. For any other node it evaluates normally and
+/// returns a single-element vec.
+pub(crate) fn expand_range(
+    node: NodeRef<'_>,
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Vec<Value> {
+    use xlstream_core::CellError;
+    use xlstream_parse::NodeView;
+
+    match node.view() {
+        NodeView::RangeRef { sheet, start_row, end_row, start_col, .. } => {
+            let sc = start_col.unwrap_or(1);
+
+            // Try lookup sheet (already fully loaded).
+            if let Some(sheet_name) = sheet {
+                if let Some(ls) = interp.prelude().lookup_sheet(sheet_name) {
+                    let sr = start_row.map_or(0, |r| (r - 1) as usize);
+                    let er = end_row.map_or(ls.num_rows().saturating_sub(1), |r| (r - 1) as usize);
+                    let col = (sc - 1) as usize;
+                    return (sr..=er)
+                        .map(|r| ls.cell(r, col).cloned().unwrap_or(Value::Empty))
+                        .collect();
+                }
+            }
+
+            // Fall back to cached bounded range (main sheet).
+            if let (Some(sr), Some(er)) = (start_row, end_row) {
+                let key = crate::prelude::BoundedRangeKey {
+                    sheet: sheet.map(ToString::to_string),
+                    col: sc,
+                    start_row: sr,
+                    end_row: er,
+                };
+                if let Some(values) = interp.prelude().get_cached_range(&key) {
+                    return values.clone();
+                }
+            }
+
+            vec![Value::Error(CellError::Ref)]
+        }
+        _ => vec![interp.eval(node, scope)],
+    }
+}
+
 /// Look up `name` (case-insensitive) and call the matching builtin.
 ///
 /// Returns `None` for unknown functions — the caller decides the fallback.
@@ -73,8 +121,8 @@ pub(crate) fn dispatch(
         "EDATE" => Some(date::builtin_edate(&eval_args(args, interp, scope))),
         "EOMONTH" => Some(date::builtin_eomonth(&eval_args(args, interp, scope))),
         "DATEDIF" => Some(date::builtin_datedif(&eval_args(args, interp, scope))),
-        "NETWORKDAYS" => Some(date::builtin_networkdays(&eval_args(args, interp, scope))),
-        "WORKDAY" => Some(date::builtin_workday(&eval_args(args, interp, scope))),
+        "NETWORKDAYS" => Some(date::builtin_networkdays(args, interp, scope)),
+        "WORKDAY" => Some(date::builtin_workday(args, interp, scope)),
         // -- string builtins (pure, eager eval) --
         "LEFT" => Some(string::builtin_left(&eval_args(args, interp, scope))),
         "RIGHT" => Some(string::builtin_right(&eval_args(args, interp, scope))),
@@ -85,8 +133,8 @@ pub(crate) fn dispatch(
         "PROPER" => Some(string::builtin_proper(&eval_args(args, interp, scope))),
         "TRIM" => Some(string::builtin_trim(&eval_args(args, interp, scope))),
         "CLEAN" => Some(string::builtin_clean(&eval_args(args, interp, scope))),
-        "CONCAT" | "CONCATENATE" => Some(string::builtin_concat(&eval_args(args, interp, scope))),
-        "TEXTJOIN" => Some(string::builtin_textjoin(&eval_args(args, interp, scope))),
+        "CONCAT" | "CONCATENATE" => Some(string::builtin_concat(args, interp, scope)),
+        "TEXTJOIN" => Some(string::builtin_textjoin(args, interp, scope)),
         "FIND" => Some(string::builtin_find(&eval_args(args, interp, scope))),
         "SEARCH" => Some(string::builtin_search(&eval_args(args, interp, scope))),
         "SUBSTITUTE" => Some(string::builtin_substitute(&eval_args(args, interp, scope))),
@@ -133,8 +181,8 @@ pub(crate) fn dispatch(
         "PMT" => Some(financial::builtin_pmt(&eval_args(args, interp, scope))),
         "PV" => Some(financial::builtin_pv(&eval_args(args, interp, scope))),
         "FV" => Some(financial::builtin_fv(&eval_args(args, interp, scope))),
-        "NPV" => Some(financial::builtin_npv(&eval_args(args, interp, scope))),
-        "IRR" => Some(financial::builtin_irr(&eval_args(args, interp, scope))),
+        "NPV" => Some(financial::builtin_npv(args, interp, scope)),
+        "IRR" => Some(financial::builtin_irr(args, interp, scope)),
         "RATE" => Some(financial::builtin_rate(&eval_args(args, interp, scope))),
         _ => None,
     }

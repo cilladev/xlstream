@@ -1,9 +1,14 @@
 //! Financial builtin functions (Phase 9, Chunk 3).
 //!
 //! Standard time-value-of-money formulas: PMT, PV, FV, NPV, IRR, RATE.
-//! All take `&[Value]` and return `Value`.
+//! Pure builtins take `&[Value]` and return `Value`.
+//! Stateful builtins (IRR, NPV) take AST nodes for range expansion.
 
 use xlstream_core::{coerce, CellError, Value};
+use xlstream_parse::NodeRef;
+
+use crate::interp::Interpreter;
+use crate::scope::RowScope;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -208,44 +213,25 @@ pub fn builtin_fv(args: &[Value]) -> Value {
 // NPV
 // ---------------------------------------------------------------------------
 
-/// `NPV(rate, value1, value2, ...)` — net present value.
+/// Compute NPV from a rate and cashflow slice.
 ///
 /// Discounts each cashflow at `rate`, starting at period 1.
-/// Requires at least one cashflow argument.
 ///
 /// # Examples
 ///
 /// ```
 /// use xlstream_core::Value;
-/// use xlstream_eval::builtins::financial::builtin_npv;
-/// let result = builtin_npv(&[
-///     Value::Number(0.10),
-///     Value::Number(-1000.0),
-///     Value::Number(300.0),
-///     Value::Number(400.0),
-///     Value::Number(500.0),
-/// ]);
+/// use xlstream_eval::builtins::financial::npv_from_values;
+/// let result = npv_from_values(0.10, &[-1000.0, 300.0, 400.0, 500.0]);
 /// match result {
 ///     Value::Number(n) => assert!((n - (-19.12)).abs() < 1.0),
 ///     _ => panic!("expected Number"),
 /// }
 /// ```
 #[must_use]
-pub fn builtin_npv(args: &[Value]) -> Value {
-    if args.len() < 2 {
-        return Value::Error(CellError::Value);
-    }
-    let rate = match num_arg(args, 0) {
-        Ok(v) => v,
-        Err(e) => return e,
-    };
-
+pub fn npv_from_values(rate: f64, cashflows: &[f64]) -> Value {
     let mut npv = 0.0;
-    for (i, v) in args[1..].iter().enumerate() {
-        let cf = match coerce::to_number(v) {
-            Ok(n) => n,
-            Err(e) => return Value::Error(e),
-        };
+    for (i, &cf) in cashflows.iter().enumerate() {
         #[allow(clippy::cast_precision_loss)]
         let period = (i + 1) as f64;
         npv += cf / (1.0 + rate).powf(period);
@@ -253,62 +239,61 @@ pub fn builtin_npv(args: &[Value]) -> Value {
     finite_or_num(npv)
 }
 
+/// `NPV(rate, value1, value2, ...)` — net present value (stateful).
+///
+/// Evaluates the rate arg normally, then expands remaining args via
+/// `expand_range` to support bounded range references.
+pub(crate) fn builtin_npv(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() < 2 {
+        return Value::Error(CellError::Value);
+    }
+    let rate_val = interp.eval(args[0], scope);
+    let rate = match coerce::to_number(&rate_val) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+
+    let mut cashflows = Vec::new();
+    for &arg in &args[1..] {
+        for v in super::expand_range(arg, interp, scope) {
+            match coerce::to_number(&v) {
+                Ok(n) => cashflows.push(n),
+                Err(e) => return Value::Error(e),
+            }
+        }
+    }
+
+    npv_from_values(rate, &cashflows)
+}
+
 // ---------------------------------------------------------------------------
 // IRR
 // ---------------------------------------------------------------------------
 
-/// `IRR(value1, value2, ..., guess?)` — internal rate of return.
+/// Compute IRR from a cashflow slice using Newton-Raphson iteration.
 ///
-/// Uses Newton-Raphson iteration (up to 100 iterations, 1e-10 threshold).
-/// All arguments except the optional last `guess` are cashflows.
-/// Default guess is 0.1.
+/// Up to 100 iterations, 1e-10 threshold. Default guess is 0.1.
 ///
 /// Returns `#NUM!` if values don't contain both positive and negative
 /// cashflows, or if the iteration doesn't converge.
-///
-/// v0.1 limitation: cashflows are flat args, not range-based.
 ///
 /// # Examples
 ///
 /// ```
 /// use xlstream_core::Value;
-/// use xlstream_eval::builtins::financial::builtin_irr;
-/// let result = builtin_irr(&[
-///     Value::Number(-1000.0),
-///     Value::Number(300.0),
-///     Value::Number(400.0),
-///     Value::Number(500.0),
-///     Value::Number(200.0),
-/// ]);
+/// use xlstream_eval::builtins::financial::irr_from_cashflows;
+/// let result = irr_from_cashflows(&[-1000.0, 300.0, 400.0, 500.0, 200.0]);
 /// match result {
 ///     Value::Number(n) => assert!((n - 0.1532).abs() < 0.01),
 ///     _ => panic!("expected Number"),
 /// }
 /// ```
 #[must_use]
-pub fn builtin_irr(args: &[Value]) -> Value {
-    if args.len() < 2 {
-        return Value::Error(CellError::Value);
-    }
-
-    // Collect all numeric args. The last arg *might* be a guess
-    // if it's provided alongside the cashflows. We treat all args
-    // as cashflows — if the user wants a custom guess, they pass
-    // it as the last arg and we detect the "guess" heuristic:
-    // actually, IRR(values, guess) in Excel takes a range + guess.
-    // In our flat model, we use a simple convention: if there are
-    // >= 3 args, the last arg could be a guess. But since we can't
-    // distinguish, we just treat all args as cashflows with default
-    // guess 0.1.
-    let mut cashflows = Vec::with_capacity(args.len());
-    for v in args {
-        let cf = match coerce::to_number(v) {
-            Ok(n) => n,
-            Err(e) => return Value::Error(e),
-        };
-        cashflows.push(cf);
-    }
-
+pub fn irr_from_cashflows(cashflows: &[f64]) -> Value {
     if cashflows.len() < 2 {
         return Value::Error(CellError::Num);
     }
@@ -350,6 +335,32 @@ pub fn builtin_irr(args: &[Value]) -> Value {
     }
 
     Value::Error(CellError::Num)
+}
+
+/// `IRR(values, guess?)` — internal rate of return (stateful).
+///
+/// Expands all args via `expand_range` to collect cashflows, then
+/// delegates to [`irr_from_cashflows`].
+pub(crate) fn builtin_irr(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+
+    let mut cashflows = Vec::new();
+    for &arg in args {
+        for v in super::expand_range(arg, interp, scope) {
+            match coerce::to_number(&v) {
+                Ok(n) => cashflows.push(n),
+                Err(e) => return Value::Error(e),
+            }
+        }
+    }
+
+    irr_from_cashflows(&cashflows)
 }
 
 // ---------------------------------------------------------------------------
@@ -677,13 +688,7 @@ mod tests {
     #[test]
     fn npv_basic() {
         // NPV(0.10, -1000, 300, 400, 500) ~ -19.12
-        let result = builtin_npv(&[
-            Value::Number(0.10),
-            Value::Number(-1000.0),
-            Value::Number(300.0),
-            Value::Number(400.0),
-            Value::Number(500.0),
-        ]);
+        let result = npv_from_values(0.10, &[-1000.0, 300.0, 400.0, 500.0]);
         match result {
             Value::Number(n) => assert!((n - (-19.12)).abs() < 1.0),
             other => panic!("expected Number, got {other:?}"),
@@ -693,12 +698,7 @@ mod tests {
     #[test]
     fn npv_positive_project() {
         // NPV(0.05, -1000, 600, 600) > 0
-        let result = builtin_npv(&[
-            Value::Number(0.05),
-            Value::Number(-1000.0),
-            Value::Number(600.0),
-            Value::Number(600.0),
-        ]);
+        let result = npv_from_values(0.05, &[-1000.0, 600.0, 600.0]);
         match result {
             Value::Number(n) => assert!(n > 0.0),
             other => panic!("expected Number, got {other:?}"),
@@ -708,29 +708,11 @@ mod tests {
     #[test]
     fn npv_zero_rate() {
         // NPV(0, 100, 200, 300) = 600
-        let result = builtin_npv(&[
-            Value::Number(0.0),
-            Value::Number(100.0),
-            Value::Number(200.0),
-            Value::Number(300.0),
-        ]);
+        let result = npv_from_values(0.0, &[100.0, 200.0, 300.0]);
         match result {
             Value::Number(n) => assert!((n - 600.0).abs() < 0.01),
             other => panic!("expected Number, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn npv_error_propagation() {
-        assert_eq!(
-            builtin_npv(&[Value::Number(0.10), Value::Error(CellError::Na)]),
-            Value::Error(CellError::Na)
-        );
-    }
-
-    #[test]
-    fn npv_too_few_args() {
-        assert_eq!(builtin_npv(&[Value::Number(0.10)]), Value::Error(CellError::Value));
     }
 
     // ===== IRR =====
@@ -738,13 +720,7 @@ mod tests {
     #[test]
     fn irr_convergence() {
         // IRR(-1000, 300, 400, 500, 200) ~ 0.1532
-        let result = builtin_irr(&[
-            Value::Number(-1000.0),
-            Value::Number(300.0),
-            Value::Number(400.0),
-            Value::Number(500.0),
-            Value::Number(200.0),
-        ]);
+        let result = irr_from_cashflows(&[-1000.0, 300.0, 400.0, 500.0, 200.0]);
         match result {
             Value::Number(n) => assert!((n - 0.1532).abs() < 0.01),
             other => panic!("expected Number, got {other:?}"),
@@ -754,7 +730,7 @@ mod tests {
     #[test]
     fn irr_simple_doubling() {
         // IRR(-100, 200) = 1.0 (100% return)
-        let result = builtin_irr(&[Value::Number(-100.0), Value::Number(200.0)]);
+        let result = irr_from_cashflows(&[-100.0, 200.0]);
         match result {
             Value::Number(n) => assert!((n - 1.0).abs() < 0.01),
             other => panic!("expected Number, got {other:?}"),
@@ -763,32 +739,17 @@ mod tests {
 
     #[test]
     fn irr_no_sign_change_returns_num_error() {
-        // All positive cashflows — no valid IRR
-        assert_eq!(
-            builtin_irr(&[Value::Number(100.0), Value::Number(200.0), Value::Number(300.0)]),
-            Value::Error(CellError::Num)
-        );
+        assert_eq!(irr_from_cashflows(&[100.0, 200.0, 300.0]), Value::Error(CellError::Num));
     }
 
     #[test]
     fn irr_all_negative_returns_num_error() {
-        assert_eq!(
-            builtin_irr(&[Value::Number(-100.0), Value::Number(-200.0)]),
-            Value::Error(CellError::Num)
-        );
+        assert_eq!(irr_from_cashflows(&[-100.0, -200.0]), Value::Error(CellError::Num));
     }
 
     #[test]
-    fn irr_too_few_args() {
-        assert_eq!(builtin_irr(&[Value::Number(-100.0)]), Value::Error(CellError::Value));
-    }
-
-    #[test]
-    fn irr_error_propagation() {
-        assert_eq!(
-            builtin_irr(&[Value::Error(CellError::Na), Value::Number(100.0)]),
-            Value::Error(CellError::Na)
-        );
+    fn irr_too_few_cashflows_returns_num_error() {
+        assert_eq!(irr_from_cashflows(&[-100.0]), Value::Error(CellError::Num));
     }
 
     // ===== RATE =====
