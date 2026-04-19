@@ -7,8 +7,8 @@
 pub mod aggregate;
 mod conditional;
 pub(crate) mod date;
-pub(crate) mod financial;
-pub(crate) mod info;
+pub mod financial;
+pub mod info;
 mod lookup;
 pub(crate) mod math;
 mod multi_conditional;
@@ -118,6 +118,24 @@ pub(crate) fn dispatch(
         "ACOS" => Some(math::builtin_acos(&eval_args(args, interp, scope))),
         "ATAN" => Some(math::builtin_atan(&eval_args(args, interp, scope))),
         "ATAN2" => Some(math::builtin_atan2(&eval_args(args, interp, scope))),
+        // -- info builtins (pure, eager eval) --
+        "ISBLANK" => Some(info::builtin_isblank(&eval_args(args, interp, scope))),
+        "ISNUMBER" => Some(info::builtin_isnumber(&eval_args(args, interp, scope))),
+        "ISTEXT" => Some(info::builtin_istext(&eval_args(args, interp, scope))),
+        "ISERROR" => Some(info::builtin_iserror(&eval_args(args, interp, scope))),
+        "ISNA" => Some(info::builtin_isna(&eval_args(args, interp, scope))),
+        "ISLOGICAL" => Some(info::builtin_islogical(&eval_args(args, interp, scope))),
+        "ISNONTEXT" => Some(info::builtin_isnontext(&eval_args(args, interp, scope))),
+        "ISREF" => Some(info::builtin_isref(&eval_args(args, interp, scope))),
+        "NA" => Some(info::builtin_na(&eval_args(args, interp, scope))),
+        "TYPE" => Some(info::builtin_type(&eval_args(args, interp, scope))),
+        // -- financial builtins (pure, eager eval) --
+        "PMT" => Some(financial::builtin_pmt(&eval_args(args, interp, scope))),
+        "PV" => Some(financial::builtin_pv(&eval_args(args, interp, scope))),
+        "FV" => Some(financial::builtin_fv(&eval_args(args, interp, scope))),
+        "NPV" => Some(financial::builtin_npv(&eval_args(args, interp, scope))),
+        "IRR" => Some(financial::builtin_irr(&eval_args(args, interp, scope))),
+        "RATE" => Some(financial::builtin_rate(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
