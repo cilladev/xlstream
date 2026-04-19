@@ -1,8 +1,8 @@
 //! Integration tests: AST rewrite golden tests.
 
 use xlstream_parse::{
-    classify, parse, rewrite, AggKind, AggregateKey, Classification, ClassificationContext,
-    LookupKey, LookupKind, PreludeKey,
+    classify, collect_lookup_keys, parse, rewrite, AggKind, AggregateKey, Classification,
+    ClassificationContext, LookupKey, LookupKind, PreludeKey,
 };
 
 /// Extract the `root: ...` portion of the `Ast` debug output, which is the
@@ -71,17 +71,15 @@ fn row_local_classifications_pass_through_untouched() {
 }
 
 #[test]
-fn vlookup_collapses_to_prelude_lookup() {
+fn vlookup_stays_as_function_node() {
     let ast = parse("VLOOKUP(A2, 'Region Info'!A:C, 2, FALSE)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5).with_lookup_sheet("Region Info");
     let verdict = classify(&ast, &ctx);
     assert_eq!(verdict, Classification::LookupOnly);
     let rewritten = rewrite(ast, &ctx, &verdict);
     let dbg = root_dbg(&rewritten);
-    assert!(dbg.contains("PreludeRef"), "expected PreludeRef: {dbg}");
-    assert!(dbg.contains("Lookup"), "expected Lookup variant: {dbg}");
-    assert!(dbg.contains("Region Info"), "expected sheet name: {dbg}");
-    assert!(dbg.contains("VLookup"), "expected VLookup kind: {dbg}");
+    assert!(dbg.contains("Function"), "expected Function node preserved: {dbg}");
+    assert!(dbg.contains("VLOOKUP"), "expected VLOOKUP name: {dbg}");
 }
 
 #[test]
@@ -135,16 +133,49 @@ fn nested_aggregates_both_collapse() {
 }
 
 #[test]
-fn vlookup_key_and_value_indices_are_correct() {
-    // VLOOKUP(A2, 'Lookup'!A:D, 3, FALSE)
-    // key_index = 1 (A), value_index = 1 + 3 - 1 = 3
+fn collect_vlookup_key_extracts_indices() {
     let ast = parse("VLOOKUP(A2, 'Lookup'!A:D, 3, FALSE)").unwrap();
-    let ctx = ClassificationContext::for_cell("Sheet1", 2, 5).with_lookup_sheet("Lookup");
-    let verdict = classify(&ast, &ctx);
-    let rewritten = rewrite(ast, &ctx, &verdict);
-    let dbg = root_dbg(&rewritten);
-    assert!(dbg.contains("key_index: 1"), "expected key_index 1: {dbg}");
-    assert!(dbg.contains("value_index: 3"), "expected value_index 3: {dbg}");
+    let keys = collect_lookup_keys(&ast);
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].kind, LookupKind::VLookup);
+    assert_eq!(keys[0].sheet, "Lookup");
+    assert_eq!(keys[0].key_index, 1);
+    assert_eq!(keys[0].value_index, 3);
+}
+
+#[test]
+fn collect_xlookup_key() {
+    let ast = parse("XLOOKUP(A1, 'Data'!B:B, 'Data'!D:D)").unwrap();
+    let keys = collect_lookup_keys(&ast);
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].kind, LookupKind::XLookup);
+    assert_eq!(keys[0].sheet, "Data");
+    assert_eq!(keys[0].key_index, 2);
+    assert_eq!(keys[0].value_index, 4);
+}
+
+#[test]
+fn collect_no_lookups_returns_empty() {
+    let ast = parse("A1+B1*2").unwrap();
+    let keys = collect_lookup_keys(&ast);
+    assert!(keys.is_empty());
+}
+
+#[test]
+fn collect_match_registers_sheet() {
+    let ast = parse("MATCH(A1, 'Lookup'!B:B, 0)").unwrap();
+    let keys = collect_lookup_keys(&ast);
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].sheet, "Lookup");
+    assert_eq!(keys[0].key_index, 2);
+}
+
+#[test]
+fn collect_index_registers_sheet() {
+    let ast = parse("INDEX('Data'!A:C, 2, 1)").unwrap();
+    let keys = collect_lookup_keys(&ast);
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].sheet, "Data");
 }
 
 #[test]

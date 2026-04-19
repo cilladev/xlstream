@@ -32,5 +32,7 @@ pub use ast::Ast;
 pub use classify::{classify, Classification, ClassificationContext, UnsupportedReason};
 pub use parser::parse;
 pub use references::{extract_references, Reference, References};
-pub use rewrite::{rewrite, AggKind, AggregateKey, LookupKey, LookupKind, PreludeKey};
+pub use rewrite::{
+    collect_lookup_keys, rewrite, AggKind, AggregateKey, LookupKey, LookupKind, PreludeKey,
+};
 pub use view::{NodeRef, NodeView};

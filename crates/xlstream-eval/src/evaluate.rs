@@ -7,8 +7,8 @@ use std::time::Instant;
 use xlstream_core::{col_row_to_a1, Value, XlStreamError};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
-    classify, extract_references, parse, rewrite, AggregateKey, Ast, Classification,
-    ClassificationContext, Reference,
+    classify, collect_lookup_keys, extract_references, parse, rewrite, AggregateKey, Ast,
+    Classification, ClassificationContext, LookupKey, Reference,
 };
 
 use crate::interp::Interpreter;
@@ -85,10 +85,10 @@ pub fn evaluate(
     }
 
     // Parse + classify formula columns; build topo order.
-    let (topo_order, col_asts) = if let Some(ref main) = main_sheet {
-        build_eval_plan(main, &main_formulas)?
+    let (topo_order, col_asts, lookup_keys) = if let Some(ref main) = main_sheet {
+        build_eval_plan(main, &main_formulas, &sheet_names)?
     } else {
-        (Vec::new(), HashMap::new())
+        (Vec::new(), HashMap::new(), Vec::new())
     };
 
     // Collect aggregate keys from all rewritten ASTs and run prelude.
@@ -111,12 +111,18 @@ pub fn evaluate(
             .collect()
     };
 
-    let prelude = if all_agg_keys.is_empty() && all_multi_keys.is_empty() {
+    let agg_prelude = if all_agg_keys.is_empty() && all_multi_keys.is_empty() {
         Prelude::empty()
     } else if let Some(ref main) = main_sheet {
         crate::prelude_plan::execute_prelude(&mut reader, main, &all_agg_keys, &all_multi_keys)?
     } else {
         Prelude::empty()
+    };
+    let lookup_sheets = crate::lookup::load_lookup_sheets(&lookup_keys, &mut reader)?;
+    let prelude = if lookup_sheets.is_empty() {
+        agg_prelude
+    } else {
+        agg_prelude.with_lookup_sheets(lookup_sheets)
     };
     let interp = Interpreter::new(&prelude);
     let mut writer = Writer::create(output)?;
@@ -172,10 +178,12 @@ pub fn evaluate(
 
 /// Parse + classify all formula columns for `main_sheet`. Returns the
 /// topo-sorted column evaluation order and the per-column [`Ast`] cache.
+#[allow(clippy::type_complexity)]
 fn build_eval_plan(
     main_sheet: &str,
     all_formulas: &[(u32, u32, String)],
-) -> Result<(Vec<u32>, HashMap<u32, Ast>), XlStreamError> {
+    all_sheet_names: &[String],
+) -> Result<(Vec<u32>, HashMap<u32, Ast>, Vec<LookupKey>), XlStreamError> {
     // First occurrence per column (0-based col → (0-based row, formula text)).
     let mut col_formula: HashMap<u32, (u32, String)> = HashMap::new();
     for (row, col, text) in all_formulas {
@@ -183,13 +191,20 @@ fn build_eval_plan(
     }
 
     let mut col_asts: HashMap<u32, Ast> = HashMap::new();
+    let mut all_lookup_keys: Vec<LookupKey> = Vec::new();
     for (&col, (row, text)) in &col_formula {
         // calamine strips the leading '='; strip defensively to handle either.
         let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
         let ast = parse(formula_str)?;
 
-        // Classify at first-occurrence position (convert 0-based to 1-based).
-        let ctx = ClassificationContext::for_cell(main_sheet, row + 1, col + 1);
+        // Register all non-main sheets as lookup sheets so the classifier
+        // accepts cross-sheet range refs in lookup functions.
+        let mut ctx = ClassificationContext::for_cell(main_sheet, row + 1, col + 1);
+        for name in all_sheet_names {
+            if !name.eq_ignore_ascii_case(main_sheet) {
+                ctx = ctx.with_lookup_sheet(name);
+            }
+        }
         let verdict = classify(&ast, &ctx);
         if let Classification::Unsupported(ref reason) = verdict {
             return Err(XlStreamError::Unsupported {
@@ -200,8 +215,10 @@ fn build_eval_plan(
             });
         }
 
-        // Rewrite aggregate/lookup sub-expressions to PreludeRef nodes.
+        // Rewrite aggregate sub-expressions to PreludeRef nodes.
+        // Lookups stay as Function nodes (rewrite_lookup returns None).
         let rewritten = rewrite(ast, &ctx, &verdict);
+        all_lookup_keys.extend(collect_lookup_keys(&rewritten));
         col_asts.insert(col, rewritten);
     }
 
@@ -227,7 +244,7 @@ fn build_eval_plan(
         .collect();
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
-    Ok((topo_order, col_asts))
+    Ok((topo_order, col_asts, all_lookup_keys))
 }
 
 #[cfg(test)]
