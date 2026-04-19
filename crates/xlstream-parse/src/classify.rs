@@ -387,6 +387,8 @@ fn classify_reference(
             }
             if resolved.eq_ignore_ascii_case(ctx.current_sheet()) && *row == ctx.current_row() {
                 Disposition::RowLocal
+            } else if sheet.is_some() && ctx.is_lookup_sheet(resolved) {
+                Disposition::Lookup
             } else {
                 Disposition::Unsupported(UnsupportedReason::NonCurrentRowRef)
             }
@@ -575,6 +577,30 @@ mod tests {
         assert!(ctx.is_lookup_sheet("lookup1"));
         assert!(!ctx.is_lookup_sheet("Other"));
         assert_eq!(ctx.headers().get("Amount"), Some(&4));
+    }
+
+    #[test]
+    fn cross_sheet_cell_ref_to_lookup_sheet_is_lookup() {
+        let ast = crate::parse("'Tax Rates'!A1").unwrap();
+        let ctx = ClassificationContext::for_cell("Main", 2, 1).with_lookup_sheet("Tax Rates");
+        assert_eq!(classify(&ast, &ctx), Classification::LookupOnly);
+    }
+
+    #[test]
+    fn cross_sheet_cell_ref_to_non_lookup_sheet_is_unsupported() {
+        let ast = crate::parse("'Other'!A1").unwrap();
+        let ctx = ClassificationContext::for_cell("Main", 2, 1).with_lookup_sheet("Tax Rates");
+        assert_eq!(
+            classify(&ast, &ctx),
+            Classification::Unsupported(UnsupportedReason::NonCurrentRowRef)
+        );
+    }
+
+    #[test]
+    fn cross_sheet_cell_ref_mixed_with_row_local() {
+        let ast = crate::parse("A2+'Tax Rates'!B1").unwrap();
+        let ctx = ClassificationContext::for_cell("Main", 2, 3).with_lookup_sheet("Tax Rates");
+        assert_eq!(classify(&ast, &ctx), Classification::Mixed);
     }
 
     #[test]
