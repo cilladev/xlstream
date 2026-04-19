@@ -63,7 +63,7 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 | 5 | Arithmetic, comparison, concat | [`phase-05-arithmetic.md`](phase-05-arithmetic.md) | ✓ complete |
 | 6 | Conditionals, logical | [`phase-06-conditional.md`](phase-06-conditional.md) | complete |
 | 7 | Aggregates | [`phase-07-aggregates.md`](phase-07-aggregates.md) | in progress |
-| 8 | Lookups | [`phase-08-lookups.md`](phase-08-lookups.md) | not started |
+| 8 | Lookups | [`phase-08-lookups.md`](phase-08-lookups.md) | in progress |
 | 9 | Strings, dates, math | [`phase-09-strings-dates-math.md`](phase-09-strings-dates-math.md) | not started |
 | 10 | Parallelism | [`phase-10-parallelism.md`](phase-10-parallelism.md) | not started |
 | 11 | Python binding | [`phase-11-python-binding.md`](phase-11-python-binding.md) | not started |

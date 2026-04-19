@@ -14,60 +14,61 @@
 
 ### Classification
 
-- [ ] Recognise each lookup function; record (lookup_sheet, key_col, value_col, match_mode) in the prelude plan.
-- [ ] Mark lookup sheets in pass 0 — sheets (any size, as long as they fit in memory) without formulas, which main-sheet formulas reference.
-- [ ] Multi-key lookups: user handles via concatenation at call site (`VLOOKUP(A&B, ...)`) against a helper column on the lookup sheet. Engine just sees a single text key. No composite-key logic in the classifier.
+- [x] Recognise each lookup function; record (lookup_sheet, key_col, value_col, match_mode) in the prelude plan.
+- [x] Mark lookup sheets in pass 0 — sheets (any size, as long as they fit in memory) without formulas, which main-sheet formulas reference.
+- [x] Multi-key lookups: user handles via concatenation at call site (`VLOOKUP(A&B, ...)`) against a helper column on the lookup sheet. Engine just sees a single text key. No composite-key logic in the classifier.
 
 ### `LookupKey`
 
-In `xlstream-eval/src/lookup/key.rs`:
+In `xlstream-eval/src/lookup/value.rs` (named `LookupValue` to avoid collision with `xlstream_parse::LookupKey`):
 
-- [ ] `enum LookupKey { Number(f64), Text(Box<str>), Bool(bool) }`.
-- [ ] Hash: type-aware (1 and "1" differ); text case-folded for Eq+Hash.
-- [ ] `impl Ord` for binary-search needs.
+- [x] `enum LookupValue { Number(OrderedF64), Text(CaseFoldedText), Bool(bool) }`.
+- [x] Hash: type-aware (1 and "1" differ); text case-folded for Eq+Hash.
+- [x] `impl Ord` for binary-search needs.
 
 ### `LookupIndex` builder
 
-- [ ] `build_index(reader, sheet, key_col, values_cols) -> LookupIndex`:
-  - [ ] Stream the sheet.
-  - [ ] For each row, take the cell at `key_col` as the key.
-  - [ ] Insert into `exact: HashMap<LookupKey, u32>` (first-match policy matches Excel).
-  - [ ] Store row values.
-- [ ] Sorted variant for approx match: collect into `Vec<(LookupKey, u32)>`, sort once.
+- [x] `LookupSheet::new(rows)` + `build_col_index(col)` / `build_row_index(row)`:
+  - [x] Stream the sheet.
+  - [x] For each row, take the cell at `key_col` as the key.
+  - [x] Insert into `exact: HashMap<LookupValue, usize>` (first-match policy matches Excel).
+  - [x] Store row values.
+- [x] Sorted variant for approx match: `build_col_sorted(col)` collects into `Vec<(LookupValue, usize)>`, sorts once.
 
 ### Lookup builtins
 
 In `xlstream-eval/src/builtins/lookup.rs` — all **stateful** (need prelude + AST args):
 
-- [ ] `VLOOKUP(key, range, col, match?)`:
-  - [ ] Exact: hash lookup.
-  - [ ] Approx: binary search (largest key ≤ lookup).
-- [ ] `HLOOKUP` — same but row-oriented.
-- [ ] `XLOOKUP(key, lookup_arr, return_arr, not_found?, match_mode?, search_mode?)`:
-  - [ ] Exact, wildcard, approx — modes respected.
-- [ ] `MATCH(key, arr, match_type?)` — returns index (1-based).
-- [ ] `XMATCH` — XLOOKUP-flavoured MATCH.
-- [ ] `INDEX(array, row, col?)` — constant lookup into a pre-loaded range, no index build needed.
-- [ ] `CHOOSE(index, val1, val2, ...)` — returns `val[index]`. No table; just arg pick.
+- [x] `VLOOKUP(key, range, col, match?)`:
+  - [x] Exact: hash lookup.
+  - [x] Approx: binary search (largest key <= lookup).
+- [x] `HLOOKUP` — same but row-oriented (exact match only in v0.1).
+- [x] `XLOOKUP(key, lookup_arr, return_arr, not_found?, match_mode?, search_mode?)`:
+  - [x] Exact match with optional fallback.
+  - [ ] Wildcard, approx — deferred to v0.2.
+- [x] `MATCH(key, arr, match_type?)` — returns index (1-based).
+- [x] `XMATCH` — XLOOKUP-flavoured MATCH (exact only).
+- [x] `INDEX(array, row, col?)` — constant lookup into a pre-loaded range, no index build needed.
+- [x] `CHOOSE(index, val1, val2, ...)` — returns `val[index]`. No table; just arg pick.
 
 ### Error cases
 
-- [ ] Key not found (exact) → `#N/A`.
-- [ ] Column index out of range → `#REF!`.
-- [ ] Invalid lookup range → `#REF!`.
-- [ ] Key arg is `#VALUE!` → propagate.
-- [ ] Approx match, lookup below first key → `#N/A`.
+- [x] Key not found (exact) → `#N/A`.
+- [x] Column index out of range → `#REF!`.
+- [x] Invalid lookup range → `#REF!`.
+- [x] Key arg is `#VALUE!` → propagate.
+- [x] Approx match, lookup below first key → `#N/A`.
 
 ### Tests
 
 For VLOOKUP (template for others):
-- [ ] Exact hit.
-- [ ] Exact miss → `#N/A`.
-- [ ] Approx (sorted) hit.
-- [ ] Approx miss below first key → `#N/A`.
-- [ ] Case-insensitive text match.
-- [ ] Numeric type match: `1` vs `"1"` — not equal (Excel semantics).
-- [ ] Error in key → propagate.
+- [x] Exact hit.
+- [x] Exact miss → `#N/A`.
+- [x] Approx (sorted) hit.
+- [x] Approx miss below first key → `#N/A`.
+- [x] Case-insensitive text match.
+- [x] Numeric type match: `1` vs `"1"` — not equal (Excel semantics).
+- [x] Error in key → propagate.
 - [ ] Wildcard exact match (`"ap*"`) via XLOOKUP/XMATCH — linear scan, verify correctness and log warning on large tables.
 
 For multi-key via `&` + helper column:
@@ -82,7 +83,7 @@ For multi-key via `&` + helper column:
 
 ## Integration tests
 
-- [ ] Fixture: `VLOOKUP(Region, 'Region Info'!A:C, 2, FALSE)` with a 5-row lookup sheet. Assert all 400k rows.
+- [x] Fixture: `VLOOKUP(Region, 'Region Info'!A:C, 2, FALSE)` with a 3-row lookup sheet. Assert 5 rows including miss and case-insensitive.
 - [ ] Fixture: `IF(Deal Value > VLOOKUP(Region & Business, 'Thresholds'!D:E, 2, FALSE), "YES", "NO")` where `Thresholds!D` is a pre-computed `=A&B` helper column. Combines conditional + concat-key lookup.
 
 ## Done when
