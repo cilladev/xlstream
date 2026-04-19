@@ -2,6 +2,22 @@
 
 from importlib.metadata import version as _version
 
-__all__: list[str] = []
+from ._xlstream import (
+    evaluate,
+    XlStreamError,
+    UnsupportedFormula,
+    FormulaParseError,
+    ClassificationError,
+    CircularReferenceError,
+)
+
+__all__ = [
+    "evaluate",
+    "XlStreamError",
+    "UnsupportedFormula",
+    "FormulaParseError",
+    "ClassificationError",
+    "CircularReferenceError",
+]
 
 __version__ = _version("xlstream")
