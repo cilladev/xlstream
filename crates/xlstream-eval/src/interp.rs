@@ -77,7 +77,16 @@ impl<'ctx> Interpreter<'ctx> {
             NodeView::Text(s) => Value::Text(s.into()),
             NodeView::Error(e) => Value::Error(e),
 
-            // Cell ref: classifier guaranteed same-row. Use col only.
+            // Cell ref: same-row or cross-sheet lookup cell.
+            NodeView::CellRef { sheet: Some(sheet_name), row, col } => {
+                if let Some(ls) = self.prelude.lookup_sheet(sheet_name) {
+                    ls.cell((row - 1) as usize, (col - 1) as usize)
+                        .cloned()
+                        .unwrap_or(Value::Error(CellError::Ref))
+                } else {
+                    scope.get(col)
+                }
+            }
             NodeView::CellRef { col, .. } => scope.get(col),
 
             // Ranges outside functions -> #REF!
@@ -197,6 +206,43 @@ mod tests {
         let row = vec![Value::Number(1.0), Value::Number(2.0)];
         let scope = RowScope::new(&row, 0);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref),);
+    }
+
+    #[test]
+    fn eval_cross_sheet_cell_ref_to_lookup_sheet() {
+        use std::collections::HashMap;
+
+        use crate::lookup::LookupSheet;
+
+        let rows = vec![
+            vec![Value::Number(0.05), Value::Number(0.10)],
+            vec![Value::Number(0.08), Value::Number(0.15)],
+        ];
+        let sheet = LookupSheet::new(rows);
+        let mut sheets = HashMap::new();
+        sheets.insert("tax rates".to_string(), sheet);
+        let prelude = Prelude::empty().with_lookup_sheets(sheets);
+        let interp = make_interp(&prelude);
+        let ast = parse("'Tax Rates'!A1").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(0.05));
+    }
+
+    #[test]
+    fn eval_cross_sheet_cell_ref_out_of_bounds() {
+        use std::collections::HashMap;
+
+        use crate::lookup::LookupSheet;
+
+        let rows = vec![vec![Value::Number(1.0)]];
+        let sheet = LookupSheet::new(rows);
+        let mut sheets = HashMap::new();
+        sheets.insert("data".to_string(), sheet);
+        let prelude = Prelude::empty().with_lookup_sheets(sheets);
+        let interp = make_interp(&prelude);
+        let ast = parse("'Data'!Z99").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
     }
 
     #[test]

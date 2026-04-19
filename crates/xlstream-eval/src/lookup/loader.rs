@@ -79,6 +79,7 @@ pub fn load_lookup_sheets(
         }
         for &row in &req.row_keys {
             sheet.build_row_index(row);
+            sheet.build_row_sorted(row);
         }
 
         result.insert(lower_name.clone(), sheet);

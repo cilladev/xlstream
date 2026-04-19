@@ -177,10 +177,6 @@ pub(crate) fn builtin_hlookup(
         false
     };
 
-    if !exact_match {
-        return Value::Error(CellError::Na);
-    }
-
     let Some(sheet) = interp.prelude().lookup_sheet(sheet_name) else {
         return Value::Error(CellError::Na);
     };
@@ -189,7 +185,10 @@ pub(crate) fn builtin_hlookup(
         return Value::Error(CellError::Na);
     };
 
-    let Some(col_idx) = sheet.row_lookup(0, &key) else {
+    let col_idx =
+        if exact_match { sheet.row_lookup(0, &key) } else { sheet.row_approx_lookup(0, &key) };
+
+    let Some(col_idx) = col_idx else {
         return Value::Error(CellError::Na);
     };
 
@@ -594,6 +593,51 @@ mod tests {
         let ast = parse("HLOOKUP(\"city\", 'People'!A:C, 3, FALSE)").unwrap();
         let scope = RowScope::new(&[], 1);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Text("LA".into()));
+    }
+
+    fn prelude_with_hlookup_sorted_data() -> Prelude {
+        let rows = vec![
+            vec![Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)],
+            vec![
+                Value::Text("ten".into()),
+                Value::Text("twenty".into()),
+                Value::Text("thirty".into()),
+            ],
+            vec![Value::Number(100.0), Value::Number(200.0), Value::Number(300.0)],
+        ];
+        let mut sheet = LookupSheet::new(rows);
+        sheet.build_row_index(0);
+        sheet.build_row_sorted(0);
+        let mut sheets = HashMap::new();
+        sheets.insert("rates".to_string(), sheet);
+        Prelude::empty().with_lookup_sheets(sheets)
+    }
+
+    #[test]
+    fn hlookup_approx_match_hit() {
+        let prelude = prelude_with_hlookup_sorted_data();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("HLOOKUP(25, 'Rates'!A:C, 2, TRUE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Text("twenty".into()));
+    }
+
+    #[test]
+    fn hlookup_approx_match_exact_boundary() {
+        let prelude = prelude_with_hlookup_sorted_data();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("HLOOKUP(30, 'Rates'!A:C, 3, TRUE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(300.0));
+    }
+
+    #[test]
+    fn hlookup_approx_below_first_returns_na() {
+        let prelude = prelude_with_hlookup_sorted_data();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("HLOOKUP(5, 'Rates'!A:C, 2, TRUE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Na));
     }
 
     // --- MATCH ---

@@ -31,6 +31,7 @@ pub struct LookupSheet {
     col_indexes: HashMap<u32, HashMap<LookupValue, usize>>,
     row_indexes: HashMap<u32, HashMap<LookupValue, usize>>,
     col_sorted: HashMap<u32, Vec<(LookupValue, usize)>>,
+    row_sorted: HashMap<u32, Vec<(LookupValue, usize)>>,
 }
 
 impl LookupSheet {
@@ -42,6 +43,7 @@ impl LookupSheet {
             col_indexes: HashMap::new(),
             row_indexes: HashMap::new(),
             col_sorted: HashMap::new(),
+            row_sorted: HashMap::new(),
         }
     }
 
@@ -113,6 +115,43 @@ impl LookupSheet {
         self.row_indexes.get(&row)?.get(key).copied()
     }
 
+    /// Build a sorted index for row-based approximate match (binary search).
+    ///
+    /// `row` is 0-based. Collects `(key, col_idx)` pairs from that row
+    /// and sorts by key. Mirrors [`build_col_sorted`](Self::build_col_sorted)
+    /// for HLOOKUP approximate matching.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_core::Value;
+    /// use xlstream_eval::lookup::{LookupSheet, LookupValue};
+    ///
+    /// let rows = vec![
+    ///     vec![Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)],
+    ///     vec![Value::Text("a".into()), Value::Text("b".into()), Value::Text("c".into())],
+    /// ];
+    /// let mut sheet = LookupSheet::new(rows);
+    /// sheet.build_row_sorted(0);
+    /// let key = LookupValue::from_value(&Value::Number(25.0)).unwrap();
+    /// assert_eq!(sheet.row_approx_lookup(0, &key), Some(1));
+    /// ```
+    pub fn build_row_sorted(&mut self, row: u32) {
+        if self.row_sorted.contains_key(&row) {
+            return;
+        }
+        let mut sorted: Vec<(LookupValue, usize)> = Vec::new();
+        if let Some(row_data) = self.rows.get(row as usize) {
+            for (col_idx, cell) in row_data.iter().enumerate() {
+                if let Some(key) = LookupValue::from_value(cell) {
+                    sorted.push((key, col_idx));
+                }
+            }
+        }
+        sorted.sort_by(|(a, _), (b, _)| a.cmp(b));
+        self.row_sorted.insert(row, sorted);
+    }
+
     /// Approximate match: find the largest key <= the given key.
     ///
     /// Returns the 0-based row index, or `None` if the key is below
@@ -120,6 +159,36 @@ impl LookupSheet {
     #[must_use]
     pub fn col_approx_lookup(&self, col: u32, key: &LookupValue) -> Option<usize> {
         let sorted = self.col_sorted.get(&col)?;
+        let pos = sorted.partition_point(|(k, _)| k <= key);
+        if pos == 0 {
+            None
+        } else {
+            Some(sorted[pos - 1].1)
+        }
+    }
+
+    /// Row-based approximate match: find the largest key <= the given key.
+    ///
+    /// Returns the 0-based column index, or `None` if the key is below
+    /// all values in the sorted row index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_core::Value;
+    /// use xlstream_eval::lookup::{LookupSheet, LookupValue};
+    ///
+    /// let rows = vec![
+    ///     vec![Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)],
+    /// ];
+    /// let mut sheet = LookupSheet::new(rows);
+    /// sheet.build_row_sorted(0);
+    /// let key = LookupValue::from_value(&Value::Number(25.0)).unwrap();
+    /// assert_eq!(sheet.row_approx_lookup(0, &key), Some(1));
+    /// ```
+    #[must_use]
+    pub fn row_approx_lookup(&self, row: u32, key: &LookupValue) -> Option<usize> {
+        let sorted = self.row_sorted.get(&row)?;
         let pos = sorted.partition_point(|(k, _)| k <= key);
         if pos == 0 {
             None
@@ -253,5 +322,39 @@ mod tests {
         sheet.build_col_sorted(0);
         let key = LookupValue::from_value(&Value::Number(20.0)).unwrap();
         assert_eq!(sheet.col_approx_lookup(0, &key), Some(1));
+    }
+
+    #[test]
+    fn row_approx_lookup_finds_largest_lte() {
+        let rows = vec![
+            vec![Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)],
+            vec![
+                Value::Text("ten".into()),
+                Value::Text("twenty".into()),
+                Value::Text("thirty".into()),
+            ],
+        ];
+        let mut sheet = LookupSheet::new(rows);
+        sheet.build_row_sorted(0);
+        let key = LookupValue::from_value(&Value::Number(25.0)).unwrap();
+        assert_eq!(sheet.row_approx_lookup(0, &key), Some(1));
+    }
+
+    #[test]
+    fn row_approx_lookup_below_first_returns_none() {
+        let rows = vec![vec![Value::Number(10.0), Value::Number(20.0)]];
+        let mut sheet = LookupSheet::new(rows);
+        sheet.build_row_sorted(0);
+        let key = LookupValue::from_value(&Value::Number(5.0)).unwrap();
+        assert_eq!(sheet.row_approx_lookup(0, &key), None);
+    }
+
+    #[test]
+    fn row_approx_lookup_exact_hit() {
+        let rows = vec![vec![Value::Number(10.0), Value::Number(20.0)]];
+        let mut sheet = LookupSheet::new(rows);
+        sheet.build_row_sorted(0);
+        let key = LookupValue::from_value(&Value::Number(20.0)).unwrap();
+        assert_eq!(sheet.row_approx_lookup(0, &key), Some(1));
     }
 }
