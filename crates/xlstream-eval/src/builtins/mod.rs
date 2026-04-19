@@ -61,6 +61,20 @@ pub(crate) fn dispatch(
         "XMATCH" | "_XLFN.XMATCH" => Some(lookup::builtin_xmatch(args, interp, scope)),
         "INDEX" => Some(lookup::builtin_index(args, interp, scope)),
         "CHOOSE" => Some(lookup::builtin_choose(args, interp, scope)),
+        // -- date builtins (stateful — need prelude) --
+        "TODAY" => Some(date::builtin_today(args, interp, scope)),
+        "NOW" => Some(date::builtin_now(args, interp, scope)),
+        // -- date builtins (pure, eager eval) --
+        "DATE" => Some(date::builtin_date(&eval_args(args, interp, scope))),
+        "YEAR" => Some(date::builtin_year(&eval_args(args, interp, scope))),
+        "MONTH" => Some(date::builtin_month(&eval_args(args, interp, scope))),
+        "DAY" => Some(date::builtin_day(&eval_args(args, interp, scope))),
+        "WEEKDAY" => Some(date::builtin_weekday(&eval_args(args, interp, scope))),
+        "EDATE" => Some(date::builtin_edate(&eval_args(args, interp, scope))),
+        "EOMONTH" => Some(date::builtin_eomonth(&eval_args(args, interp, scope))),
+        "DATEDIF" => Some(date::builtin_datedif(&eval_args(args, interp, scope))),
+        "NETWORKDAYS" => Some(date::builtin_networkdays(&eval_args(args, interp, scope))),
+        "WORKDAY" => Some(date::builtin_workday(&eval_args(args, interp, scope))),
         // -- string builtins (pure, eager eval) --
         "LEFT" => Some(string::builtin_left(&eval_args(args, interp, scope))),
         "RIGHT" => Some(string::builtin_right(&eval_args(args, interp, scope))),

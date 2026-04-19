@@ -1,11 +1,37 @@
 //! [`Prelude`] — data computed before the row-streaming pass.
 //!
-//! Phase 7 adds aggregate scalars. Phase 8 adds lookup indexes.
+//! Phase 7 adds aggregate scalars. Phase 8 adds lookup indexes. Phase 9
+//! adds volatile data (TODAY/NOW).
 
 use std::collections::HashMap;
 
-use xlstream_core::{CellError, Value};
+use xlstream_core::{CellError, ExcelDate, Value};
 use xlstream_parse::{AggKind, AggregateKey};
+
+/// Runtime-injected volatile values for `TODAY()` and `NOW()`.
+///
+/// The caller constructs this once per workbook evaluation, freezing the
+/// clock so every row sees the same instant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::ExcelDate;
+/// use xlstream_eval::prelude::VolatileData;
+///
+/// let v = VolatileData {
+///     today: ExcelDate::from_serial(46130.0),
+///     now: ExcelDate::from_serial(46130.75),
+/// };
+/// assert_eq!(v.today.serial, 46130.0);
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct VolatileData {
+    /// Date-only serial for `TODAY()`.
+    pub today: ExcelDate,
+    /// Date+time serial for `NOW()`.
+    pub now: ExcelDate,
+}
 
 /// Key for a conditional aggregate (SUMIF, COUNTIF, AVERAGEIF) prelude
 /// entry.
@@ -99,6 +125,8 @@ pub struct Prelude {
     multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, Value>>,
     /// Pre-loaded lookup sheet data, keyed by lowercased sheet name.
     lookup_sheets: HashMap<String, crate::lookup::LookupSheet>,
+    /// Volatile data (TODAY/NOW). `None` until set via `with_volatile`.
+    volatile: Option<VolatileData>,
 }
 
 impl Prelude {
@@ -118,6 +146,7 @@ impl Prelude {
             conditional_aggregates: HashMap::new(),
             multi_conditional_aggregates: HashMap::new(),
             lookup_sheets: HashMap::new(),
+            volatile: None,
         }
     }
 
@@ -145,6 +174,7 @@ impl Prelude {
             conditional_aggregates: HashMap::new(),
             multi_conditional_aggregates: HashMap::new(),
             lookup_sheets: HashMap::new(),
+            volatile: None,
         }
     }
 
@@ -173,6 +203,7 @@ impl Prelude {
             conditional_aggregates,
             multi_conditional_aggregates: HashMap::new(),
             lookup_sheets: HashMap::new(),
+            volatile: None,
         }
     }
 
@@ -198,6 +229,7 @@ impl Prelude {
             conditional_aggregates,
             multi_conditional_aggregates,
             lookup_sheets: HashMap::new(),
+            volatile: None,
         }
     }
 
@@ -364,6 +396,58 @@ impl Prelude {
             | AggKind::Median => Value::Number(0.0),
         }
     }
+
+    /// Attach volatile data (TODAY/NOW). Builder-style.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_core::ExcelDate;
+    /// use xlstream_eval::Prelude;
+    /// use xlstream_eval::prelude::VolatileData;
+    ///
+    /// let v = VolatileData {
+    ///     today: ExcelDate::from_serial(46130.0),
+    ///     now: ExcelDate::from_serial(46130.75),
+    /// };
+    /// let p = Prelude::empty().with_volatile(v);
+    /// assert_eq!(p.volatile_today().serial, 46130.0);
+    /// ```
+    #[must_use]
+    pub fn with_volatile(mut self, volatile: VolatileData) -> Self {
+        self.volatile = Some(volatile);
+        self
+    }
+
+    /// Return the `TODAY()` serial. Returns serial 0 if volatile data is
+    /// not set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::Prelude;
+    /// let p = Prelude::empty();
+    /// assert_eq!(p.volatile_today().serial, 0.0);
+    /// ```
+    #[must_use]
+    pub fn volatile_today(&self) -> ExcelDate {
+        self.volatile.map_or(ExcelDate::from_serial(0.0), |v| v.today)
+    }
+
+    /// Return the `NOW()` serial. Returns serial 0 if volatile data is
+    /// not set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::Prelude;
+    /// let p = Prelude::empty();
+    /// assert_eq!(p.volatile_now().serial, 0.0);
+    /// ```
+    #[must_use]
+    pub fn volatile_now(&self) -> ExcelDate {
+        self.volatile.map_or(ExcelDate::from_serial(0.0), |v| v.now)
+    }
 }
 
 #[cfg(test)]
@@ -490,5 +574,55 @@ mod tests {
         };
         let prelude = Prelude::empty();
         assert_eq!(prelude.get_multi_conditional(&key, "east\0q1"), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn volatile_today_returns_zero_when_unset() {
+        let p = Prelude::empty();
+        assert_eq!(p.volatile_today().serial, 0.0);
+    }
+
+    #[test]
+    fn volatile_now_returns_zero_when_unset() {
+        let p = Prelude::empty();
+        assert_eq!(p.volatile_now().serial, 0.0);
+    }
+
+    #[test]
+    fn volatile_today_returns_set_value() {
+        use xlstream_core::ExcelDate;
+
+        let v = VolatileData {
+            today: ExcelDate::from_serial(46130.0),
+            now: ExcelDate::from_serial(46130.75),
+        };
+        let p = Prelude::empty().with_volatile(v);
+        assert_eq!(p.volatile_today().serial, 46130.0);
+    }
+
+    #[test]
+    fn volatile_now_returns_set_value() {
+        use xlstream_core::ExcelDate;
+
+        let v = VolatileData {
+            today: ExcelDate::from_serial(46130.0),
+            now: ExcelDate::from_serial(46130.75),
+        };
+        let p = Prelude::empty().with_volatile(v);
+        assert_eq!(p.volatile_now().serial, 46130.75);
+    }
+
+    #[test]
+    fn with_volatile_is_builder_pattern() {
+        use xlstream_core::ExcelDate;
+
+        let v = VolatileData {
+            today: ExcelDate::from_serial(100.0),
+            now: ExcelDate::from_serial(100.5),
+        };
+        // Chaining works
+        let p = Prelude::empty().with_volatile(v);
+        assert_eq!(p.volatile_today().serial, 100.0);
+        assert_eq!(p.volatile_now().serial, 100.5);
     }
 }
