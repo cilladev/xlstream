@@ -25,6 +25,26 @@ import xlstream
 xlstream.evaluate("input.xlsx", "output.xlsx")
 ```
 
+## Python
+
+```bash
+pip install xlstream
+```
+
+```python
+import xlstream
+
+result = xlstream.evaluate("input.xlsx", "output.xlsx")
+print(result["rows_processed"])       # rows written
+print(result["formulas_evaluated"])   # formula cells evaluated
+print(result["duration_ms"])          # wall-clock ms
+
+# Parallel evaluation
+result = xlstream.evaluate("input.xlsx", "output.xlsx", workers=4)
+```
+
+See [`bindings/python/README.md`](bindings/python/README.md) for development setup.
+
 ## Development setup
 
 Clone the repo, then from the project root:
