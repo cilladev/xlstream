@@ -273,69 +273,6 @@ fn rewrite_lookup(_name: &str, _args: &[Node], _ctx: &ClassificationContext) -> 
     None
 }
 
-#[allow(dead_code)]
-fn rewrite_lookup_old(name: &str, args: &[Node], ctx: &ClassificationContext) -> Option<Node> {
-    let upper = name.to_uppercase();
-    match upper.as_str() {
-        "VLOOKUP" => rewrite_vlookup(args, ctx),
-        "HLOOKUP" => rewrite_hlookup(args, ctx),
-        "XLOOKUP" => rewrite_xlookup(args, ctx),
-        _ => None,
-    }
-}
-
-/// `VLOOKUP(lookup_value, table_array, col_index_num, [range_lookup])`
-/// -- extract sheet + `key_column` from `table_array` (arg 1),
-/// `value_column` = `key_column` + `col_index_num` - 1 from arg 2.
-fn rewrite_vlookup(args: &[Node], _ctx: &ClassificationContext) -> Option<Node> {
-    if args.len() < 3 {
-        return None;
-    }
-    let (sheet, key_column, _end_col) = extract_range_info(&args[1])?;
-    let col_offset = extract_positive_u32(&args[2])?;
-    let value_column = key_column + col_offset - 1;
-    Some(Node::PreludeRef(PreludeKey::Lookup(LookupKey {
-        kind: LookupKind::VLookup,
-        sheet,
-        key_index: key_column,
-        value_index: value_column,
-    })))
-}
-
-/// `HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])`
-/// -- minimal handling: extract from range, use `row_index` as value offset.
-fn rewrite_hlookup(args: &[Node], _ctx: &ClassificationContext) -> Option<Node> {
-    if args.len() < 3 {
-        return None;
-    }
-    let (sheet, key_column, _end_col) = extract_range_info(&args[1])?;
-    let row_offset = extract_positive_u32(&args[2])?;
-    let value_column = key_column + row_offset - 1;
-    Some(Node::PreludeRef(PreludeKey::Lookup(LookupKey {
-        kind: LookupKind::HLookup,
-        sheet,
-        key_index: key_column,
-        value_index: value_column,
-    })))
-}
-
-/// `XLOOKUP(lookup_value, lookup_array, return_array, ...)`
-/// -- minimal: extract sheet + column from `lookup_array` (arg 1) and
-/// `return_array` (arg 2).
-fn rewrite_xlookup(args: &[Node], _ctx: &ClassificationContext) -> Option<Node> {
-    if args.len() < 3 {
-        return None;
-    }
-    let (sheet, key_column, _) = extract_range_info(&args[1])?;
-    let (_, value_column, _) = extract_range_info(&args[2])?;
-    Some(Node::PreludeRef(PreludeKey::Lookup(LookupKey {
-        kind: LookupKind::XLookup,
-        sheet,
-        key_index: key_column,
-        value_index: value_column,
-    })))
-}
-
 /// Extract `(sheet, start_col, end_col)` from a range reference node.
 fn extract_range_info(node: &Node) -> Option<(String, u32, u32)> {
     match node {

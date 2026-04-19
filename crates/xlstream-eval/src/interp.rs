@@ -131,7 +131,10 @@ impl<'ctx> Interpreter<'ctx> {
                     .get_aggregate(agg_key)
                     .cloned()
                     .unwrap_or(Value::Error(CellError::Value)),
-                xlstream_parse::PreludeKey::Lookup(_) => Value::Error(CellError::Value),
+                xlstream_parse::PreludeKey::Lookup(_) => {
+                    tracing::warn!("PreludeRef(Lookup) reached evaluator — lookups should stay as Function nodes");
+                    Value::Error(CellError::Value)
+                }
             },
         }
     }
