@@ -40,7 +40,14 @@ pub fn to_number(v: &Value) -> Result<f64, CellError> {
         #[allow(clippy::cast_precision_loss)]
         Value::Integer(i) => Ok(*i as f64),
         Value::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
-        Value::Text(s) => s.trim().parse::<f64>().map_err(|_| CellError::Value),
+        Value::Text(s) => {
+            let n = s.trim().parse::<f64>().map_err(|_| CellError::Value)?;
+            if n.is_finite() {
+                Ok(n)
+            } else {
+                Err(CellError::Value)
+            }
+        }
         Value::Empty => Ok(0.0),
         Value::Date(d) => Ok(d.serial),
         Value::Error(e) => Err(*e),
@@ -190,6 +197,26 @@ mod tests {
     #[test]
     fn to_number_from_text_non_numeric() {
         assert_eq!(to_number(&Value::Text("abc".into())), Err(CellError::Value));
+    }
+
+    #[test]
+    fn to_number_from_text_nan_rejected() {
+        assert_eq!(to_number(&Value::Text("NaN".into())), Err(CellError::Value));
+    }
+
+    #[test]
+    fn to_number_from_text_inf_rejected() {
+        assert_eq!(to_number(&Value::Text("inf".into())), Err(CellError::Value));
+    }
+
+    #[test]
+    fn to_number_from_text_negative_inf_rejected() {
+        assert_eq!(to_number(&Value::Text("-inf".into())), Err(CellError::Value));
+    }
+
+    #[test]
+    fn to_number_from_text_infinity_rejected() {
+        assert_eq!(to_number(&Value::Text("infinity".into())), Err(CellError::Value));
     }
 
     #[test]
