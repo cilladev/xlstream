@@ -71,6 +71,8 @@ pub(crate) fn dispatch(
         "PROPER" => Some(string::builtin_proper(&eval_args(args, interp, scope))),
         "TRIM" => Some(string::builtin_trim(&eval_args(args, interp, scope))),
         "CLEAN" => Some(string::builtin_clean(&eval_args(args, interp, scope))),
+        "CONCAT" | "CONCATENATE" => Some(string::builtin_concat(&eval_args(args, interp, scope))),
+        "TEXTJOIN" => Some(string::builtin_textjoin(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
