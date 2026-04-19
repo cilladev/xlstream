@@ -23,6 +23,15 @@ fn opt_num(args: &[Value], idx: usize, default: f64) -> Result<f64, Value> {
     num_arg(args, idx)
 }
 
+/// Guard against NaN/Infinity results from TVM calculations.
+fn finite_or_num(result: f64) -> Value {
+    if result.is_nan() || result.is_infinite() {
+        Value::Error(CellError::Num)
+    } else {
+        Value::Number(result)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // PMT
 // ---------------------------------------------------------------------------
@@ -77,12 +86,12 @@ pub fn builtin_pmt(args: &[Value]) -> Value {
     }
 
     if rate == 0.0 {
-        return Value::Number(-(pv + fv) / nper);
+        return finite_or_num(-(pv + fv) / nper);
     }
 
     let pow = (1.0 + rate).powf(nper);
     let type_factor = 1.0 + rate * pmt_type;
-    Value::Number(-(rate * (pv * pow + fv)) / (type_factor * (pow - 1.0)))
+    finite_or_num(-(rate * (pv * pow + fv)) / (type_factor * (pow - 1.0)))
 }
 
 // ---------------------------------------------------------------------------
@@ -132,12 +141,12 @@ pub fn builtin_pv(args: &[Value]) -> Value {
     };
 
     if rate == 0.0 {
-        return Value::Number(-(pmt * nper + fv));
+        return finite_or_num(-(pmt * nper + fv));
     }
 
     let pow = (1.0 + rate).powf(nper);
     let type_factor = 1.0 + rate * pmt_type;
-    Value::Number(-(pmt * type_factor * (pow - 1.0) / rate + fv) / pow)
+    finite_or_num(-(pmt * type_factor * (pow - 1.0) / rate + fv) / pow)
 }
 
 // ---------------------------------------------------------------------------
@@ -187,12 +196,12 @@ pub fn builtin_fv(args: &[Value]) -> Value {
     };
 
     if rate == 0.0 {
-        return Value::Number(-(pv + pmt * nper));
+        return finite_or_num(-(pv + pmt * nper));
     }
 
     let pow = (1.0 + rate).powf(nper);
     let type_factor = 1.0 + rate * pmt_type;
-    Value::Number(-(pv * pow + pmt * type_factor * (pow - 1.0) / rate))
+    finite_or_num(-(pv * pow + pmt * type_factor * (pow - 1.0) / rate))
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +250,7 @@ pub fn builtin_npv(args: &[Value]) -> Value {
         let period = (i + 1) as f64;
         npv += cf / (1.0 + rate).powf(period);
     }
-    Value::Number(npv)
+    finite_or_num(npv)
 }
 
 // ---------------------------------------------------------------------------

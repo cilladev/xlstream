@@ -191,8 +191,11 @@ pub(crate) fn builtin_power(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if base == 0.0 && exp < 0.0 {
+        return Value::Error(CellError::Div0);
+    }
     let result = base.powf(exp);
-    if result.is_nan() {
+    if result.is_nan() || result.is_infinite() {
         return Value::Error(CellError::Num);
     }
     Value::Number(result)
@@ -337,7 +340,11 @@ pub(crate) fn builtin_exp(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
-    Value::Number(x.exp())
+    let result = x.exp();
+    if result.is_infinite() || result.is_nan() {
+        return Value::Error(CellError::Num);
+    }
+    Value::Number(result)
 }
 
 // ---------------------------------------------------------------------------
