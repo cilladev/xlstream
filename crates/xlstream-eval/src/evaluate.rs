@@ -136,7 +136,25 @@ pub fn evaluate(
         } else {
             Prelude::empty()
         };
-    let lookup_sheets = crate::lookup::load_lookup_sheets(&lookup_keys, &mut reader)?;
+    // Cross-sheet bounded ranges in range-expanding functions (e.g.
+    // NETWORKDAYS holidays) need the referenced sheet loaded as a lookup
+    // sheet so expand_range can resolve them.
+    let mut extended_lookup_keys = lookup_keys;
+    for rk in &all_range_keys {
+        if let Some(ref sheet_name) = rk.sheet {
+            let already_present =
+                extended_lookup_keys.iter().any(|lk| lk.sheet.eq_ignore_ascii_case(sheet_name));
+            if !already_present {
+                extended_lookup_keys.push(xlstream_parse::LookupKey {
+                    kind: xlstream_parse::LookupKind::VLookup,
+                    sheet: sheet_name.clone(),
+                    key_index: 1,
+                    value_index: 1,
+                });
+            }
+        }
+    }
+    let lookup_sheets = crate::lookup::load_lookup_sheets(&extended_lookup_keys, &mut reader)?;
     let prelude = if lookup_sheets.is_empty() {
         agg_prelude
     } else {
@@ -212,8 +230,12 @@ fn build_eval_plan(
     let mut all_lookup_keys: Vec<LookupKey> = Vec::new();
     for (&col, (row, text)) in &col_formula {
         // calamine strips the leading '='; strip defensively to handle either.
+        // rust_xlsxwriter prepends `_xlfn.` to "future" Excel functions
+        // (CONCAT, TEXTJOIN, etc.); strip that prefix so the parser sees
+        // the canonical function name.
         let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
-        let ast = parse(formula_str)?;
+        let formula_str = strip_xlfn_prefix(formula_str);
+        let ast = parse(&formula_str)?;
 
         // Register all non-main sheets as lookup sheets so the classifier
         // accepts cross-sheet range refs in lookup functions.
@@ -263,6 +285,16 @@ fn build_eval_plan(
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
     Ok((topo_order, col_asts, all_lookup_keys))
+}
+
+/// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes that `rust_xlsxwriter`
+/// injects for "future" Excel functions (CONCAT, TEXTJOIN, IFS, etc.).
+///
+/// These prefixes are internal to the xlsx format and are not part of the
+/// canonical function name. Calamine preserves them verbatim, so we strip
+/// them here before parsing.
+fn strip_xlfn_prefix(formula: &str) -> String {
+    formula.replace("_xlfn._xlws.", "").replace("_xlfn.", "")
 }
 
 #[cfg(test)]
