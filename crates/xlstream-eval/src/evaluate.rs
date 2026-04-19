@@ -317,4 +317,10 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, XlStreamError::Xlsx(_)), "expected Xlsx error, got {err:?}");
     }
+
+    #[test]
+    fn ast_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<xlstream_parse::Ast>();
+    }
 }

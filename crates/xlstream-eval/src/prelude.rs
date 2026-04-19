@@ -718,4 +718,16 @@ mod tests {
         assert_eq!(p.volatile_today().serial, 100.0);
         assert_eq!(p.volatile_now().serial, 100.5);
     }
+
+    #[test]
+    fn prelude_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Prelude>();
+    }
+
+    #[test]
+    fn value_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Value>();
+    }
 }
