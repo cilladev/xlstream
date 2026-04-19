@@ -399,6 +399,80 @@ fn extract_averageifs_key(
     })
 }
 
+/// Walk an AST and collect all [`BoundedRangeKey`]s referenced by
+/// `RangeRef` nodes with bounded rows and a single column.
+///
+/// These are bounded ranges inside range-expanding functions that
+/// survive the rewrite pass (they are NOT rewritten to `PreludeRef`).
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::parse;
+/// use xlstream_eval::prelude_plan::collect_bounded_range_keys;
+///
+/// let ast = parse("IRR(A2:A10)").unwrap();
+/// let keys = collect_bounded_range_keys(&ast);
+/// assert_eq!(keys.len(), 1);
+/// assert_eq!(keys[0].col, 1);
+/// assert_eq!(keys[0].start_row, 2);
+/// assert_eq!(keys[0].end_row, 10);
+/// ```
+#[must_use]
+pub fn collect_bounded_range_keys(ast: &Ast) -> Vec<crate::prelude::BoundedRangeKey> {
+    let mut keys = Vec::new();
+    collect_range_keys_recursive(ast.root(), &mut keys);
+    keys
+}
+
+fn collect_range_keys_recursive(
+    node: xlstream_parse::NodeRef<'_>,
+    keys: &mut Vec<crate::prelude::BoundedRangeKey>,
+) {
+    match node.view() {
+        NodeView::RangeRef {
+            sheet,
+            start_row: Some(sr),
+            end_row: Some(er),
+            start_col: Some(sc),
+            end_col: Some(ec),
+        } if sc == ec && sheet.is_none() => {
+            keys.push(crate::prelude::BoundedRangeKey {
+                sheet: None,
+                col: sc,
+                start_row: sr,
+                end_row: er,
+            });
+        }
+        NodeView::BinaryOp { .. } => {
+            if let Some(left) = node.left() {
+                collect_range_keys_recursive(left, keys);
+            }
+            if let Some(right) = node.right() {
+                collect_range_keys_recursive(right, keys);
+            }
+        }
+        NodeView::UnaryOp { .. } => {
+            if let Some(operand) = node.operand() {
+                collect_range_keys_recursive(operand, keys);
+            }
+        }
+        NodeView::Function { .. } => {
+            for arg in node.args() {
+                collect_range_keys_recursive(arg, keys);
+            }
+        }
+        NodeView::Array { .. } => {
+            for row in node.array_cells() {
+                for cell in row {
+                    collect_range_keys_recursive(cell, keys);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Execute the prelude pass: stream the main sheet, fold column values
 /// through [`FoldState`] accumulators, and build a filled [`Prelude`].
 ///
@@ -407,7 +481,8 @@ fn extract_averageifs_key(
 /// finishes each accumulator and stores the result.
 ///
 /// Also computes multi-criteria conditional aggregate groupby tables
-/// for SUMIFS/COUNTIFS/AVERAGEIFS.
+/// for SUMIFS/COUNTIFS/AVERAGEIFS, and collects bounded range values
+/// for range-expanding functions.
 ///
 /// # Errors
 ///
@@ -423,15 +498,17 @@ fn extract_averageifs_key(
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 }];
-/// let prelude = execute_prelude(&mut reader, "Sheet1", &keys, &[]).unwrap();
+/// let prelude = execute_prelude(&mut reader, "Sheet1", &keys, &[], &[]).unwrap();
 /// ```
+#[allow(clippy::too_many_lines)]
 pub fn execute_prelude(
     reader: &mut Reader,
     main_sheet: &str,
     simple_keys: &[AggregateKey],
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
+    range_keys: &[crate::prelude::BoundedRangeKey],
 ) -> Result<Prelude, XlStreamError> {
-    if simple_keys.is_empty() && multi_keys.is_empty() {
+    if simple_keys.is_empty() && multi_keys.is_empty() && range_keys.is_empty() {
         return Ok(Prelude::empty());
     }
 
@@ -465,11 +542,22 @@ pub fn execute_prelude(
         multi_folds.insert(i, HashMap::new());
     }
 
+    // Initialize bounded range collectors.
+    let mut range_collectors: HashMap<crate::prelude::BoundedRangeKey, Vec<Value>> = HashMap::new();
+    for rk in range_keys {
+        let capacity = (rk.end_row.saturating_sub(rk.start_row) + 1) as usize;
+        range_collectors.insert(rk.clone(), Vec::with_capacity(capacity));
+    }
+
     // Stream the sheet, skipping header row.
     let mut stream = reader.cells(main_sheet)?;
     let mut header_skipped = false;
+    let mut calamine_row_idx: u32 = 0;
 
     while let Some((_row_idx, row_values)) = stream.next_row()? {
+        let excel_row = calamine_row_idx + 1; // 1-based
+        calamine_row_idx += 1;
+
         if !header_skipped {
             header_skipped = true;
             continue;
@@ -480,6 +568,15 @@ pub fn execute_prelude(
             let idx = (col as usize).saturating_sub(1);
             let val = row_values.get(idx).unwrap_or(&Value::Empty);
             fold.feed(val);
+        }
+
+        // Collect bounded range values.
+        for (rk, collector) in &mut range_collectors {
+            if excel_row >= rk.start_row && excel_row <= rk.end_row {
+                let idx = (rk.col as usize).saturating_sub(1);
+                let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
+                collector.push(val);
+            }
         }
 
         // Feed multi-conditional folds.
@@ -540,10 +637,16 @@ pub fn execute_prelude(
         multi_aggs.insert(mk.clone(), inner);
     }
 
-    if multi_aggs.is_empty() {
-        Ok(Prelude::with_aggregates(aggregates))
+    let prelude = if multi_aggs.is_empty() {
+        Prelude::with_aggregates(aggregates)
     } else {
-        Ok(Prelude::with_all(aggregates, HashMap::new(), multi_aggs))
+        Prelude::with_all(aggregates, HashMap::new(), multi_aggs)
+    };
+
+    if range_collectors.is_empty() {
+        Ok(prelude)
+    } else {
+        Ok(prelude.with_cached_ranges(range_collectors))
     }
 }
 

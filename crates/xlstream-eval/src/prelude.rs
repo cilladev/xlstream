@@ -101,6 +101,38 @@ pub struct MultiConditionalAggKey {
     pub sheet: Option<String>,
 }
 
+/// Key for a bounded single-column range that must be cached during prelude.
+///
+/// Range-expanding functions (IRR, NPV, CONCAT, TEXTJOIN, NETWORKDAYS,
+/// WORKDAY, AND, OR) may reference bounded ranges like `A2:A100` on the
+/// main sheet. The prelude scans those rows once and stores the collected
+/// values so the row-pass evaluator can expand them without re-reading.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_eval::prelude::BoundedRangeKey;
+///
+/// let key = BoundedRangeKey {
+///     sheet: None,
+///     col: 1,
+///     start_row: 2,
+///     end_row: 100,
+/// };
+/// assert_eq!(key.col, 1);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BoundedRangeKey {
+    /// Sheet name (`None` = main streaming sheet).
+    pub sheet: Option<String>,
+    /// 1-based column index.
+    pub col: u32,
+    /// 1-based start row (inclusive).
+    pub start_row: u32,
+    /// 1-based end row (inclusive).
+    pub end_row: u32,
+}
+
 /// Prelude data computed before the row-streaming pass.
 ///
 /// Constructed once after the prelude pass (pass 1) completes, then shared
@@ -127,6 +159,8 @@ pub struct Prelude {
     lookup_sheets: HashMap<String, crate::lookup::LookupSheet>,
     /// Volatile data (TODAY/NOW). `None` until set via `with_volatile`.
     volatile: Option<VolatileData>,
+    /// Cached bounded ranges for range-expanding functions.
+    cached_ranges: HashMap<BoundedRangeKey, Vec<Value>>,
 }
 
 impl Prelude {
@@ -147,6 +181,7 @@ impl Prelude {
             multi_conditional_aggregates: HashMap::new(),
             lookup_sheets: HashMap::new(),
             volatile: None,
+            cached_ranges: HashMap::new(),
         }
     }
 
@@ -175,6 +210,7 @@ impl Prelude {
             multi_conditional_aggregates: HashMap::new(),
             lookup_sheets: HashMap::new(),
             volatile: None,
+            cached_ranges: HashMap::new(),
         }
     }
 
@@ -204,6 +240,7 @@ impl Prelude {
             multi_conditional_aggregates: HashMap::new(),
             lookup_sheets: HashMap::new(),
             volatile: None,
+            cached_ranges: HashMap::new(),
         }
     }
 
@@ -230,6 +267,7 @@ impl Prelude {
             multi_conditional_aggregates,
             lookup_sheets: HashMap::new(),
             volatile: None,
+            cached_ranges: HashMap::new(),
         }
     }
 
@@ -417,6 +455,51 @@ impl Prelude {
     pub fn with_volatile(mut self, volatile: VolatileData) -> Self {
         self.volatile = Some(volatile);
         self
+    }
+
+    /// Attach pre-collected bounded range values. Builder-style.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use xlstream_core::Value;
+    /// use xlstream_eval::Prelude;
+    /// use xlstream_eval::prelude::BoundedRangeKey;
+    ///
+    /// let key = BoundedRangeKey { sheet: None, col: 1, start_row: 2, end_row: 4 };
+    /// let values = vec![Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)];
+    /// let mut ranges = HashMap::new();
+    /// ranges.insert(key.clone(), values);
+    /// let p = Prelude::empty().with_cached_ranges(ranges);
+    /// assert_eq!(p.get_cached_range(&key).unwrap().len(), 3);
+    /// ```
+    #[must_use]
+    pub fn with_cached_ranges(
+        mut self,
+        cached_ranges: HashMap<BoundedRangeKey, Vec<Value>>,
+    ) -> Self {
+        self.cached_ranges = cached_ranges;
+        self
+    }
+
+    /// Look up a cached bounded range by key.
+    ///
+    /// Returns `None` if the range was not collected during prelude.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::Prelude;
+    /// use xlstream_eval::prelude::BoundedRangeKey;
+    ///
+    /// let key = BoundedRangeKey { sheet: None, col: 1, start_row: 2, end_row: 4 };
+    /// let p = Prelude::empty();
+    /// assert!(p.get_cached_range(&key).is_none());
+    /// ```
+    #[must_use]
+    pub fn get_cached_range(&self, key: &BoundedRangeKey) -> Option<&Vec<Value>> {
+        self.cached_ranges.get(key)
     }
 
     /// Return the `TODAY()` serial. Logs a warning and returns serial 0

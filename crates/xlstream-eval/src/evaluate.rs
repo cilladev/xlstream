@@ -62,6 +62,7 @@ pub struct EvaluateSummary {
 /// assert!(matches!(err, xlstream_core::XlStreamError::Xlsx(_)));
 /// ```
 #[must_use = "evaluation results must be inspected for errors"]
+#[allow(clippy::too_many_lines)]
 pub fn evaluate(
     input: &Path,
     output: &Path,
@@ -111,13 +112,30 @@ pub fn evaluate(
             .collect()
     };
 
-    let agg_prelude = if all_agg_keys.is_empty() && all_multi_keys.is_empty() {
-        Prelude::empty()
-    } else if let Some(ref main) = main_sheet {
-        crate::prelude_plan::execute_prelude(&mut reader, main, &all_agg_keys, &all_multi_keys)?
-    } else {
-        Prelude::empty()
+    // Collect bounded range keys for range-expanding functions.
+    let all_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
+        let mut seen = std::collections::HashSet::new();
+        col_asts
+            .values()
+            .flat_map(crate::prelude_plan::collect_bounded_range_keys)
+            .filter(|k| seen.insert(k.clone()))
+            .collect()
     };
+
+    let agg_prelude =
+        if all_agg_keys.is_empty() && all_multi_keys.is_empty() && all_range_keys.is_empty() {
+            Prelude::empty()
+        } else if let Some(ref main) = main_sheet {
+            crate::prelude_plan::execute_prelude(
+                &mut reader,
+                main,
+                &all_agg_keys,
+                &all_multi_keys,
+                &all_range_keys,
+            )?
+        } else {
+            Prelude::empty()
+        };
     let lookup_sheets = crate::lookup::load_lookup_sheets(&lookup_keys, &mut reader)?;
     let prelude = if lookup_sheets.is_empty() {
         agg_prelude
