@@ -9,6 +9,14 @@ members = [
     "crates/xlstream-io",
     "crates/xlstream-eval",
     "crates/xlstream-cli",
+    "bindings/python",
+]
+default-members = [
+    "crates/xlstream-core",
+    "crates/xlstream-parse",
+    "crates/xlstream-io",
+    "crates/xlstream-eval",
+    "crates/xlstream-cli",
 ]
 
 [workspace.package]
