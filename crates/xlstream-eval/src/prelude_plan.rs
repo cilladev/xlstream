@@ -436,9 +436,9 @@ fn collect_range_keys_recursive(
             end_row: Some(er),
             start_col: Some(sc),
             end_col: Some(ec),
-        } if sc == ec && sheet.is_none() => {
+        } if sc == ec => {
             keys.push(crate::prelude::BoundedRangeKey {
-                sheet: None,
+                sheet: sheet.map(ToString::to_string),
                 col: sc,
                 start_row: sr,
                 end_row: er,
