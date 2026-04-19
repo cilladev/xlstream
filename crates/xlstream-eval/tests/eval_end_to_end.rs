@@ -137,3 +137,39 @@ fn summary_duration_is_nonzero_after_real_eval() {
     // Duration should be at least 1 ns for any real I/O.
     assert!(summary.duration.as_nanos() > 0, "duration should be nonzero after evaluation");
 }
+
+// ---------------------------------------------------------------------------
+// Conditional + logical (Phase 6)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn conditional_if_short_circuit_and_ifs_tiered_match() {
+    let input = helpers::generate_conditional_fixture();
+    let output = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+
+    let summary = evaluate(input.path(), output.path(), None).unwrap();
+    // 1 header + 5 data rows
+    assert_eq!(summary.rows_processed, 6, "rows_processed mismatch");
+    // 5 rows * 2 formula columns
+    assert_eq!(summary.formulas_evaluated, 10, "formulas_evaluated mismatch");
+
+    let mut reader = Reader::open(output.path()).unwrap();
+    let rows = read_all_rows(&mut reader, "Sheet1");
+    assert_eq!(rows.len(), 6);
+
+    // Row 1 (A=0): B=0 (IF short-circuit), C="Bronze"
+    assert_eq!(rows[1].1[1], Value::Number(0.0), "row 1: IF(0=0, 0, 1/0) should be 0");
+    assert_eq!(rows[1].1[2], Value::Text("Bronze".into()), "row 1: tier mismatch");
+
+    // Row 2 (A=150000): C="Platinum"
+    assert_eq!(rows[2].1[2], Value::Text("Platinum".into()), "row 2: tier mismatch");
+
+    // Row 3 (A=75000): C="Gold"
+    assert_eq!(rows[3].1[2], Value::Text("Gold".into()), "row 3: tier mismatch");
+
+    // Row 4 (A=25000): C="Silver"
+    assert_eq!(rows[4].1[2], Value::Text("Silver".into()), "row 4: tier mismatch");
+
+    // Row 5 (A=5000): C="Bronze"
+    assert_eq!(rows[5].1[2], Value::Text("Bronze".into()), "row 5: tier mismatch");
+}

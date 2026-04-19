@@ -12,55 +12,55 @@
 
 ### IF
 
-In `xlstream-eval/src/builtins/conditional.rs` as **stateful** builtins (they take `&[AstNode]`, not pre-evaluated values — for short-circuit):
+In `xlstream-eval/src/builtins/conditional.rs` as **stateful** builtins (they take `&[NodeRef]`, not pre-evaluated values — for short-circuit):
 
-- [ ] `IF(cond, then, else?)`:
-  - [ ] Evaluate `cond`, coerce to bool.
-  - [ ] If true, evaluate `then` and return.
-  - [ ] If false, evaluate `else` or return `FALSE`.
-  - [ ] Short-circuit: never evaluate the unused branch.
-- [ ] Test: `IF(A=0, 0, 1/A)` — when `A=0`, does NOT produce `#DIV/0!`.
+- [x] `IF(cond, then, else?)`:
+  - [x] Evaluate `cond`, coerce to bool.
+  - [x] If true, evaluate `then` and return.
+  - [x] If false, evaluate `else` or return `FALSE`.
+  - [x] Short-circuit: never evaluate the unused branch.
+- [x] Test: `IF(A=0, 0, 1/A)` — when `A=0`, does NOT produce `#DIV/0!`.
 
 ### IFS
 
-- [ ] `IFS(cond1, value1, cond2, value2, ...)`:
-  - [ ] Evaluate cond1; if true return value1.
-  - [ ] Otherwise try cond2; if true return value2. Etc.
-  - [ ] If no condition matches → `#N/A`.
-  - [ ] Short-circuit: only evaluate conds up to the first match; only evaluate the matching value.
+- [x] `IFS(cond1, value1, cond2, value2, ...)`:
+  - [x] Evaluate cond1; if true return value1.
+  - [x] Otherwise try cond2; if true return value2. Etc.
+  - [x] If no condition matches → `#N/A`.
+  - [x] Short-circuit: only evaluate conds up to the first match; only evaluate the matching value.
 
 ### SWITCH
 
-- [ ] `SWITCH(expression, val1, result1, val2, result2, ..., default?)`:
-  - [ ] Evaluate `expression` once.
-  - [ ] Compare against val1, val2, ... in order; return first matching `resultN`.
-  - [ ] No match → `default` if given, else `#N/A`.
+- [x] `SWITCH(expression, val1, result1, val2, result2, ..., default?)`:
+  - [x] Evaluate `expression` once.
+  - [x] Compare against val1, val2, ... in order; return first matching `resultN`.
+  - [x] No match → `default` if given, else `#N/A`.
 
 ### IFERROR, IFNA
 
-- [ ] `IFERROR(expr, fallback)`:
-  - [ ] Evaluate `expr`; if result is `Value::Error(_)` or the evaluation returned `Err(CellError)`, evaluate and return `fallback`.
-  - [ ] Otherwise return the value.
-- [ ] `IFNA(expr, fallback)`:
-  - [ ] Same but only for `CellError::Na`. Other errors propagate.
+- [x] `IFERROR(expr, fallback)`:
+  - [x] Evaluate `expr`; if result is `Value::Error(_)` or the evaluation returned `Err(CellError)`, evaluate and return `fallback`.
+  - [x] Otherwise return the value.
+- [x] `IFNA(expr, fallback)`:
+  - [x] Same but only for `CellError::Na`. Other errors propagate.
 
 ### AND, OR, NOT, XOR
 
-- [ ] `AND(a1, a2, ..., aN)`:
-  - [ ] Short-circuit on first FALSE.
-  - [ ] Empty args → `#VALUE!`.
-  - [ ] Propagate errors.
-- [ ] `OR(...)`:
-  - [ ] Short-circuit on first TRUE.
-- [ ] `NOT(x)`:
-  - [ ] Coerce to bool, invert.
-- [ ] `XOR(...)`:
-  - [ ] Parity: true iff odd number of truthy args.
+- [x] `AND(a1, a2, ..., aN)`:
+  - [x] Short-circuit on first FALSE.
+  - [x] Empty args → `#VALUE!`.
+  - [x] Propagate errors.
+- [x] `OR(...)`:
+  - [x] Short-circuit on first TRUE.
+- [x] `NOT(x)`:
+  - [x] Coerce to bool, invert.
+- [x] `XOR(...)`:
+  - [x] Parity: true iff odd number of truthy args.
 
 ### TRUE, FALSE
 
-- [ ] `TRUE()` and `FALSE()` zero-arg builtins return `Value::Bool(true)` / `Value::Bool(false)`.
-- [ ] Parser should already handle the `TRUE` / `FALSE` literal tokens; confirm.
+- [x] `TRUE()` and `FALSE()` zero-arg builtins return `Value::Bool(true)` / `Value::Bool(false)`.
+- [x] Parser should already handle the `TRUE` / `FALSE` literal tokens; confirm.
 
 ### Tests
 
@@ -68,37 +68,37 @@ Each function: at least 5 unit tests + 1 integration test.
 
 #### IF
 
-- [ ] Happy path true branch.
-- [ ] Happy path false branch.
-- [ ] 2-arg form (no else) with false → `FALSE`.
-- [ ] Short-circuit: `IF(A=0, 0, 1/A)` when `A=0` does NOT error.
-- [ ] Cond is an error → propagate.
-- [ ] Cond is a number: 0 → false, nonzero → true.
-- [ ] Cond is a string: `"TRUE"` → true, `"FALSE"` → false, other → `#VALUE!`.
+- [x] Happy path true branch.
+- [x] Happy path false branch.
+- [x] 2-arg form (no else) with false → `FALSE`.
+- [x] Short-circuit: `IF(A=0, 0, 1/A)` when `A=0` does NOT error.
+- [x] Cond is an error → propagate.
+- [x] Cond is a number: 0 → false, nonzero → true.
+- [x] Cond is a string: `"TRUE"` → true, `"FALSE"` → false, other → `#VALUE!`.
 
 #### IFS, SWITCH similar coverage.
 
 #### IFERROR
 
-- [ ] Catches `#DIV/0!`.
-- [ ] Catches `#VALUE!`.
-- [ ] Pass-through for non-error.
-- [ ] Fallback receives the correct value.
-- [ ] IFNA only catches `#N/A`, not `#VALUE!`.
+- [x] Catches `#DIV/0!`.
+- [x] Catches `#VALUE!`.
+- [x] Pass-through for non-error.
+- [x] Fallback receives the correct value.
+- [x] IFNA only catches `#N/A`, not `#VALUE!`.
 
 #### AND / OR / NOT
 
-- [ ] `AND(TRUE, TRUE) = TRUE`.
-- [ ] `AND(TRUE, FALSE) = FALSE`.
-- [ ] `OR(FALSE, TRUE) = TRUE`.
-- [ ] `NOT(TRUE) = FALSE`.
-- [ ] `AND(1, 1, 1) = TRUE` (numeric coercion).
-- [ ] `AND("TRUE", "true") = TRUE` (case-insensitive).
-- [ ] Short-circuit: second arg with side effect not evaluated when first is false (we don't have side effects, but the test verifies the stateful-builtin calls `eval` only once for early termination — check the interpreter's trace).
+- [x] `AND(TRUE, TRUE) = TRUE`.
+- [x] `AND(TRUE, FALSE) = FALSE`.
+- [x] `OR(FALSE, TRUE) = TRUE`.
+- [x] `NOT(TRUE) = FALSE`.
+- [x] `AND(1, 1, 1) = TRUE` (numeric coercion).
+- [x] `AND("TRUE", "true") = TRUE` (case-insensitive).
+- [x] Short-circuit: second arg with side effect not evaluated when first is false (verified via `AND(FALSE, 1/0)` returning FALSE without `#DIV/0!`).
 
 ## Integration tests
 
-- [ ] Fixture with `IFS(Deal Value > 100000, "Platinum", Deal Value > 50000, "Gold", Deal Value > 10000, "Silver", TRUE, "Bronze")` — matches xlformula's benchmark.
+- [x] Fixture with `IFS(Deal Value > 100000, "Platinum", Deal Value > 50000, "Gold", Deal Value > 10000, "Silver", TRUE, "Bronze")` — matches xlformula's benchmark.
 - [ ] Fixture with `IFERROR(VLOOKUP(...), "N/A")` — needs a lookup sheet; depends on Phase 8 too. Defer this one until Phase 8 lands.
 
 ## Done when
