@@ -36,6 +36,12 @@ fn power_before_mul() {
     assert_eq!(eval_formula("2*3^2", &[]), Value::Number(18.0));
 }
 
+#[test]
+fn power_is_right_associative() {
+    // Excel: 2^3^2 = 2^(3^2) = 2^9 = 512 (right-associative)
+    assert_eq!(eval_formula("2^3^2", &[]), Value::Number(512.0));
+}
+
 // -- The -2^2 precedence --
 // NOTE: Excel evaluates -2^2 as (-2)^2 = 4. However, formualizer-parse
 // gives ^ higher precedence than unary minus (standard math), so
