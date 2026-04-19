@@ -4,6 +4,8 @@
 //! Error propagation is explicit — `Value::Error` inputs are checked
 //! before calling `coerce::to_number`.
 
+use rust_decimal::prelude::*;
+use rust_decimal::Decimal;
 use xlstream_core::{coerce, CellError, Value};
 
 // ---------------------------------------------------------------------------
@@ -21,13 +23,27 @@ fn num_arg(args: &[Value], idx: usize) -> Result<f64, Value> {
     }
 }
 
-/// Compute `10^digits` as a scaling factor for rounding functions.
-///
-/// Negative `digits` yield fractional factors (e.g. digits=-2 => 0.01).
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-fn round_factor(digits: f64) -> f64 {
-    let d = digits as i32;
-    10_f64.powi(d)
+/// Convert f64 to Decimal via shortest-roundtrip string to preserve
+/// the user-visible decimal representation (avoids IEEE 754 artifacts
+/// like 2.345 becoming 2.3449999...).
+fn to_decimal(x: f64) -> Option<Decimal> {
+    Decimal::from_str(&format!("{x}")).ok()
+}
+
+/// Decimal-space rounding with half-away-from-zero, matching Excel.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+fn decimal_round(x: f64, digits: i32) -> f64 {
+    let Some(d) = to_decimal(x) else { return x };
+    if digits >= 0 {
+        d.round_dp_with_strategy(digits as u32, RoundingStrategy::MidpointAwayFromZero)
+            .to_f64()
+            .unwrap_or(x)
+    } else {
+        let factor = Decimal::from(10i64.pow((-digits) as u32));
+        ((d / factor).round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero) * factor)
+            .to_f64()
+            .unwrap_or(x)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -35,6 +51,7 @@ fn round_factor(digits: f64) -> f64 {
 // ---------------------------------------------------------------------------
 
 /// `ROUND(x, digits)` — round half away from zero (Excel convention).
+/// Uses decimal arithmetic to match Excel's rounding of values like 2.345.
 pub(crate) fn builtin_round(args: &[Value]) -> Value {
     if args.len() != 2 {
         return Value::Error(CellError::Value);
@@ -47,10 +64,8 @@ pub(crate) fn builtin_round(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let factor = round_factor(digits);
-    let scaled = x * factor;
-    let rounded = f64::copysign((scaled.abs() + 0.5).floor(), x) / factor;
-    Value::Number(rounded)
+    #[allow(clippy::cast_possible_truncation)]
+    Value::Number(decimal_round(x, digits.round() as i32))
 }
 
 /// `ROUNDUP(x, digits)` — round away from zero.
@@ -66,10 +81,17 @@ pub(crate) fn builtin_roundup(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let factor = round_factor(digits);
-    let scaled = x * factor;
-    let rounded = f64::copysign(scaled.abs().ceil(), x) / factor;
-    Value::Number(rounded)
+    let Some(d) = to_decimal(x) else {
+        return Value::Number(x);
+    };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let dp = digits.round().max(0.0) as u32;
+    let rounded = if x >= 0.0 {
+        d.round_dp_with_strategy(dp, RoundingStrategy::AwayFromZero)
+    } else {
+        -(-d).round_dp_with_strategy(dp, RoundingStrategy::AwayFromZero)
+    };
+    Value::Number(rounded.to_f64().unwrap_or(x))
 }
 
 /// `ROUNDDOWN(x, digits)` — round toward zero (truncate).
@@ -85,10 +107,13 @@ pub(crate) fn builtin_rounddown(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
-    let factor = round_factor(digits);
-    let scaled = x * factor;
-    let rounded = f64::copysign(scaled.abs().floor(), x) / factor;
-    Value::Number(rounded)
+    let Some(d) = to_decimal(x) else {
+        return Value::Number(x);
+    };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let dp = digits.round().max(0.0) as u32;
+    let rounded = d.round_dp_with_strategy(dp, RoundingStrategy::ToZero);
+    Value::Number(rounded.to_f64().unwrap_or(x))
 }
 
 // ---------------------------------------------------------------------------
@@ -495,7 +520,12 @@ mod tests {
 
     #[test]
     fn round_two_decimal_places() {
-        assert_eq!(builtin_round(&[Value::Number(2.125), Value::Number(2.0)]), Value::Number(2.13));
+        assert_eq!(builtin_round(&[Value::Number(2.345), Value::Number(2.0)]), Value::Number(2.35));
+    }
+
+    #[test]
+    fn round_1_005_to_two_decimal_places() {
+        assert_eq!(builtin_round(&[Value::Number(1.005), Value::Number(2.0)]), Value::Number(1.01));
     }
 
     #[test]
