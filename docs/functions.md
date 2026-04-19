@@ -95,53 +95,53 @@ All v0.1. Hash-indexed exact match, binary-search approx, wildcard fallback. Sin
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `LEFT` | `(text, n?)` | n defaults to 1 | v0.1 | [ ] |
-| `RIGHT` | `(text, n?)` | n defaults to 1 | v0.1 | [ ] |
-| `MID` | `(text, start, n)` | start is 1-based | v0.1 | [ ] |
-| `LEN` | `(text)` | character count | v0.1 | [ ] |
-| `UPPER` | `(text)` | uppercase | v0.1 | [ ] |
-| `LOWER` | `(text)` | lowercase | v0.1 | [ ] |
-| `PROPER` | `(text)` | title case | v0.2 | [ ] |
-| `TRIM` | `(text)` | strips leading/trailing + collapses runs of spaces | v0.1 | [ ] |
-| `CLEAN` | `(text)` | strips non-printable | v0.2 | [ ] |
-| `CONCAT` | `(a, b, ...)` | joins (modern) | v0.1 | [ ] |
-| `CONCATENATE` | `(a, b, ...)` | joins (legacy alias) | v0.1 | [ ] |
-| `TEXTJOIN` | `(delim, ignore_empty, a, b, ...)` | delimited join | v0.1 | [ ] |
-| `FIND` | `(needle, haystack, start?)` | 1-based, case-sensitive | v0.1 | [ ] |
-| `SEARCH` | `(needle, haystack, start?)` | case-insensitive, wildcard-enabled | v0.1 | [ ] |
-| `SUBSTITUTE` | `(text, old, new, which?)` | replace by match | v0.1 | [ ] |
-| `REPLACE` | `(text, start, n, new)` | replace by position | v0.1 | [ ] |
-| `TEXT` | `(value, format)` | numeric/date to formatted string (subset of formats) | v0.1 | [ ] |
-| `VALUE` | `(text)` | text to number | v0.1 | [ ] |
-| `EXACT` | `(a, b)` | case-sensitive equality | v0.2 | [ ] |
+| `LEFT` | `(text, n?)` | n defaults to 1 | v0.1 | [x] |
+| `RIGHT` | `(text, n?)` | n defaults to 1 | v0.1 | [x] |
+| `MID` | `(text, start, n)` | start is 1-based | v0.1 | [x] |
+| `LEN` | `(text)` | character count | v0.1 | [x] |
+| `UPPER` | `(text)` | uppercase | v0.1 | [x] |
+| `LOWER` | `(text)` | lowercase | v0.1 | [x] |
+| `PROPER` | `(text)` | title case | v0.2 | [x] |
+| `TRIM` | `(text)` | strips leading/trailing + collapses runs of spaces | v0.1 | [x] |
+| `CLEAN` | `(text)` | strips non-printable | v0.2 | [x] |
+| `CONCAT` | `(a, b, ...)` | joins (modern) | v0.1 | [x] |
+| `CONCATENATE` | `(a, b, ...)` | joins (legacy alias) | v0.1 | [x] |
+| `TEXTJOIN` | `(delim, ignore_empty, a, b, ...)` | delimited join | v0.1 | [x] |
+| `FIND` | `(needle, haystack, start?)` | 1-based, case-sensitive | v0.1 | [x] |
+| `SEARCH` | `(needle, haystack, start?)` | case-insensitive, wildcard-enabled | v0.1 | [x] |
+| `SUBSTITUTE` | `(text, old, new, which?)` | replace by match | v0.1 | [x] |
+| `REPLACE` | `(text, start, n, new)` | replace by position | v0.1 | [x] |
+| `TEXT` | `(value, format)` | numeric/date to formatted string (subset of formats) | v0.1 | [x] |
+| `VALUE` | `(text)` | text to number | v0.1 | [x] |
+| `EXACT` | `(a, b)` | case-sensitive equality | v0.2 | [x] |
 
 ## Math (Phase 9)
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `ROUND` | `(x, digits)` | round half away from zero | v0.1 | [ ] |
-| `ROUNDUP` | `(x, digits)` | toward +∞ | v0.1 | [ ] |
-| `ROUNDDOWN` | `(x, digits)` | toward 0 | v0.1 | [ ] |
-| `INT` | `(x)` | floor toward -∞ | v0.1 | [ ] |
-| `MOD` | `(x, y)` | sign of divisor | v0.1 | [ ] |
-| `ABS` | `(x)` | absolute value | v0.1 | [ ] |
-| `SIGN` | `(x)` | -1, 0, or 1 | v0.1 | [ ] |
-| `SQRT` | `(x)` | square root; negative → `#NUM!` | v0.1 | [ ] |
-| `POWER` | `(base, exp)` | same as `^` | v0.1 | [ ] |
-| `CEILING` | `(x, significance)` | round up to multiple | v0.2 | [ ] |
-| `FLOOR` | `(x, significance)` | round down to multiple | v0.2 | [ ] |
-| `LN` | `(x)` | natural log | v0.2 | [ ] |
-| `LOG` | `(x, base?)` | base defaults to 10 | v0.2 | [ ] |
-| `LOG10` | `(x)` | base-10 log | v0.2 | [ ] |
-| `EXP` | `(x)` | e^x | v0.2 | [ ] |
-| `SIN` | `(x)` | radians | v0.2 | [ ] |
-| `COS` | `(x)` | radians | v0.2 | [ ] |
-| `TAN` | `(x)` | radians | v0.2 | [ ] |
-| `ASIN` | `(x)` | returns radians | v0.2 | [ ] |
-| `ACOS` | `(x)` | returns radians | v0.2 | [ ] |
-| `ATAN` | `(x)` | returns radians | v0.2 | [ ] |
-| `ATAN2` | `(y, x)` | note Excel arg order (y before x) | v0.2 | [ ] |
-| `PI` | `()` | constant π | v0.1 | [ ] |
+| `ROUND` | `(x, digits)` | round half away from zero | v0.1 | [x] |
+| `ROUNDUP` | `(x, digits)` | toward +∞ | v0.1 | [x] |
+| `ROUNDDOWN` | `(x, digits)` | toward 0 | v0.1 | [x] |
+| `INT` | `(x)` | floor toward -∞ | v0.1 | [x] |
+| `MOD` | `(x, y)` | sign of divisor | v0.1 | [x] |
+| `ABS` | `(x)` | absolute value | v0.1 | [x] |
+| `SIGN` | `(x)` | -1, 0, or 1 | v0.1 | [x] |
+| `SQRT` | `(x)` | square root; negative → `#NUM!` | v0.1 | [x] |
+| `POWER` | `(base, exp)` | same as `^` | v0.1 | [x] |
+| `CEILING` | `(x, significance)` | round up to multiple | v0.2 | [x] |
+| `FLOOR` | `(x, significance)` | round down to multiple | v0.2 | [x] |
+| `LN` | `(x)` | natural log | v0.2 | [x] |
+| `LOG` | `(x, base?)` | base defaults to 10 | v0.2 | [x] |
+| `LOG10` | `(x)` | base-10 log | v0.2 | [x] |
+| `EXP` | `(x)` | e^x | v0.2 | [x] |
+| `SIN` | `(x)` | radians | v0.2 | [x] |
+| `COS` | `(x)` | radians | v0.2 | [x] |
+| `TAN` | `(x)` | radians | v0.2 | [x] |
+| `ASIN` | `(x)` | returns radians | v0.2 | [x] |
+| `ACOS` | `(x)` | returns radians | v0.2 | [x] |
+| `ATAN` | `(x)` | returns radians | v0.2 | [x] |
+| `ATAN2` | `(y, x)` | note Excel arg order (y before x) | v0.2 | [x] |
+| `PI` | `()` | constant π | v0.1 | [x] |
 | `RAND` | `()` | single-evaluation-per-run (deterministic with seed) | v0.1 | [ ] |
 | `RANDBETWEEN` | `(low, high)` | single-evaluation-per-run | v0.1 | [ ] |
 
@@ -151,44 +151,44 @@ Excel 1900-based serial dates. The 1900-02-29 leap bug is preserved for compatib
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `TODAY` | `()` | date; evaluated once per run | v0.1 | [ ] |
-| `NOW` | `()` | date+time; evaluated once per run | v0.1 | [ ] |
-| `DATE` | `(y, m, d)` | rolls over (`DATE(2026,13,1) = DATE(2027,1,1)`) | v0.1 | [ ] |
-| `YEAR` | `(date)` | | v0.1 | [ ] |
-| `MONTH` | `(date)` | | v0.1 | [ ] |
-| `DAY` | `(date)` | | v0.1 | [ ] |
-| `WEEKDAY` | `(date, type?)` | type = 1/2/3 (Excel variants) | v0.1 | [ ] |
-| `EDATE` | `(date, months)` | same day, N months later | v0.1 | [ ] |
-| `EOMONTH` | `(date, months)` | last day of the resulting month | v0.1 | [ ] |
-| `DATEDIF` | `(start, end, unit)` | `"y"`, `"m"`, `"d"`, `"ym"`, `"yd"`, `"md"` | v0.1 | [ ] |
-| `NETWORKDAYS` | `(start, end, holidays?)` | skips weekends | v0.2 | [ ] |
-| `WORKDAY` | `(start, days, holidays?)` | start + N working days | v0.2 | [ ] |
+| `TODAY` | `()` | date; evaluated once per run | v0.1 | [x] |
+| `NOW` | `()` | date+time; evaluated once per run | v0.1 | [x] |
+| `DATE` | `(y, m, d)` | rolls over (`DATE(2026,13,1) = DATE(2027,1,1)`) | v0.1 | [x] |
+| `YEAR` | `(date)` | | v0.1 | [x] |
+| `MONTH` | `(date)` | | v0.1 | [x] |
+| `DAY` | `(date)` | | v0.1 | [x] |
+| `WEEKDAY` | `(date, type?)` | type = 1/2/3 (Excel variants) | v0.1 | [x] |
+| `EDATE` | `(date, months)` | same day, N months later | v0.1 | [x] |
+| `EOMONTH` | `(date, months)` | last day of the resulting month | v0.1 | [x] |
+| `DATEDIF` | `(start, end, unit)` | `"y"`, `"m"`, `"d"`, `"ym"`, `"yd"`, `"md"` | v0.1 | [x] |
+| `NETWORKDAYS` | `(start, end, holidays?)` | skips weekends | v0.2 | [x] |
+| `WORKDAY` | `(start, days, holidays?)` | start + N working days | v0.2 | [x] |
 
 ## Info / type (Phase 9)
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `ISBLANK` | `(x)` | true iff `Empty` | v0.1 | [ ] |
-| `ISNUMBER` | `(x)` | | v0.1 | [ ] |
-| `ISTEXT` | `(x)` | | v0.1 | [ ] |
-| `ISLOGICAL` | `(x)` | | v0.2 | [ ] |
-| `ISNONTEXT` | `(x)` | inverse of ISTEXT | v0.2 | [ ] |
-| `ISERROR` | `(x)` | any `CellError` | v0.1 | [ ] |
-| `ISNA` | `(x)` | `#N/A` only | v0.1 | [ ] |
-| `ISREF` | `(x)` | always `FALSE` in our model | v0.2 | [ ] |
-| `NA` | `()` | returns `#N/A` | v0.1 | [ ] |
-| `TYPE` | `(x)` | Excel-style type code | v0.2 | [ ] |
+| `ISBLANK` | `(x)` | true iff `Empty` | v0.1 | [x] |
+| `ISNUMBER` | `(x)` | | v0.1 | [x] |
+| `ISTEXT` | `(x)` | | v0.1 | [x] |
+| `ISLOGICAL` | `(x)` | | v0.2 | [x] |
+| `ISNONTEXT` | `(x)` | inverse of ISTEXT | v0.2 | [x] |
+| `ISERROR` | `(x)` | any `CellError` | v0.1 | [x] |
+| `ISNA` | `(x)` | `#N/A` only | v0.1 | [x] |
+| `ISREF` | `(x)` | always `FALSE` in our model | v0.2 | [x] |
+| `NA` | `()` | returns `#N/A` | v0.1 | [x] |
+| `TYPE` | `(x)` | Excel-style type code | v0.2 | [x] |
 
 ## Financial (Phase 9)
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `PMT` | `(rate, nper, pv, fv?, type?)` | loan payment | v0.1 | [ ] |
-| `PV` | `(rate, nper, pmt, fv?, type?)` | present value | v0.1 | [ ] |
-| `FV` | `(rate, nper, pmt, pv?, type?)` | future value | v0.1 | [ ] |
-| `NPV` | `(rate, v1, v2, ...)` | net present value | v0.1 | [ ] |
-| `IRR` | `(values, guess?)` | internal rate of return; iterative | v0.2 | [ ] |
-| `RATE` | `(nper, pmt, pv, fv?, type?, guess?)` | interest rate; iterative | v0.2 | [ ] |
+| `PMT` | `(rate, nper, pv, fv?, type?)` | loan payment | v0.1 | [x] |
+| `PV` | `(rate, nper, pmt, fv?, type?)` | present value | v0.1 | [x] |
+| `FV` | `(rate, nper, pmt, pv?, type?)` | future value | v0.1 | [x] |
+| `NPV` | `(rate, v1, v2, ...)` | net present value | v0.1 | [x] |
+| `IRR` | `(values, guess?)` | internal rate of return; iterative | v0.2 | [x] |
+| `RATE` | `(nper, pmt, pv, fv?, type?, guess?)` | interest rate; iterative | v0.2 | [x] |
 
 ## Explicitly NOT supported
 
