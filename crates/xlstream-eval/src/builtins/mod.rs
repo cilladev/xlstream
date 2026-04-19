@@ -66,6 +66,11 @@ pub(crate) fn dispatch(
         "RIGHT" => Some(string::builtin_right(&eval_args(args, interp, scope))),
         "MID" => Some(string::builtin_mid(&eval_args(args, interp, scope))),
         "LEN" => Some(string::builtin_len(&eval_args(args, interp, scope))),
+        "UPPER" => Some(string::builtin_upper(&eval_args(args, interp, scope))),
+        "LOWER" => Some(string::builtin_lower(&eval_args(args, interp, scope))),
+        "PROPER" => Some(string::builtin_proper(&eval_args(args, interp, scope))),
+        "TRIM" => Some(string::builtin_trim(&eval_args(args, interp, scope))),
+        "CLEAN" => Some(string::builtin_clean(&eval_args(args, interp, scope))),
         _ => None,
     }
 }

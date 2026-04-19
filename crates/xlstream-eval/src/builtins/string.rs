@@ -128,6 +128,102 @@ pub(crate) fn builtin_len(args: &[Value]) -> Value {
     Value::Number(s.chars().count() as f64)
 }
 
+// ---------------------------------------------------------------------------
+// UPPER / LOWER / PROPER / TRIM / CLEAN
+// ---------------------------------------------------------------------------
+
+/// `UPPER(text)` — convert to uppercase.
+pub(crate) fn builtin_upper(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let s = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    Value::Text(s.to_uppercase().into())
+}
+
+/// `LOWER(text)` — convert to lowercase.
+pub(crate) fn builtin_lower(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let s = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    Value::Text(s.to_lowercase().into())
+}
+
+/// `PROPER(text)` — title case. Capitalizes after any non-letter character.
+pub(crate) fn builtin_proper(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let s = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let mut result = String::with_capacity(s.len());
+    let mut cap_next = true;
+    for ch in s.chars() {
+        if ch.is_alphabetic() {
+            if cap_next {
+                result.extend(ch.to_uppercase());
+            } else {
+                result.extend(ch.to_lowercase());
+            }
+            cap_next = false;
+        } else {
+            result.push(ch);
+            cap_next = true;
+        }
+    }
+    Value::Text(result.into())
+}
+
+/// `TRIM(text)` — strip leading/trailing spaces, collapse internal runs
+/// of ASCII space (0x20) to a single space.
+pub(crate) fn builtin_trim(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let s = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let mut result = String::with_capacity(s.len());
+    let mut prev_space = true; // treat start as "after space" to strip leading
+    for ch in s.chars() {
+        if ch == ' ' {
+            if !prev_space {
+                prev_space = true;
+            }
+        } else {
+            if prev_space && !result.is_empty() {
+                result.push(' ');
+            }
+            result.push(ch);
+            prev_space = false;
+        }
+    }
+    Value::Text(result.into())
+}
+
+/// `CLEAN(text)` — remove characters with ASCII code 0-31.
+pub(crate) fn builtin_clean(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let s = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let result: String = s.chars().filter(|c| !c.is_ascii_control()).collect();
+    Value::Text(result.into())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -352,5 +448,190 @@ mod tests {
     #[test]
     fn len_wrong_arg_count() {
         assert_eq!(builtin_len(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== UPPER =====
+
+    #[test]
+    fn upper_basic() {
+        assert_eq!(builtin_upper(&[Value::Text("hello".into())]), Value::Text("HELLO".into()));
+    }
+
+    #[test]
+    fn upper_mixed_case() {
+        assert_eq!(builtin_upper(&[Value::Text("HeLLo".into())]), Value::Text("HELLO".into()));
+    }
+
+    #[test]
+    fn upper_empty_string() {
+        assert_eq!(builtin_upper(&[Value::Text("".into())]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn upper_error_propagation() {
+        assert_eq!(builtin_upper(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn upper_number_coerced() {
+        assert_eq!(builtin_upper(&[Value::Number(42.0)]), Value::Text("42".into()));
+    }
+
+    #[test]
+    fn upper_wrong_arg_count() {
+        assert_eq!(builtin_upper(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== LOWER =====
+
+    #[test]
+    fn lower_basic() {
+        assert_eq!(builtin_lower(&[Value::Text("HELLO".into())]), Value::Text("hello".into()));
+    }
+
+    #[test]
+    fn lower_mixed_case() {
+        assert_eq!(builtin_lower(&[Value::Text("HeLLo".into())]), Value::Text("hello".into()));
+    }
+
+    #[test]
+    fn lower_empty_string() {
+        assert_eq!(builtin_lower(&[Value::Text("".into())]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn lower_error_propagation() {
+        assert_eq!(builtin_lower(&[Value::Error(CellError::Div0)]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn lower_number_coerced() {
+        assert_eq!(builtin_lower(&[Value::Number(42.0)]), Value::Text("42".into()));
+    }
+
+    #[test]
+    fn lower_wrong_arg_count() {
+        assert_eq!(
+            builtin_lower(&[Value::Text("a".into()), Value::Text("b".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== PROPER =====
+
+    #[test]
+    fn proper_basic() {
+        assert_eq!(
+            builtin_proper(&[Value::Text("hello world".into())]),
+            Value::Text("Hello World".into())
+        );
+    }
+
+    #[test]
+    fn proper_after_digit() {
+        assert_eq!(builtin_proper(&[Value::Text("123abc".into())]), Value::Text("123Abc".into()));
+    }
+
+    #[test]
+    fn proper_all_caps() {
+        assert_eq!(
+            builtin_proper(&[Value::Text("HELLO WORLD".into())]),
+            Value::Text("Hello World".into())
+        );
+    }
+
+    #[test]
+    fn proper_empty_string() {
+        assert_eq!(builtin_proper(&[Value::Text("".into())]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn proper_error_propagation() {
+        assert_eq!(builtin_proper(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn proper_number_coerced() {
+        assert_eq!(builtin_proper(&[Value::Number(42.0)]), Value::Text("42".into()));
+    }
+
+    // ===== TRIM =====
+
+    #[test]
+    fn trim_leading_trailing() {
+        assert_eq!(builtin_trim(&[Value::Text("  hello  ".into())]), Value::Text("hello".into()));
+    }
+
+    #[test]
+    fn trim_internal_spaces_collapsed() {
+        assert_eq!(
+            builtin_trim(&[Value::Text("hello   world".into())]),
+            Value::Text("hello world".into())
+        );
+    }
+
+    #[test]
+    fn trim_all_spaces() {
+        assert_eq!(builtin_trim(&[Value::Text("   ".into())]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn trim_empty_string() {
+        assert_eq!(builtin_trim(&[Value::Text("".into())]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn trim_error_propagation() {
+        assert_eq!(builtin_trim(&[Value::Error(CellError::Ref)]), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn trim_tabs_not_affected() {
+        // TRIM only targets ASCII space (0x20), not tabs
+        assert_eq!(
+            builtin_trim(&[Value::Text("\thello\t".into())]),
+            Value::Text("\thello\t".into())
+        );
+    }
+
+    // ===== CLEAN =====
+
+    #[test]
+    fn clean_removes_control_chars() {
+        assert_eq!(
+            builtin_clean(&[Value::Text("hello\x00world\x07".into())]),
+            Value::Text("helloworld".into())
+        );
+    }
+
+    #[test]
+    fn clean_preserves_printable() {
+        assert_eq!(
+            builtin_clean(&[Value::Text("hello world".into())]),
+            Value::Text("hello world".into())
+        );
+    }
+
+    #[test]
+    fn clean_removes_newlines_tabs() {
+        assert_eq!(
+            builtin_clean(&[Value::Text("line1\nline2\ttab".into())]),
+            Value::Text("line1line2tab".into())
+        );
+    }
+
+    #[test]
+    fn clean_empty_string() {
+        assert_eq!(builtin_clean(&[Value::Text("".into())]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn clean_error_propagation() {
+        assert_eq!(builtin_clean(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn clean_wrong_arg_count() {
+        assert_eq!(builtin_clean(&[]), Value::Error(CellError::Value));
     }
 }
