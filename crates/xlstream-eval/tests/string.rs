@@ -189,3 +189,12 @@ fn case_insensitive_function_names() {
     assert_eq!(eval_formula("left(\"Hello\", 2)", &[]), Value::Text("He".into()));
     assert_eq!(eval_formula("UPPER(\"hello\")", &[]), Value::Text("HELLO".into()));
 }
+
+// ===== TEXT date format =====
+
+#[test]
+fn text_date_format_through_evaluator() {
+    let serial = xlstream_core::ExcelDate::from_ymd(2026, 4, 15).serial;
+    let row = vec![Value::Number(serial)];
+    assert_eq!(eval_formula("TEXT(A1, \"yyyy-mm-dd\")", &row), Value::Text("2026-04-15".into()));
+}
