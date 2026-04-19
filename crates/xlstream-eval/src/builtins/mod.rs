@@ -75,6 +75,11 @@ pub(crate) fn dispatch(
         "TEXTJOIN" => Some(string::builtin_textjoin(&eval_args(args, interp, scope))),
         "FIND" => Some(string::builtin_find(&eval_args(args, interp, scope))),
         "SEARCH" => Some(string::builtin_search(&eval_args(args, interp, scope))),
+        "SUBSTITUTE" => Some(string::builtin_substitute(&eval_args(args, interp, scope))),
+        "REPLACE" => Some(string::builtin_replace(&eval_args(args, interp, scope))),
+        "TEXT" => Some(string::builtin_text(&eval_args(args, interp, scope))),
+        "VALUE" => Some(string::builtin_value(&eval_args(args, interp, scope))),
+        "EXACT" => Some(string::builtin_exact(&eval_args(args, interp, scope))),
         _ => None,
     }
 }

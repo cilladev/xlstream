@@ -5,6 +5,7 @@
 //! before calling `coerce::to_text` (which does NOT propagate errors).
 
 use std::borrow::Cow;
+use std::fmt::Write as _;
 
 use xlstream_core::{coerce, CellError, Value};
 
@@ -403,6 +404,215 @@ fn wildcard_match(pattern: &[char], text: &[char]) -> bool {
             wildcard_match(&pattern[1..], &text[1..])
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// SUBSTITUTE / REPLACE / TEXT / VALUE / EXACT
+// ---------------------------------------------------------------------------
+
+/// `SUBSTITUTE(text, old, new, which?)` — replace occurrences.
+///
+/// If `which` is given, replace only the Nth occurrence. Case-sensitive.
+pub(crate) fn builtin_substitute(args: &[Value]) -> Value {
+    if args.len() < 3 || args.len() > 4 {
+        return Value::Error(CellError::Value);
+    }
+    let text = match text_arg(args, 0) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+    let old = match text_arg(args, 1) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+    let new_str = match text_arg(args, 2) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+
+    if old.is_empty() {
+        return Value::Text(text.into());
+    }
+
+    if args.len() == 4 {
+        // Replace only the Nth occurrence
+        let which = match req_positive_int(args, 3) {
+            Ok(n) => n,
+            Err(e) => return e,
+        };
+        if which == 0 {
+            return Value::Error(CellError::Value);
+        }
+        let mut result = String::with_capacity(text.len());
+        let mut count = 0usize;
+        let mut remaining = text.as_str();
+        while let Some(pos) = remaining.find(&old) {
+            count += 1;
+            if count == which {
+                result.push_str(&remaining[..pos]);
+                result.push_str(&new_str);
+                result.push_str(&remaining[pos + old.len()..]);
+                return Value::Text(result.into());
+            }
+            result.push_str(&remaining[..pos + old.len()]);
+            remaining = &remaining[pos + old.len()..];
+        }
+        // Nth occurrence not found — return original
+        result.push_str(remaining);
+        Value::Text(result.into())
+    } else {
+        // Replace all occurrences
+        Value::Text(text.replace(&old, &new_str).into())
+    }
+}
+
+/// `REPLACE(text, start, n, new)` — replace by 1-based position.
+pub(crate) fn builtin_replace(args: &[Value]) -> Value {
+    if args.len() != 4 {
+        return Value::Error(CellError::Value);
+    }
+    let text = match text_arg(args, 0) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+    let start = match req_positive_int(args, 1) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if start == 0 {
+        return Value::Error(CellError::Value);
+    }
+    let n = match req_positive_int(args, 2) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let new_str = match text_arg(args, 3) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+
+    let chars: Vec<char> = text.chars().collect();
+    let start_idx = start.saturating_sub(1);
+    let mut result = String::with_capacity(chars.len());
+    for ch in &chars[..start_idx.min(chars.len())] {
+        result.push(*ch);
+    }
+    result.push_str(&new_str);
+    let end_idx = (start_idx + n).min(chars.len());
+    for ch in &chars[end_idx..] {
+        result.push(*ch);
+    }
+    Value::Text(result.into())
+}
+
+/// Format a number with thousands separators and the given decimal places.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn format_with_thousands(n: f64, decimals: usize) -> String {
+    let abs = n.abs();
+    let negative = n < 0.0;
+
+    // Round to requested decimal places. `decimals` is at most 3 in practice.
+    #[allow(clippy::cast_possible_wrap)]
+    let factor = 10_f64.powi(decimals as i32);
+    let rounded = (abs * factor + 0.5) as u64;
+    let factor_u = factor as u64;
+    let int_part = rounded / factor_u;
+    let frac_part = rounded % factor_u;
+
+    // Format integer part with commas
+    let int_str = int_part.to_string();
+    let mut with_commas = String::new();
+    for (i, ch) in int_str.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            with_commas.push(',');
+        }
+        with_commas.push(ch);
+    }
+    let with_commas: String = with_commas.chars().rev().collect();
+
+    let mut result = String::new();
+    if negative {
+        result.push('-');
+    }
+    result.push_str(&with_commas);
+    if decimals > 0 {
+        result.push('.');
+        let _ = write!(result, "{frac_part:0>decimals$}");
+    }
+    result
+}
+
+/// `TEXT(value, format)` — format number as text.
+///
+/// v0.1 supported formats: `"0"`, `"0.0"`, `"0.00"`, `"0.000"`,
+/// `"#,##0"`, `"#,##0.00"`, `"0%"`, `"0.00%"`.
+/// Unknown format emits `tracing::warn!` and returns `#VALUE!`.
+pub(crate) fn builtin_text(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    if let Value::Error(e) = &args[0] {
+        return Value::Error(*e);
+    }
+    let n = match coerce::to_number(&args[0]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let fmt = match text_arg(args, 1) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+
+    match fmt.as_str() {
+        "0" => Value::Text(format!("{n:.0}").into()),
+        "0.0" => Value::Text(format!("{n:.1}").into()),
+        "0.00" => Value::Text(format!("{n:.2}").into()),
+        "0.000" => Value::Text(format!("{n:.3}").into()),
+        "#,##0" => Value::Text(format_with_thousands(n, 0).into()),
+        "#,##0.00" => Value::Text(format_with_thousands(n, 2).into()),
+        "0%" => {
+            let pct = n * 100.0;
+            Value::Text(format!("{pct:.0}%").into())
+        }
+        "0.00%" => {
+            let pct = n * 100.0;
+            Value::Text(format!("{pct:.2}%").into())
+        }
+        _ => {
+            tracing::warn!(format = %fmt, "TEXT: unsupported format string");
+            Value::Error(CellError::Value)
+        }
+    }
+}
+
+/// `VALUE(text)` — text to number (delegates to `coerce::to_number`).
+pub(crate) fn builtin_value(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    if let Value::Error(e) = &args[0] {
+        return Value::Error(*e);
+    }
+    match coerce::to_number(&args[0]) {
+        Ok(n) => Value::Number(n),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `EXACT(a, b)` — case-sensitive text comparison.
+pub(crate) fn builtin_exact(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let a = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let b = match text_arg(args, 1) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    Value::Bool(a == b)
 }
 
 #[cfg(test)]
@@ -1089,5 +1299,331 @@ mod tests {
             builtin_search(&[Value::Text("hel*lo".into()), Value::Text("Hello".into())]),
             Value::Number(1.0)
         );
+    }
+
+    // ===== SUBSTITUTE =====
+
+    #[test]
+    fn substitute_replace_all() {
+        assert_eq!(
+            builtin_substitute(&[
+                Value::Text("aabbcc".into()),
+                Value::Text("b".into()),
+                Value::Text("X".into()),
+            ]),
+            Value::Text("aaXXcc".into())
+        );
+    }
+
+    #[test]
+    fn substitute_replace_nth() {
+        assert_eq!(
+            builtin_substitute(&[
+                Value::Text("aabab".into()),
+                Value::Text("a".into()),
+                Value::Text("X".into()),
+                Value::Number(2.0),
+            ]),
+            Value::Text("aXbab".into())
+        );
+    }
+
+    #[test]
+    fn substitute_not_found() {
+        assert_eq!(
+            builtin_substitute(&[
+                Value::Text("hello".into()),
+                Value::Text("z".into()),
+                Value::Text("X".into()),
+            ]),
+            Value::Text("hello".into())
+        );
+    }
+
+    #[test]
+    fn substitute_empty_old_returns_original() {
+        assert_eq!(
+            builtin_substitute(&[
+                Value::Text("hello".into()),
+                Value::Text("".into()),
+                Value::Text("X".into()),
+            ]),
+            Value::Text("hello".into())
+        );
+    }
+
+    #[test]
+    fn substitute_error_propagation() {
+        assert_eq!(
+            builtin_substitute(&[
+                Value::Error(CellError::Na),
+                Value::Text("a".into()),
+                Value::Text("b".into()),
+            ]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn substitute_case_sensitive() {
+        assert_eq!(
+            builtin_substitute(&[
+                Value::Text("Hello".into()),
+                Value::Text("h".into()),
+                Value::Text("X".into()),
+            ]),
+            Value::Text("Hello".into())
+        );
+    }
+
+    #[test]
+    fn substitute_wrong_arg_count() {
+        assert_eq!(
+            builtin_substitute(&[Value::Text("a".into()), Value::Text("b".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== REPLACE =====
+
+    #[test]
+    fn replace_basic() {
+        assert_eq!(
+            builtin_replace(&[
+                Value::Text("Hello".into()),
+                Value::Number(2.0),
+                Value::Number(3.0),
+                Value::Text("XY".into()),
+            ]),
+            Value::Text("HXYo".into())
+        );
+    }
+
+    #[test]
+    fn replace_at_start() {
+        assert_eq!(
+            builtin_replace(&[
+                Value::Text("Hello".into()),
+                Value::Number(1.0),
+                Value::Number(1.0),
+                Value::Text("J".into()),
+            ]),
+            Value::Text("Jello".into())
+        );
+    }
+
+    #[test]
+    fn replace_insert_no_delete() {
+        assert_eq!(
+            builtin_replace(&[
+                Value::Text("Hello".into()),
+                Value::Number(3.0),
+                Value::Number(0.0),
+                Value::Text("XY".into()),
+            ]),
+            Value::Text("HeXYllo".into())
+        );
+    }
+
+    #[test]
+    fn replace_error_propagation() {
+        assert_eq!(
+            builtin_replace(&[
+                Value::Error(CellError::Ref),
+                Value::Number(1.0),
+                Value::Number(1.0),
+                Value::Text("X".into()),
+            ]),
+            Value::Error(CellError::Ref)
+        );
+    }
+
+    #[test]
+    fn replace_start_zero_returns_value_error() {
+        assert_eq!(
+            builtin_replace(&[
+                Value::Text("Hello".into()),
+                Value::Number(0.0),
+                Value::Number(1.0),
+                Value::Text("X".into()),
+            ]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn replace_wrong_arg_count() {
+        assert_eq!(
+            builtin_replace(
+                &[Value::Text("Hello".into()), Value::Number(1.0), Value::Number(1.0),]
+            ),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== TEXT =====
+
+    #[test]
+    fn text_format_integer() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1234.0), Value::Text("0".into())]),
+            Value::Text("1234".into())
+        );
+    }
+
+    #[test]
+    fn text_format_one_decimal() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1234.5), Value::Text("0.0".into())]),
+            Value::Text("1234.5".into())
+        );
+    }
+
+    #[test]
+    fn text_format_two_decimals() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1234.5), Value::Text("0.00".into())]),
+            Value::Text("1234.50".into())
+        );
+    }
+
+    #[test]
+    fn text_format_thousands() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1_234_567.0), Value::Text("#,##0".into())]),
+            Value::Text("1,234,567".into())
+        );
+    }
+
+    #[test]
+    fn text_format_thousands_with_decimals() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1234.5), Value::Text("#,##0.00".into())]),
+            Value::Text("1,234.50".into())
+        );
+    }
+
+    #[test]
+    fn text_format_percent() {
+        assert_eq!(
+            builtin_text(&[Value::Number(0.75), Value::Text("0%".into())]),
+            Value::Text("75%".into())
+        );
+    }
+
+    #[test]
+    fn text_format_percent_with_decimals() {
+        assert_eq!(
+            builtin_text(&[Value::Number(0.7512), Value::Text("0.00%".into())]),
+            Value::Text("75.12%".into())
+        );
+    }
+
+    #[test]
+    fn text_unknown_format_returns_value_error() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1.0), Value::Text("yyyy-mm-dd".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn text_error_propagation() {
+        assert_eq!(
+            builtin_text(&[Value::Error(CellError::Na), Value::Text("0".into())]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn text_wrong_arg_count() {
+        assert_eq!(builtin_text(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+    }
+
+    // ===== VALUE =====
+
+    #[test]
+    fn value_from_numeric_text() {
+        assert_eq!(builtin_value(&[Value::Text("42.5".into())]), Value::Number(42.5));
+    }
+
+    #[test]
+    fn value_from_non_numeric_text() {
+        assert_eq!(builtin_value(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn value_from_number_passthrough() {
+        assert_eq!(builtin_value(&[Value::Number(10.0)]), Value::Number(10.0));
+    }
+
+    #[test]
+    fn value_from_bool() {
+        assert_eq!(builtin_value(&[Value::Bool(true)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn value_error_propagation() {
+        assert_eq!(builtin_value(&[Value::Error(CellError::Div0)]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn value_wrong_arg_count() {
+        assert_eq!(builtin_value(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== EXACT =====
+
+    #[test]
+    fn exact_same_strings() {
+        assert_eq!(
+            builtin_exact(&[Value::Text("Hello".into()), Value::Text("Hello".into())]),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn exact_different_case() {
+        assert_eq!(
+            builtin_exact(&[Value::Text("Hello".into()), Value::Text("hello".into())]),
+            Value::Bool(false)
+        );
+    }
+
+    #[test]
+    fn exact_different_strings() {
+        assert_eq!(
+            builtin_exact(&[Value::Text("Hello".into()), Value::Text("World".into())]),
+            Value::Bool(false)
+        );
+    }
+
+    #[test]
+    fn exact_empty_strings() {
+        assert_eq!(
+            builtin_exact(&[Value::Text("".into()), Value::Text("".into())]),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn exact_error_propagation() {
+        assert_eq!(
+            builtin_exact(&[Value::Error(CellError::Na), Value::Text("a".into())]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn exact_number_coerced() {
+        assert_eq!(
+            builtin_exact(&[Value::Number(42.0), Value::Text("42".into())]),
+            Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn exact_wrong_arg_count() {
+        assert_eq!(builtin_exact(&[Value::Text("a".into())]), Value::Error(CellError::Value));
     }
 }
