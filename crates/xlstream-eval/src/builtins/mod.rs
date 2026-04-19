@@ -6,6 +6,7 @@
 
 pub mod aggregate;
 mod conditional;
+mod lookup;
 mod multi_conditional;
 
 use xlstream_core::Value;
@@ -40,6 +41,13 @@ pub(crate) fn dispatch(
         "SUMIFS" => Some(multi_conditional::builtin_sumifs(args, interp, scope)),
         "COUNTIFS" => Some(multi_conditional::builtin_countifs(args, interp, scope)),
         "AVERAGEIFS" => Some(multi_conditional::builtin_averageifs(args, interp, scope)),
+        "VLOOKUP" => Some(lookup::builtin_vlookup(args, interp, scope)),
+        "XLOOKUP" | "_XLFN.XLOOKUP" => Some(lookup::builtin_xlookup(args, interp, scope)),
+        "HLOOKUP" => Some(lookup::builtin_hlookup(args, interp, scope)),
+        "MATCH" => Some(lookup::builtin_match(args, interp, scope)),
+        "XMATCH" | "_XLFN.XMATCH" => Some(lookup::builtin_xmatch(args, interp, scope)),
+        "INDEX" => Some(lookup::builtin_index(args, interp, scope)),
+        "CHOOSE" => Some(lookup::builtin_choose(args, interp, scope)),
         _ => None,
     }
 }
