@@ -6,14 +6,28 @@
 
 pub mod aggregate;
 mod conditional;
+pub(crate) mod date;
+pub(crate) mod financial;
+pub(crate) mod info;
 mod lookup;
+pub(crate) mod math;
 mod multi_conditional;
+pub(crate) mod string;
 
 use xlstream_core::Value;
 use xlstream_parse::NodeRef;
 
 use crate::interp::Interpreter;
 use crate::scope::RowScope;
+
+/// Evaluate all arguments eagerly, returning a `Vec<Value>`.
+///
+/// Used by pure builtins (string, math, etc.) that don't need
+/// short-circuit evaluation.
+#[allow(dead_code)] // used once string/math/etc dispatch arms land
+fn eval_args(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Vec<Value> {
+    args.iter().map(|a| interp.eval(*a, scope)).collect()
+}
 
 /// Look up `name` (case-insensitive) and call the matching builtin.
 ///
