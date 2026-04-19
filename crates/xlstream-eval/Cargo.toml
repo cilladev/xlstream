@@ -15,6 +15,7 @@ authors.workspace = true
 xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
 xlstream-parse = { path = "../xlstream-parse", version = "0.1.0" }
 xlstream-io = { path = "../xlstream-io", version = "0.1.0" }
+ssfmt.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

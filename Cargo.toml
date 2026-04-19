@@ -32,6 +32,9 @@ formualizer-common = "=1.1.2"
 # Python binding
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
 
+# Excel number formatting
+ssfmt = "0.1.2"
+
 # Concurrency + utilities
 rayon = "1.10"
 crossbeam-channel = "0.5"

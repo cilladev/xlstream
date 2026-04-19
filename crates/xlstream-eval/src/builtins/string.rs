@@ -5,7 +5,6 @@
 //! before calling `coerce::to_text` (which does NOT propagate errors).
 
 use std::borrow::Cow;
-use std::fmt::Write as _;
 
 use xlstream_core::{coerce, CellError, Value};
 
@@ -505,48 +504,8 @@ pub(crate) fn builtin_replace(args: &[Value]) -> Value {
     Value::Text(result.into())
 }
 
-/// Format a number with thousands separators and the given decimal places.
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn format_with_thousands(n: f64, decimals: usize) -> String {
-    let abs = n.abs();
-    let negative = n < 0.0;
-
-    // Round to requested decimal places. `decimals` is at most 3 in practice.
-    #[allow(clippy::cast_possible_wrap)]
-    let factor = 10_f64.powi(decimals as i32);
-    let rounded = (abs * factor + 0.5) as u64;
-    let factor_u = factor as u64;
-    let int_part = rounded / factor_u;
-    let frac_part = rounded % factor_u;
-
-    // Format integer part with commas
-    let int_str = int_part.to_string();
-    let mut with_commas = String::new();
-    for (i, ch) in int_str.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            with_commas.push(',');
-        }
-        with_commas.push(ch);
-    }
-    let with_commas: String = with_commas.chars().rev().collect();
-
-    let mut result = String::new();
-    if negative {
-        result.push('-');
-    }
-    result.push_str(&with_commas);
-    if decimals > 0 {
-        result.push('.');
-        let _ = write!(result, "{frac_part:0>decimals$}");
-    }
-    result
-}
-
-/// `TEXT(value, format)` — format number as text.
-///
-/// v0.1 supported formats: `"0"`, `"0.0"`, `"0.00"`, `"0.000"`,
-/// `"#,##0"`, `"#,##0.00"`, `"0%"`, `"0.00%"`, `"yyyy-mm-dd"`.
-/// Unknown format emits `tracing::warn!` and returns `#VALUE!`.
+/// `TEXT(value, format)` — format number/date as text using ECMA-376
+/// format codes. Full format coverage via the `ssfmt` crate.
 pub(crate) fn builtin_text(args: &[Value]) -> Value {
     if args.len() != 2 {
         return Value::Error(CellError::Value);
@@ -554,39 +513,17 @@ pub(crate) fn builtin_text(args: &[Value]) -> Value {
     if let Value::Error(e) = &args[0] {
         return Value::Error(*e);
     }
-    let n = match coerce::to_number(&args[0]) {
+    if let Value::Error(e) = &args[1] {
+        return Value::Error(*e);
+    }
+    let num = match coerce::to_number(&args[0]) {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
-    let fmt = match text_arg(args, 1) {
-        Ok(s) => s.into_owned(),
-        Err(e) => return e,
-    };
-
-    match fmt.as_str() {
-        "0" => Value::Text(format!("{n:.0}").into()),
-        "0.0" => Value::Text(format!("{n:.1}").into()),
-        "0.00" => Value::Text(format!("{n:.2}").into()),
-        "0.000" => Value::Text(format!("{n:.3}").into()),
-        "#,##0" => Value::Text(format_with_thousands(n, 0).into()),
-        "#,##0.00" => Value::Text(format_with_thousands(n, 2).into()),
-        "0%" => {
-            let pct = n * 100.0;
-            Value::Text(format!("{pct:.0}%").into())
-        }
-        "0.00%" => {
-            let pct = n * 100.0;
-            Value::Text(format!("{pct:.2}%").into())
-        }
-        "yyyy-mm-dd" => {
-            let date = xlstream_core::ExcelDate::from_serial(n);
-            let (y, m, d) = date.year_month_day();
-            Value::Text(format!("{y:04}-{m:02}-{d:02}").into())
-        }
-        _ => {
-            tracing::warn!(format = %fmt, "TEXT: unsupported format string");
-            Value::Error(CellError::Value)
-        }
+    let fmt_str = coerce::to_text(&args[1]);
+    match ssfmt::format_default(num, &fmt_str) {
+        Ok(s) => Value::Text(s.into()),
+        Err(_) => Value::Error(CellError::Value),
     }
 }
 
@@ -1525,14 +1462,6 @@ mod tests {
     }
 
     #[test]
-    fn text_unknown_format_returns_value_error() {
-        assert_eq!(
-            builtin_text(&[Value::Number(1.0), Value::Text("dd/mm/yyyy".into())]),
-            Value::Error(CellError::Value)
-        );
-    }
-
-    #[test]
     fn text_date_format_yyyy_mm_dd() {
         let serial = xlstream_core::ExcelDate::from_ymd(2026, 4, 15).serial;
         assert_eq!(
@@ -1542,10 +1471,51 @@ mod tests {
     }
 
     #[test]
+    fn text_date_format_dd_mm_yyyy() {
+        let serial = xlstream_core::ExcelDate::from_ymd(2026, 4, 15).serial;
+        assert_eq!(
+            builtin_text(&[Value::Number(serial), Value::Text("dd/mm/yyyy".into())]),
+            Value::Text("15/04/2026".into())
+        );
+    }
+
+    #[test]
+    fn text_fraction_format() {
+        assert_eq!(
+            builtin_text(&[Value::Number(0.5), Value::Text("# ?/?".into())]),
+            Value::Text(" 1/2".into())
+        );
+    }
+
+    #[test]
+    fn text_scientific_format() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1234.0), Value::Text("0.00E+00".into())]),
+            Value::Text("1.23E+03".into())
+        );
+    }
+
+    #[test]
+    fn text_time_format() {
+        assert_eq!(
+            builtin_text(&[Value::Number(0.75), Value::Text("hh:mm:ss".into())]),
+            Value::Text("18:00:00".into())
+        );
+    }
+
+    #[test]
     fn text_error_propagation() {
         assert_eq!(
             builtin_text(&[Value::Error(CellError::Na), Value::Text("0".into())]),
             Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn text_format_error_propagation_second_arg() {
+        assert_eq!(
+            builtin_text(&[Value::Number(1.0), Value::Error(CellError::Ref)]),
+            Value::Error(CellError::Ref)
         );
     }
 
