@@ -40,17 +40,17 @@ All v0.1. Fundamental — nothing useful without these.
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `TRUE` | `()` | bool literal | v0.1 | [ ] |
-| `FALSE` | `()` | bool literal | v0.1 | [ ] |
-| `IF` | `(cond, then, else?)` | short-circuit | v0.1 | [ ] |
-| `IFS` | `(cond1, val1, cond2, val2, ...)` | first match wins; no match → `#N/A` | v0.1 | [ ] |
-| `SWITCH` | `(expr, val1, result1, ..., default?)` | expr evaluated once | v0.1 | [ ] |
-| `IFERROR` | `(expr, fallback)` | catches any `CellError` | v0.1 | [ ] |
-| `IFNA` | `(expr, fallback)` | catches only `#N/A` | v0.1 | [ ] |
-| `AND` | `(a, b, ...)` | short-circuit on false | v0.1 | [ ] |
-| `OR` | `(a, b, ...)` | short-circuit on true | v0.1 | [ ] |
-| `NOT` | `(x)` | boolean invert | v0.1 | [ ] |
-| `XOR` | `(a, b, ...)` | parity (odd-true) | v0.1 | [ ] |
+| `TRUE` | `()` | bool literal | v0.1 | [x] |
+| `FALSE` | `()` | bool literal | v0.1 | [x] |
+| `IF` | `(cond, then, else?)` | short-circuit | v0.1 | [x] |
+| `IFS` | `(cond1, val1, cond2, val2, ...)` | first match wins; no match → `#N/A` | v0.1 | [x] |
+| `SWITCH` | `(expr, val1, result1, ..., default?)` | expr evaluated once | v0.1 | [x] |
+| `IFERROR` | `(expr, fallback)` | catches any `CellError` | v0.1 | [x] |
+| `IFNA` | `(expr, fallback)` | catches only `#N/A` | v0.1 | [x] |
+| `AND` | `(a, b, ...)` | short-circuit on false | v0.1 | [x] |
+| `OR` | `(a, b, ...)` | short-circuit on true | v0.1 | [x] |
+| `NOT` | `(x)` | boolean invert | v0.1 | [x] |
+| `XOR` | `(a, b, ...)` | parity (odd-true) | v0.1 | [x] |
 
 ## Aggregates / Statistics (Phase 7)
 

@@ -65,7 +65,6 @@ impl<'ctx> Interpreter<'ctx> {
     /// assert_eq!(interp.eval(ast.root(), &scope), Value::Bool(true));
     /// ```
     #[must_use]
-    #[allow(clippy::only_used_in_recursion)]
     pub fn eval(&self, node: NodeRef<'_>, scope: &RowScope<'_>) -> Value {
         match node.view() {
             NodeView::Number(n) => Value::Number(n),
@@ -101,9 +100,16 @@ impl<'ctx> Interpreter<'ctx> {
                 crate::ops::eval_unary(op, &operand)
             }
 
-            NodeView::Function { .. } | NodeView::Array { .. } | NodeView::PreludeRef(_) => {
-                Value::Error(CellError::Value)
+            NodeView::Function { name } => {
+                let args = node.args();
+                if let Some(result) = crate::builtins::dispatch(name, &args, self, scope) {
+                    result
+                } else {
+                    Value::Error(CellError::Value)
+                }
             }
+
+            NodeView::Array { .. } | NodeView::PreludeRef(_) => Value::Error(CellError::Value),
         }
     }
 }

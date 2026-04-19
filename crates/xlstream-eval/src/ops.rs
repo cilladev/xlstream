@@ -58,6 +58,18 @@ pub fn eval_unary(op: &str, operand: &Value) -> Value {
     }
 }
 
+/// Excel-semantics equality check for two non-error values.
+///
+/// Uses the same comparison logic as the `=` operator: IEEE 15-digit
+/// rounding for numbers, case-insensitive text, type-tier ordering.
+/// Returns `false` if either value is an error.
+pub(crate) fn values_equal(a: &Value, b: &Value) -> bool {
+    if matches!(a, Value::Error(_)) || matches!(b, Value::Error(_)) {
+        return false;
+    }
+    compare_values(a, b) == std::cmp::Ordering::Equal
+}
+
 fn eval_arithmetic(op: &str, left: &Value, right: &Value) -> Value {
     if let Value::Error(e) = left {
         return Value::Error(*e);
@@ -882,6 +894,35 @@ mod tests {
             eval_binary("+", &Value::Number(1.0), &Value::Text("inf".into())),
             Value::Error(CellError::Value)
         );
+    }
+
+    // -- 0^negative --
+
+    // ===== values_equal =====
+
+    #[test]
+    fn values_equal_same_numbers() {
+        assert!(values_equal(&Value::Number(1.0), &Value::Number(1.0)));
+    }
+
+    #[test]
+    fn values_equal_different_numbers() {
+        assert!(!values_equal(&Value::Number(1.0), &Value::Number(2.0)));
+    }
+
+    #[test]
+    fn values_equal_text_case_insensitive() {
+        assert!(values_equal(&Value::Text("abc".into()), &Value::Text("ABC".into())));
+    }
+
+    #[test]
+    fn values_equal_error_always_false() {
+        assert!(!values_equal(&Value::Error(CellError::Na), &Value::Error(CellError::Na)));
+    }
+
+    #[test]
+    fn values_equal_ieee_rounding() {
+        assert!(values_equal(&Value::Number(0.1 + 0.2), &Value::Number(0.3)));
     }
 
     // -- 0^negative --

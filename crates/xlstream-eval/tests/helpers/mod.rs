@@ -117,3 +117,42 @@ pub fn generate_unsupported_formula_fixture() -> NamedTempFile {
     wb.save(tmp.path()).unwrap();
     tmp
 }
+
+/// Fixture with conditional formulas.
+///
+/// Header `[Value, SafeDiv, Tier]`. 5 data rows.
+/// - Col A: 0, 150000, 75000, 25000, 5000
+/// - Col B: `=IF(A{row}=0, 0, 1/A{row})` — short-circuit test
+/// - Col C: `=IFS(A{row}>100000, "Platinum", ..., TRUE, "Bronze")`
+#[allow(dead_code)]
+pub fn generate_conditional_fixture() -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+
+    ws.write_string(0, 0, "Value").unwrap();
+    ws.write_string(0, 1, "SafeDiv").unwrap();
+    ws.write_string(0, 2, "Tier").unwrap();
+
+    let values = [0.0, 150_000.0, 75_000.0, 25_000.0, 5_000.0];
+    let expected_tiers = ["Bronze", "Platinum", "Gold", "Silver", "Bronze"];
+
+    for (i, (&a_val, &tier)) in values.iter().zip(expected_tiers.iter()).enumerate() {
+        let row = (i + 1) as u32;
+        let excel_row = row + 1;
+
+        ws.write_number(row, 0, a_val).unwrap();
+
+        let cond_formula = format!("=IF(A{excel_row}=0, 0, 1/A{excel_row})");
+        let cond_result = if a_val == 0.0 { "0".to_string() } else { (1.0 / a_val).to_string() };
+        ws.write_formula(row, 1, Formula::new(&cond_formula).set_result(&cond_result)).unwrap();
+
+        let tier_formula = format!(
+            "=IFS(A{excel_row}>100000, \"Platinum\", A{excel_row}>50000, \"Gold\", A{excel_row}>10000, \"Silver\", TRUE, \"Bronze\")",
+        );
+        ws.write_formula(row, 2, Formula::new(&tier_formula).set_result(tier)).unwrap();
+    }
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
