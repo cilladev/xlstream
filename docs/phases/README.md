@@ -61,10 +61,10 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 | 3 | I/O layer | [`phase-03-io.md`](phase-03-io.md) | ✓ complete |
 | 4 | Streaming core | [`phase-04-streaming-core.md`](phase-04-streaming-core.md) | ✓ complete |
 | 5 | Arithmetic, comparison, concat | [`phase-05-arithmetic.md`](phase-05-arithmetic.md) | ✓ complete |
-| 6 | Conditionals, logical | [`phase-06-conditional.md`](phase-06-conditional.md) | complete |
-| 7 | Aggregates | [`phase-07-aggregates.md`](phase-07-aggregates.md) | in progress |
-| 8 | Lookups | [`phase-08-lookups.md`](phase-08-lookups.md) | in progress |
-| 9 | Strings, dates, math | [`phase-09-strings-dates-math.md`](phase-09-strings-dates-math.md) | in progress |
+| 6 | Conditionals, logical | [`phase-06-conditional.md`](phase-06-conditional.md) | ✓ complete |
+| 7 | Aggregates | [`phase-07-aggregates.md`](phase-07-aggregates.md) | ✓ complete |
+| 8 | Lookups | [`phase-08-lookups.md`](phase-08-lookups.md) | ✓ complete |
+| 9 | Strings, dates, math | [`phase-09-strings-dates-math.md`](phase-09-strings-dates-math.md) | ✓ complete |
 | 10 | Parallelism | [`phase-10-parallelism.md`](phase-10-parallelism.md) | not started |
 | 11 | Python binding | [`phase-11-python-binding.md`](phase-11-python-binding.md) | not started |
 | 12 | Benchmarks | [`phase-12-benchmarks.md`](phase-12-benchmarks.md) | not started |
