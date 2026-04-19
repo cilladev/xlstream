@@ -83,13 +83,13 @@ All v0.1. Hash-indexed exact match, binary-search approx, wildcard fallback. Sin
 
 | Function | Signature | Notes | Tier | Status |
 |---|---|---|---|---|
-| `VLOOKUP` | `(lookup, table, col_index, approx?)` | exact (`FALSE`) or approx (`TRUE`/default) | v0.1 | [ ] |
-| `HLOOKUP` | `(lookup, table, row_index, approx?)` | row-oriented VLOOKUP | v0.1 | [ ] |
-| `XLOOKUP` | `(lookup, lookup_arr, return_arr, not_found?, match_mode?, search_mode?)` | modern lookup | v0.1 | [ ] |
-| `MATCH` | `(lookup, lookup_arr, match_type?)` | returns index | v0.1 | [ ] |
-| `XMATCH` | `(lookup, lookup_arr, match_mode?, search_mode?)` | modern MATCH | v0.1 | [ ] |
-| `INDEX` | `(array, row, col?)` | array access; no index build | v0.1 | [ ] |
-| `CHOOSE` | `(index, val1, val2, ...)` | argument pick | v0.1 | [ ] |
+| `VLOOKUP` | `(lookup, table, col_index, approx?)` | exact (`FALSE`) or approx (`TRUE`/default) | v0.1 | [x] |
+| `HLOOKUP` | `(lookup, table, row_index, approx?)` | row-oriented VLOOKUP | v0.1 | [x] |
+| `XLOOKUP` | `(lookup, lookup_arr, return_arr, not_found?, match_mode?, search_mode?)` | modern lookup | v0.1 | [x] |
+| `MATCH` | `(lookup, lookup_arr, match_type?)` | returns index | v0.1 | [x] |
+| `XMATCH` | `(lookup, lookup_arr, match_mode?, search_mode?)` | modern MATCH | v0.1 | [x] |
+| `INDEX` | `(array, row, col?)` | array access; no index build | v0.1 | [x] |
+| `CHOOSE` | `(index, val1, val2, ...)` | argument pick | v0.1 | [x] |
 
 ## Text (Phase 9)
 
