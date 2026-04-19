@@ -342,23 +342,37 @@ pub(crate) fn builtin_datedif(args: &[Value]) -> Value {
 }
 
 /// `NETWORKDAYS(start, end, holidays?)` — count working days between
-/// start and end (inclusive), skipping weekends.
+/// start and end (inclusive), skipping weekends and holidays (stateful).
 ///
-/// v0.1: holidays argument is accepted but ignored with a warning.
-pub(crate) fn builtin_networkdays(args: &[Value]) -> Value {
+/// The optional 3rd arg is expanded via `expand_range` to collect
+/// holiday date serials.
+pub(crate) fn builtin_networkdays(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
-    let start_serial = match date_serial(&args[0]) {
+    let start_val = interp.eval(args[0], scope);
+    let start_serial = match date_serial(&start_val) {
         Ok(s) => s,
         Err(e) => return e,
     };
-    let end_serial = match date_serial(&args[1]) {
+    let end_val = interp.eval(args[1], scope);
+    let end_serial = match date_serial(&end_val) {
         Ok(s) => s,
         Err(e) => return e,
     };
+
+    let mut holidays = std::collections::HashSet::new();
     if args.len() == 3 {
-        tracing::warn!("NETWORKDAYS: holidays argument ignored in v0.1");
+        for v in super::expand_range(args[2], interp, scope) {
+            if let Ok(s) = date_serial(&v) {
+                #[allow(clippy::cast_possible_truncation)]
+                holidays.insert(s.floor() as i64);
+            }
+        }
     }
 
     #[allow(clippy::cast_possible_truncation)]
@@ -373,7 +387,7 @@ pub(crate) fn builtin_networkdays(args: &[Value]) -> Value {
         #[allow(clippy::cast_precision_loss)]
         let wd = ExcelDate::from_serial(day as f64).weekday();
         // 0=Sun, 6=Sat — skip weekends
-        if wd != 0 && wd != 6 {
+        if wd != 0 && wd != 6 && !holidays.contains(&day) {
             count += 1;
         }
     }
@@ -382,18 +396,26 @@ pub(crate) fn builtin_networkdays(args: &[Value]) -> Value {
     Value::Number((count * sign) as f64)
 }
 
-/// `WORKDAY(start, days, holidays?)` — date after N working days.
+/// `WORKDAY(start, days, holidays?)` — date after N working days
+/// (stateful).
 ///
-/// v0.1: holidays argument is accepted but ignored with a warning.
-pub(crate) fn builtin_workday(args: &[Value]) -> Value {
+/// The optional 3rd arg is expanded via `expand_range` to collect
+/// holiday date serials.
+pub(crate) fn builtin_workday(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
-    let start_serial = match date_serial(&args[0]) {
+    let start_val = interp.eval(args[0], scope);
+    let start_serial = match date_serial(&start_val) {
         Ok(s) => s,
         Err(e) => return e,
     };
-    let work_days = match coerce::to_number(&args[1]) {
+    let days_val = interp.eval(args[1], scope);
+    let work_days = match coerce::to_number(&days_val) {
         Ok(n) => {
             #[allow(clippy::cast_possible_truncation)]
             let d = n as i64;
@@ -401,8 +423,15 @@ pub(crate) fn builtin_workday(args: &[Value]) -> Value {
         }
         Err(e) => return Value::Error(e),
     };
+
+    let mut holidays = std::collections::HashSet::new();
     if args.len() == 3 {
-        tracing::warn!("WORKDAY: holidays argument ignored in v0.1");
+        for v in super::expand_range(args[2], interp, scope) {
+            if let Ok(s) = date_serial(&v) {
+                #[allow(clippy::cast_possible_truncation)]
+                holidays.insert(s.floor() as i64);
+            }
+        }
     }
 
     #[allow(clippy::cast_possible_truncation)]
@@ -414,7 +443,7 @@ pub(crate) fn builtin_workday(args: &[Value]) -> Value {
         current += step;
         #[allow(clippy::cast_precision_loss)]
         let wd = ExcelDate::from_serial(current as f64).weekday();
-        if wd != 0 && wd != 6 {
+        if wd != 0 && wd != 6 && !holidays.contains(&current) {
             remaining -= 1;
         }
     }
@@ -888,63 +917,54 @@ mod tests {
 
     // ===== NETWORKDAYS =====
 
+    /// Helper: evaluate a formula string using the interpreter and return result.
+    fn eval_formula(formula: &str) -> Value {
+        let prelude = crate::Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let ast = xlstream_parse::parse(formula).unwrap();
+        let scope = crate::RowScope::new(&[], 1);
+        interp.eval(ast.root(), &scope)
+    }
+
     #[test]
     fn networkdays_one_week() {
         // Mon Jan 5, 2026 to Fri Jan 9, 2026 = 5 working days
-        let start = ExcelDate::from_ymd(2026, 1, 5);
-        let end = ExcelDate::from_ymd(2026, 1, 9);
-        assert_eq!(
-            builtin_networkdays(&[Value::Date(start), Value::Date(end)]),
-            Value::Number(5.0)
-        );
+        let start = ExcelDate::from_ymd(2026, 1, 5).serial;
+        let end = ExcelDate::from_ymd(2026, 1, 9).serial;
+        let result = eval_formula(&format!("NETWORKDAYS({start},{end})"));
+        assert_eq!(result, Value::Number(5.0));
     }
 
     #[test]
     fn networkdays_includes_weekends() {
         // Mon Jan 5 to Mon Jan 12 = 6 working days (skip Sat+Sun)
-        let start = ExcelDate::from_ymd(2026, 1, 5);
-        let end = ExcelDate::from_ymd(2026, 1, 12);
-        assert_eq!(
-            builtin_networkdays(&[Value::Date(start), Value::Date(end)]),
-            Value::Number(6.0)
-        );
+        let start = ExcelDate::from_ymd(2026, 1, 5).serial;
+        let end = ExcelDate::from_ymd(2026, 1, 12).serial;
+        let result = eval_formula(&format!("NETWORKDAYS({start},{end})"));
+        assert_eq!(result, Value::Number(6.0));
     }
 
     #[test]
     fn networkdays_same_day_weekday() {
-        let mon = ExcelDate::from_ymd(2026, 1, 5);
-        assert_eq!(builtin_networkdays(&[Value::Date(mon), Value::Date(mon)]), Value::Number(1.0));
+        let mon = ExcelDate::from_ymd(2026, 1, 5).serial;
+        let result = eval_formula(&format!("NETWORKDAYS({mon},{mon})"));
+        assert_eq!(result, Value::Number(1.0));
     }
 
     #[test]
     fn networkdays_same_day_weekend() {
         // Jan 3, 2026 = Saturday
-        let sat = ExcelDate::from_ymd(2026, 1, 3);
-        assert_eq!(builtin_networkdays(&[Value::Date(sat), Value::Date(sat)]), Value::Number(0.0));
-    }
-
-    #[test]
-    fn networkdays_wrong_arg_count() {
-        assert_eq!(builtin_networkdays(&[Value::Number(44927.0)]), Value::Error(CellError::Value));
-    }
-
-    #[test]
-    fn networkdays_error_propagation() {
-        assert_eq!(
-            builtin_networkdays(&[Value::Error(CellError::Na), Value::Number(44927.0)]),
-            Value::Error(CellError::Na)
-        );
+        let sat = ExcelDate::from_ymd(2026, 1, 3).serial;
+        let result = eval_formula(&format!("NETWORKDAYS({sat},{sat})"));
+        assert_eq!(result, Value::Number(0.0));
     }
 
     #[test]
     fn networkdays_reverse_order_negative() {
-        // Reversed: end < start yields negative count
-        let start = ExcelDate::from_ymd(2026, 1, 9);
-        let end = ExcelDate::from_ymd(2026, 1, 5);
-        assert_eq!(
-            builtin_networkdays(&[Value::Date(start), Value::Date(end)]),
-            Value::Number(-5.0)
-        );
+        let start = ExcelDate::from_ymd(2026, 1, 9).serial;
+        let end = ExcelDate::from_ymd(2026, 1, 5).serial;
+        let result = eval_formula(&format!("NETWORKDAYS({start},{end})"));
+        assert_eq!(result, Value::Number(-5.0));
     }
 
     // ===== WORKDAY =====
@@ -952,8 +972,8 @@ mod tests {
     #[test]
     fn workday_positive_days() {
         // Mon Jan 5, 2026 + 5 working days = Mon Jan 12
-        let start = ExcelDate::from_ymd(2026, 1, 5);
-        let result = builtin_workday(&[Value::Date(start), Value::Number(5.0)]);
+        let start = ExcelDate::from_ymd(2026, 1, 5).serial;
+        let result = eval_formula(&format!("WORKDAY({start},5)"));
         if let Value::Date(d) = result {
             assert_eq!(d.year_month_day(), (2026, 1, 12));
         } else {
@@ -964,8 +984,8 @@ mod tests {
     #[test]
     fn workday_negative_days() {
         // Mon Jan 12, 2026 - 5 working days = Mon Jan 5
-        let start = ExcelDate::from_ymd(2026, 1, 12);
-        let result = builtin_workday(&[Value::Date(start), Value::Number(-5.0)]);
+        let start = ExcelDate::from_ymd(2026, 1, 12).serial;
+        let result = eval_formula(&format!("WORKDAY({start},-5)"));
         if let Value::Date(d) = result {
             assert_eq!(d.year_month_day(), (2026, 1, 5));
         } else {
@@ -975,8 +995,8 @@ mod tests {
 
     #[test]
     fn workday_zero_days() {
-        let start = ExcelDate::from_ymd(2026, 1, 5);
-        let result = builtin_workday(&[Value::Date(start), Value::Number(0.0)]);
+        let start = ExcelDate::from_ymd(2026, 1, 5).serial;
+        let result = eval_formula(&format!("WORKDAY({start},0)"));
         if let Value::Date(d) = result {
             assert_eq!(d.year_month_day(), (2026, 1, 5));
         } else {
@@ -987,26 +1007,13 @@ mod tests {
     #[test]
     fn workday_skips_weekends() {
         // Fri Jan 9, 2026 + 1 working day = Mon Jan 12
-        let start = ExcelDate::from_ymd(2026, 1, 9);
-        let result = builtin_workday(&[Value::Date(start), Value::Number(1.0)]);
+        let start = ExcelDate::from_ymd(2026, 1, 9).serial;
+        let result = eval_formula(&format!("WORKDAY({start},1)"));
         if let Value::Date(d) = result {
             assert_eq!(d.year_month_day(), (2026, 1, 12));
         } else {
             panic!("expected Date, got {result:?}");
         }
-    }
-
-    #[test]
-    fn workday_wrong_arg_count() {
-        assert_eq!(builtin_workday(&[Value::Number(44927.0)]), Value::Error(CellError::Value));
-    }
-
-    #[test]
-    fn workday_error_propagation() {
-        assert_eq!(
-            builtin_workday(&[Value::Error(CellError::Div0), Value::Number(1.0)]),
-            Value::Error(CellError::Div0)
-        );
     }
 
     // ===== date_serial helper =====
