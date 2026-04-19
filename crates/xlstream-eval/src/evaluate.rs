@@ -122,9 +122,9 @@ pub fn evaluate(
             .collect()
     };
 
-    let agg_prelude =
+    let (agg_prelude, _prelude_row_count) =
         if all_agg_keys.is_empty() && all_multi_keys.is_empty() && all_range_keys.is_empty() {
-            Prelude::empty()
+            (Prelude::empty(), 0)
         } else if let Some(ref main) = main_sheet {
             crate::prelude_plan::execute_prelude(
                 &mut reader,
@@ -134,7 +134,7 @@ pub fn evaluate(
                 &all_range_keys,
             )?
         } else {
-            Prelude::empty()
+            (Prelude::empty(), 0)
         };
     // Cross-sheet bounded ranges in range-expanding functions (e.g.
     // NETWORKDAYS holidays) need the referenced sheet loaded as a lookup

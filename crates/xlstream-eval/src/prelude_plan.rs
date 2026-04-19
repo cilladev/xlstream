@@ -484,6 +484,9 @@ fn collect_range_keys_recursive(
 /// for SUMIFS/COUNTIFS/AVERAGEIFS, and collects bounded range values
 /// for range-expanding functions.
 ///
+/// Returns `(prelude, data_row_count)` where `data_row_count` is the
+/// number of non-header rows streamed during the prelude pass.
+///
 /// # Errors
 ///
 /// Returns `Err(XlStreamError::Xlsx)` if the sheet cannot be read.
@@ -498,7 +501,7 @@ fn collect_range_keys_recursive(
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 }];
-/// let prelude = execute_prelude(&mut reader, "Sheet1", &keys, &[], &[]).unwrap();
+/// let (prelude, _count) = execute_prelude(&mut reader, "Sheet1", &keys, &[], &[]).unwrap();
 /// ```
 #[allow(clippy::too_many_lines)]
 pub fn execute_prelude(
@@ -507,9 +510,9 @@ pub fn execute_prelude(
     simple_keys: &[AggregateKey],
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
-) -> Result<Prelude, XlStreamError> {
+) -> Result<(Prelude, u32), XlStreamError> {
     if simple_keys.is_empty() && multi_keys.is_empty() && range_keys.is_empty() {
-        return Ok(Prelude::empty());
+        return Ok((Prelude::empty(), 0));
     }
 
     // Group keys by column — multiple agg kinds may target the same column.
@@ -553,6 +556,7 @@ pub fn execute_prelude(
     let mut stream = reader.cells(main_sheet)?;
     let mut header_skipped = false;
     let mut calamine_row_idx: u32 = 0;
+    let mut data_row_count: u32 = 0;
 
     while let Some((_row_idx, row_values)) = stream.next_row()? {
         let excel_row = calamine_row_idx + 1; // 1-based
@@ -562,6 +566,8 @@ pub fn execute_prelude(
             header_skipped = true;
             continue;
         }
+
+        data_row_count = data_row_count.saturating_add(1);
 
         // Feed simple aggregate folds.
         for (&col, fold) in &mut col_folds {
@@ -644,9 +650,9 @@ pub fn execute_prelude(
     };
 
     if range_collectors.is_empty() {
-        Ok(prelude)
+        Ok((prelude, data_row_count))
     } else {
-        Ok(prelude.with_cached_ranges(range_collectors))
+        Ok((prelude.with_cached_ranges(range_collectors), data_row_count))
     }
 }
 
