@@ -23,6 +23,7 @@
 
 mod address;
 mod cell_error;
+pub mod coerce;
 mod date;
 mod error;
 mod value;
