@@ -13,21 +13,24 @@ use xlstream_core::Value;
 ///
 /// ```
 /// use xlstream_eval::lookup::value::OrderedF64;
-/// let a = OrderedF64::new(1.5);
-/// let b = OrderedF64::new(1.5);
+/// let a = OrderedF64::new(1.5).unwrap();
+/// let b = OrderedF64::new(1.5).unwrap();
 /// assert_eq!(a, b);
+/// assert!(OrderedF64::new(f64::NAN).is_none());
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct OrderedF64(f64);
 
 impl OrderedF64 {
-    /// Wrap an f64, normalizing `-0.0` to `+0.0`.
+    /// Wrap an f64, normalizing `-0.0` to `+0.0`. Returns `None` for NaN.
     #[must_use]
-    pub fn new(v: f64) -> Self {
-        if v == 0.0 {
-            Self(0.0)
+    pub fn new(v: f64) -> Option<Self> {
+        if v.is_nan() {
+            None
+        } else if v == 0.0 {
+            Some(Self(0.0))
         } else {
-            Self(v)
+            Some(Self(v))
         }
     }
 }
@@ -121,12 +124,12 @@ impl LookupValue {
     #[must_use]
     pub fn from_value(v: &Value) -> Option<Self> {
         match v {
-            Value::Number(n) => Some(Self::Number(OrderedF64::new(*n))),
+            Value::Number(n) => OrderedF64::new(*n).map(Self::Number),
             #[allow(clippy::cast_precision_loss)]
-            Value::Integer(i) => Some(Self::Number(OrderedF64::new(*i as f64))),
+            Value::Integer(i) => OrderedF64::new(*i as f64).map(Self::Number),
             Value::Text(s) => Some(Self::Text(CaseFoldedText::new(s))),
             Value::Bool(b) => Some(Self::Bool(*b)),
-            Value::Date(d) => Some(Self::Number(OrderedF64::new(d.serial))),
+            Value::Date(d) => OrderedF64::new(d.serial).map(Self::Number),
             Value::Empty | Value::Error(_) => None,
         }
     }
@@ -242,6 +245,11 @@ mod tests {
         let neg = LookupValue::from_value(&Value::Number(-0.0)).unwrap();
         let pos = LookupValue::from_value(&Value::Number(0.0)).unwrap();
         assert_eq!(neg, pos);
+    }
+
+    #[test]
+    fn nan_returns_none() {
+        assert!(LookupValue::from_value(&Value::Number(f64::NAN)).is_none());
     }
 
     #[test]

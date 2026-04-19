@@ -62,8 +62,8 @@ pub(crate) fn builtin_vlookup(
     };
 
     let key_col = range_start_col.saturating_sub(1);
-    #[allow(clippy::cast_possible_truncation)]
-    let value_col = (range_start_col - 1 + col_index - 1) as usize;
+    let value_col =
+        range_start_col.saturating_sub(1).saturating_add(col_index).saturating_sub(1) as usize;
 
     if exact_match {
         match sheet.col_lookup(key_col, &key) {
@@ -278,11 +278,15 @@ pub(crate) fn builtin_xmatch(
 
     if let Some(arg2) = args.get(2) {
         let v = interp.eval(*arg2, scope);
-        if let Ok(n) = xlstream_core::coerce::to_number(&v) {
-            #[allow(clippy::cast_possible_truncation)]
-            if n.round() as i32 != 0 {
-                return Value::Error(CellError::Na);
+        match xlstream_core::coerce::to_number(&v) {
+            Ok(n) =>
+            {
+                #[allow(clippy::cast_possible_truncation)]
+                if n.round() as i32 != 0 {
+                    return Value::Error(CellError::Na);
+                }
             }
+            Err(e) => return Value::Error(e),
         }
     }
 

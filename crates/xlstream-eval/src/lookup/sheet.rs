@@ -155,7 +155,9 @@ impl LookupSheet {
     /// Approximate match: find the largest key <= the given key.
     ///
     /// Returns the 0-based row index, or `None` if the key is below
-    /// all values in the sorted index.
+    /// all values in the sorted index. Type-safe: `LookupValue::Ord`
+    /// uses tier ordering (Number < Text < Bool) so mixed-type columns
+    /// naturally partition by type and same-tier comparisons are correct.
     #[must_use]
     pub fn col_approx_lookup(&self, col: u32, key: &LookupValue) -> Option<usize> {
         let sorted = self.col_sorted.get(&col)?;
