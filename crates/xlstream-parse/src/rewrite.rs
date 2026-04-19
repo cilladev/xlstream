@@ -269,7 +269,12 @@ fn recurse_function_owned(name: &str, args: &[Node], ctx: &ClassificationContext
     }
 }
 
-fn rewrite_lookup(name: &str, args: &[Node], ctx: &ClassificationContext) -> Option<Node> {
+fn rewrite_lookup(_name: &str, _args: &[Node], _ctx: &ClassificationContext) -> Option<Node> {
+    None
+}
+
+#[allow(dead_code)]
+fn rewrite_lookup_old(name: &str, args: &[Node], ctx: &ClassificationContext) -> Option<Node> {
     let upper = name.to_uppercase();
     match upper.as_str() {
         "VLOOKUP" => rewrite_vlookup(args, ctx),
@@ -357,4 +362,138 @@ fn extract_positive_u32(node: &Node) -> Option<u32> {
         }
         _ => None,
     }
+}
+
+/// Walk an AST and extract [`LookupKey`]s from lookup function calls.
+///
+/// Used by the prelude loader to know which sheets to load and which
+/// columns to index. Does not modify the AST.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::{parse, collect_lookup_keys, LookupKind};
+/// let ast = parse("VLOOKUP(A1, 'Regions'!A:C, 2, FALSE)").unwrap();
+/// let keys = collect_lookup_keys(&ast);
+/// assert_eq!(keys.len(), 1);
+/// assert_eq!(keys[0].kind, LookupKind::VLookup);
+/// ```
+#[must_use]
+pub fn collect_lookup_keys(ast: &Ast) -> Vec<LookupKey> {
+    let mut keys = Vec::new();
+    collect_from_node(&ast.root, &mut keys);
+    keys
+}
+
+fn collect_from_node(node: &Node, keys: &mut Vec<LookupKey>) {
+    match node {
+        Node::Function { name, args } => {
+            let upper = name.to_uppercase();
+            match upper.as_str() {
+                "VLOOKUP" => {
+                    if let Some(key) = extract_vlookup_key(args) {
+                        keys.push(key);
+                    }
+                }
+                "HLOOKUP" => {
+                    if let Some(key) = extract_hlookup_key(args) {
+                        keys.push(key);
+                    }
+                }
+                "XLOOKUP" => {
+                    if let Some(key) = extract_xlookup_key(args) {
+                        keys.push(key);
+                    }
+                }
+                "MATCH" | "XMATCH" => {
+                    if args.len() >= 2 {
+                        if let Some((sheet, col, _)) = extract_range_info(&args[1]) {
+                            keys.push(LookupKey {
+                                kind: LookupKind::VLookup,
+                                sheet,
+                                key_index: col,
+                                value_index: col,
+                            });
+                        }
+                    }
+                }
+                "INDEX" => {
+                    if !args.is_empty() {
+                        if let Some((sheet, col, _)) = extract_range_info(&args[0]) {
+                            keys.push(LookupKey {
+                                kind: LookupKind::VLookup,
+                                sheet,
+                                key_index: col,
+                                value_index: col,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
+            for arg in args {
+                collect_from_node(arg, keys);
+            }
+        }
+        Node::BinaryOp { left, right, .. } => {
+            collect_from_node(left, keys);
+            collect_from_node(right, keys);
+        }
+        Node::UnaryOp { expr, .. } => collect_from_node(expr, keys),
+        Node::Array(rows) => {
+            for row in rows {
+                for cell in row {
+                    collect_from_node(cell, keys);
+                }
+            }
+        }
+        Node::Literal(_)
+        | Node::Text(_)
+        | Node::Error(_)
+        | Node::Reference(_)
+        | Node::PreludeRef(_) => {}
+    }
+}
+
+fn extract_vlookup_key(args: &[Node]) -> Option<LookupKey> {
+    if args.len() < 3 {
+        return None;
+    }
+    let (sheet, key_column, _end_col) = extract_range_info(&args[1])?;
+    let col_offset = extract_positive_u32(&args[2])?;
+    let value_column = key_column + col_offset - 1;
+    Some(LookupKey {
+        kind: LookupKind::VLookup,
+        sheet,
+        key_index: key_column,
+        value_index: value_column,
+    })
+}
+
+fn extract_hlookup_key(args: &[Node]) -> Option<LookupKey> {
+    if args.len() < 3 {
+        return None;
+    }
+    let (sheet, start_col, _end_col) = extract_range_info(&args[1])?;
+    let row_offset = extract_positive_u32(&args[2])?;
+    Some(LookupKey {
+        kind: LookupKind::HLookup,
+        sheet,
+        key_index: start_col,
+        value_index: row_offset,
+    })
+}
+
+fn extract_xlookup_key(args: &[Node]) -> Option<LookupKey> {
+    if args.len() < 3 {
+        return None;
+    }
+    let (sheet, key_column, _) = extract_range_info(&args[1])?;
+    let (_, value_column, _) = extract_range_info(&args[2])?;
+    Some(LookupKey {
+        kind: LookupKind::XLookup,
+        sheet,
+        key_index: key_column,
+        value_index: value_column,
+    })
 }
