@@ -157,6 +157,118 @@ pub fn generate_conditional_fixture() -> NamedTempFile {
     tmp
 }
 
+/// Fixture with header + `n_rows` data rows and a formula column.
+///
+/// - Col A: `i` (data, 1-based)
+/// - Col B: `i * 10` (data)
+/// - Col C: formula `=A{row}+B{row}` (row-local arithmetic)
+///
+/// After evaluation: col C = col A + col B.
+#[allow(dead_code)]
+pub fn generate_arithmetic_fixture(n_rows: usize) -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+
+    ws.write_string(0, 0, "A").unwrap();
+    ws.write_string(0, 1, "B").unwrap();
+    ws.write_string(0, 2, "C").unwrap();
+
+    for i in 0..n_rows {
+        let row = (i + 1) as u32;
+        let excel_row = row + 1;
+        let a_val = (i + 1) as f64;
+        let b_val = (i + 1) as f64 * 10.0;
+
+        ws.write_number(row, 0, a_val).unwrap();
+        ws.write_number(row, 1, b_val).unwrap();
+        let formula = format!("=A{excel_row}+B{excel_row}");
+        let result = a_val + b_val;
+        ws.write_formula(row, 2, Formula::new(&formula).set_result(result.to_string())).unwrap();
+    }
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
+
+/// Large fixture with aggregate formula (pct of total).
+///
+/// Header `[Value, Pct]`. `n_rows` data rows.
+/// Col A: sequential values 1, 2, ..., n
+/// Col B: `=A{row}/SUM(A:A)*100`
+#[allow(dead_code)]
+pub fn generate_large_aggregate_fixture(n_rows: usize) -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+
+    ws.write_string(0, 0, "Value").unwrap();
+    ws.write_string(0, 1, "Pct").unwrap();
+
+    let total: f64 = (1..=n_rows).map(|i| i as f64).sum();
+
+    for i in 0..n_rows {
+        let row = (i + 1) as u32;
+        let excel_row = row + 1;
+        let val = (i + 1) as f64;
+        let pct = val / total * 100.0;
+
+        ws.write_number(row, 0, val).unwrap();
+        ws.write_formula(
+            row,
+            1,
+            Formula::new(format!("=A{excel_row}/SUM(A:A)*100")).set_result(pct.to_string()),
+        )
+        .unwrap();
+    }
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
+
+/// Large fixture with two chained formula columns.
+///
+/// Header `[A, B, C, D]`. Col C = `=A{row}*2`, col D = `=C{row}+B{row}`.
+/// D depends on C (topo order matters).
+#[allow(dead_code)]
+pub fn generate_large_chained_fixture(n_rows: usize) -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+
+    ws.write_string(0, 0, "A").unwrap();
+    ws.write_string(0, 1, "B").unwrap();
+    ws.write_string(0, 2, "C").unwrap();
+    ws.write_string(0, 3, "D").unwrap();
+
+    for i in 0..n_rows {
+        let row = (i + 1) as u32;
+        let excel_row = row + 1;
+        let a_val = (i + 1) as f64;
+        let b_val = (i + 1) as f64 * 5.0;
+
+        ws.write_number(row, 0, a_val).unwrap();
+        ws.write_number(row, 1, b_val).unwrap();
+        let c_val = a_val * 2.0;
+        let d_val = c_val + b_val;
+        ws.write_formula(
+            row,
+            2,
+            Formula::new(format!("=A{excel_row}*2")).set_result(c_val.to_string()),
+        )
+        .unwrap();
+        ws.write_formula(
+            row,
+            3,
+            Formula::new(format!("=C{excel_row}+B{excel_row}")).set_result(d_val.to_string()),
+        )
+        .unwrap();
+    }
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
+
 /// Fixture with aggregate formulas (pct of total).
 ///
 /// Header `[Region, Deal Value, Pct of Total]`. 4 data rows.
