@@ -31,62 +31,73 @@ Each worker evaluates its row range independently and pushes `(row_idx, Vec<Valu
 
 Within a row, formula columns may depend on each other (topo order). Sharding by column within a row serialises — negates the win. Sharding by row is embarrassingly parallel after prelude.
 
-## Implementation sketch
+## Implementation (Phase 10)
 
 ```rust
+// evaluate() dispatches based on worker count and row threshold:
+//   workers > 1 && formulas exist && total_data_rows >= 10,000 → parallel
+//   otherwise → single-threaded (stream_single_threaded)
+
 fn stream_parallel(
     input: &Path,
-    output: &Path,
-    prelude: Prelude,
+    output: &mut Writer,
+    prelude: Arc<Prelude>,
+    col_asts: Arc<HashMap<u32, Ast>>,
+    topo_order: Vec<u32>,
+    main_sheet: &str,
+    total_data_rows: u32,
     num_workers: usize,
-) -> Result<(), XlStreamError> {
-    let total_rows = calamine_used_rows(input)?;
-    let chunk_size = total_rows.div_ceil(num_workers);
+) -> Result<(u64, u64), XlStreamError> {
+    let chunk_size = (total_data_rows as usize).div_ceil(num_workers);
 
-    let (tx, rx) = bounded_channel::<(u32, Vec<Value>)>(num_workers * 1024);
+    // Header: read from fresh reader, write before spawning workers.
+    // Non-main sheets: written by caller before this function.
 
-    let workers: Vec<_> = (0..num_workers).map(|i| {
-        let tx = tx.clone();
-        let prelude = prelude.clone();  // Arc<Prelude> — cheap
-        let input = input.to_path_buf();
-        let start = 2 + i * chunk_size;
-        let end = (start + chunk_size).min(total_rows + 1);
+    let (tx, rx) = crossbeam_channel::bounded(num_workers * 1024);
 
-        thread::spawn(move || {
-            let mut reader = Reader::open(&input)?;
-            let mut cells = reader.cells("MainSheet")?;
-            cells.seek_to_row(start as u32)?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_workers)
+        .build()?;
 
-            let interp = Interpreter::new(&prelude);
-            for row_idx in start..end {
-                let raw_row = cells.next_row()?.expect("row exists");
-                let mut row = raw_row;
-                for &fcol in &topo_order {
-                    row[fcol] = interp.eval(&asts[fcol], &RowScope { ... })?;
-                }
-                tx.send((row_idx, row)).unwrap();
+    for worker_id in 0..num_workers {
+        let start_row = 1 + (worker_id * chunk_size) as u32;
+        let end_row = (1 + ((worker_id + 1) * chunk_size) as u32)
+            .min(1 + total_data_rows);
+        // Each worker: open Reader, seek_to_row, eval, send row-by-row.
+        pool.spawn(move || {
+            if let Err(e) = run_worker(..., start_row, end_row, &tx) {
+                let _ = tx.send(Err(e));
             }
-            Ok::<_, XlStreamError>(())
-        })
-    }).collect();
-
-    drop(tx); // close channel when all workers finish
-
-    let mut writer = Writer::create(output)?;
-    writer.add_sheet("MainSheet")?;
-    // Drain in row order via a reorder buffer.
-    let mut expected = 2u32;
-    let mut buffer = BTreeMap::new();
-    while let Ok((row_idx, row)) = rx.recv() {
-        buffer.insert(row_idx, row);
-        while let Some(row) = buffer.remove(&expected) {
-            writer.write_row(expected, &row)?;
-            expected += 1;
-        }
+        });
     }
-    writer.finish()?;
+    drop(tx); // channel closes when all workers finish
 
-    for w in workers { w.join().unwrap()?; }
+    // Reorder buffer: two-phase drain.
+    // Phase 1 (channel open): drain contiguous rows from expected_row.
+    // Phase 2 (channel closed): drain remaining rows via pop_first.
+    // This handles sparse sheets (non-contiguous row indices) correctly.
+    let mut buffer: BTreeMap<u32, (Vec<Value>, u64)> = BTreeMap::new();
+    // ... drain loop ...
+}
+
+// Workers stream row-by-row into the channel. The bounded capacity
+// provides back-pressure — if the writer falls behind, workers block
+// on tx.send() rather than buffering unboundedly.
+fn run_worker(
+    input: &Path, main_sheet: &str, prelude: &Prelude,
+    col_asts: &HashMap<u32, Ast>, topo_order: &[u32],
+    start_row: u32, end_row: u32,
+    tx: &Sender<Result<(u32, Vec<Value>, u64), XlStreamError>>,
+) -> Result<(), XlStreamError> {
+    let mut reader = Reader::open(input)?;
+    let mut stream = reader.cells(main_sheet)?;
+    stream.seek_to_row(start_row)?;
+    let interp = Interpreter::new(prelude);
+    while let Some((row_idx, mut row_values)) = stream.next_row()? {
+        if row_idx >= end_row { break; }
+        // evaluate formula cols in topo order, then send
+        tx.send(Ok((row_idx, row_values, formula_count)))?;
+    }
     Ok(())
 }
 ```
