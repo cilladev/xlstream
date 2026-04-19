@@ -97,6 +97,8 @@ pub struct Prelude {
     /// `MultiConditionalAggKey`, with inner maps from composite key
     /// (lowercased criteria values joined by `\0`) to result.
     multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, Value>>,
+    /// Pre-loaded lookup sheet data, keyed by lowercased sheet name.
+    lookup_sheets: HashMap<String, crate::lookup::LookupSheet>,
 }
 
 impl Prelude {
@@ -115,6 +117,7 @@ impl Prelude {
             aggregates: HashMap::new(),
             conditional_aggregates: HashMap::new(),
             multi_conditional_aggregates: HashMap::new(),
+            lookup_sheets: HashMap::new(),
         }
     }
 
@@ -141,6 +144,7 @@ impl Prelude {
             aggregates,
             conditional_aggregates: HashMap::new(),
             multi_conditional_aggregates: HashMap::new(),
+            lookup_sheets: HashMap::new(),
         }
     }
 
@@ -164,7 +168,12 @@ impl Prelude {
         aggregates: HashMap<AggregateKey, Value>,
         conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
     ) -> Self {
-        Self { aggregates, conditional_aggregates, multi_conditional_aggregates: HashMap::new() }
+        Self {
+            aggregates,
+            conditional_aggregates,
+            multi_conditional_aggregates: HashMap::new(),
+            lookup_sheets: HashMap::new(),
+        }
     }
 
     /// Build a prelude with simple, single-criteria conditional, and
@@ -184,7 +193,50 @@ impl Prelude {
         conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
         multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, Value>>,
     ) -> Self {
-        Self { aggregates, conditional_aggregates, multi_conditional_aggregates }
+        Self {
+            aggregates,
+            conditional_aggregates,
+            multi_conditional_aggregates,
+            lookup_sheets: HashMap::new(),
+        }
+    }
+
+    /// Attach pre-loaded lookup sheets. Keys must be lowercased.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use xlstream_core::Value;
+    /// use xlstream_eval::Prelude;
+    /// use xlstream_eval::lookup::LookupSheet;
+    ///
+    /// let mut sheets = HashMap::new();
+    /// sheets.insert("data".to_string(), LookupSheet::new(vec![vec![Value::Number(1.0)]]));
+    /// let p = Prelude::empty().with_lookup_sheets(sheets);
+    /// assert!(p.lookup_sheet("data").is_some());
+    /// ```
+    #[must_use]
+    pub fn with_lookup_sheets(
+        mut self,
+        lookup_sheets: HashMap<String, crate::lookup::LookupSheet>,
+    ) -> Self {
+        self.lookup_sheets = lookup_sheets;
+        self
+    }
+
+    /// Look up a pre-loaded sheet by name (case-insensitive).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::Prelude;
+    /// let p = Prelude::empty();
+    /// assert!(p.lookup_sheet("Sheet1").is_none());
+    /// ```
+    #[must_use]
+    pub fn lookup_sheet(&self, name: &str) -> Option<&crate::lookup::LookupSheet> {
+        self.lookup_sheets.get(&name.to_ascii_lowercase())
     }
 
     /// Look up a simple aggregate by key. Returns `None` if not found.

@@ -26,6 +26,7 @@ pub mod builtins;
 pub mod criteria;
 mod evaluate;
 mod interp;
+pub mod lookup;
 pub mod ops;
 pub mod prelude;
 pub mod prelude_plan;
