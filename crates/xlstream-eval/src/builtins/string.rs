@@ -224,6 +224,56 @@ pub(crate) fn builtin_clean(args: &[Value]) -> Value {
     Value::Text(result.into())
 }
 
+// ---------------------------------------------------------------------------
+// CONCAT / CONCATENATE / TEXTJOIN
+// ---------------------------------------------------------------------------
+
+/// `CONCAT(a, b, ...)` — join arguments as text. Zero args returns `#VALUE!`.
+pub(crate) fn builtin_concat(args: &[Value]) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+    let mut result = String::new();
+    for v in args {
+        if let Value::Error(e) = v {
+            return Value::Error(*e);
+        }
+        result.push_str(&coerce::to_text(v));
+    }
+    Value::Text(result.into())
+}
+
+/// `TEXTJOIN(delim, ignore_empty, val1, val2, ...)` — join with delimiter.
+///
+/// When `ignore_empty` is true, skips both `Value::Empty` and empty
+/// strings `""`.
+pub(crate) fn builtin_textjoin(args: &[Value]) -> Value {
+    if args.len() < 3 {
+        return Value::Error(CellError::Value);
+    }
+    let delim = match text_arg(args, 0) {
+        Ok(s) => s.into_owned(),
+        Err(e) => return e,
+    };
+    let ignore_empty = match coerce::to_bool(&args[1]) {
+        Ok(b) => b,
+        Err(e) => return Value::Error(e),
+    };
+
+    let mut parts: Vec<String> = Vec::new();
+    for v in &args[2..] {
+        if let Value::Error(e) = v {
+            return Value::Error(*e);
+        }
+        let is_empty_val = matches!(v, Value::Empty) || matches!(v, Value::Text(s) if s.is_empty());
+        if ignore_empty && is_empty_val {
+            continue;
+        }
+        parts.push(coerce::to_text(v).into_owned());
+    }
+    Value::Text(parts.join(&delim).into())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -633,5 +683,148 @@ mod tests {
     #[test]
     fn clean_wrong_arg_count() {
         assert_eq!(builtin_clean(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== CONCAT =====
+
+    #[test]
+    fn concat_two_strings() {
+        assert_eq!(
+            builtin_concat(&[Value::Text("Hello".into()), Value::Text(" World".into())]),
+            Value::Text("Hello World".into())
+        );
+    }
+
+    #[test]
+    fn concat_mixed_types() {
+        assert_eq!(
+            builtin_concat(&[Value::Text("n=".into()), Value::Number(42.0)]),
+            Value::Text("n=42".into())
+        );
+    }
+
+    #[test]
+    fn concat_single_arg() {
+        assert_eq!(builtin_concat(&[Value::Text("solo".into())]), Value::Text("solo".into()));
+    }
+
+    #[test]
+    fn concat_zero_args_returns_value_error() {
+        assert_eq!(builtin_concat(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn concat_error_propagation() {
+        assert_eq!(
+            builtin_concat(&[Value::Text("ok".into()), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn concat_empty_value_becomes_empty_string() {
+        assert_eq!(
+            builtin_concat(&[Value::Text("a".into()), Value::Empty, Value::Text("b".into())]),
+            Value::Text("ab".into())
+        );
+    }
+
+    #[test]
+    fn concat_bool_coerced() {
+        assert_eq!(
+            builtin_concat(&[Value::Bool(true), Value::Bool(false)]),
+            Value::Text("TRUEFALSE".into())
+        );
+    }
+
+    // ===== TEXTJOIN =====
+
+    #[test]
+    fn textjoin_basic() {
+        assert_eq!(
+            builtin_textjoin(&[
+                Value::Text(", ".into()),
+                Value::Bool(false),
+                Value::Text("a".into()),
+                Value::Text("b".into()),
+                Value::Text("c".into()),
+            ]),
+            Value::Text("a, b, c".into())
+        );
+    }
+
+    #[test]
+    fn textjoin_ignore_empty_true() {
+        assert_eq!(
+            builtin_textjoin(&[
+                Value::Text(",".into()),
+                Value::Bool(true),
+                Value::Text("a".into()),
+                Value::Empty,
+                Value::Text("".into()),
+                Value::Text("b".into()),
+            ]),
+            Value::Text("a,b".into())
+        );
+    }
+
+    #[test]
+    fn textjoin_ignore_empty_false_preserves_blanks() {
+        assert_eq!(
+            builtin_textjoin(&[
+                Value::Text(",".into()),
+                Value::Bool(false),
+                Value::Text("a".into()),
+                Value::Empty,
+                Value::Text("b".into()),
+            ]),
+            Value::Text("a,,b".into())
+        );
+    }
+
+    #[test]
+    fn textjoin_error_propagation_in_delim() {
+        assert_eq!(
+            builtin_textjoin(&[
+                Value::Error(CellError::Div0),
+                Value::Bool(false),
+                Value::Text("a".into()),
+            ]),
+            Value::Error(CellError::Div0)
+        );
+    }
+
+    #[test]
+    fn textjoin_error_propagation_in_values() {
+        assert_eq!(
+            builtin_textjoin(&[
+                Value::Text(",".into()),
+                Value::Bool(false),
+                Value::Text("a".into()),
+                Value::Error(CellError::Na),
+            ]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn textjoin_too_few_args() {
+        assert_eq!(
+            builtin_textjoin(&[Value::Text(",".into()), Value::Bool(false)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn textjoin_empty_delimiter() {
+        assert_eq!(
+            builtin_textjoin(&[
+                Value::Text("".into()),
+                Value::Bool(false),
+                Value::Text("a".into()),
+                Value::Text("b".into()),
+            ]),
+            Value::Text("ab".into())
+        );
     }
 }
