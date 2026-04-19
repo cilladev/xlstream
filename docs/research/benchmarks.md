@@ -49,6 +49,38 @@ xlstream vs. formualizer on identical hardware and identical workloads. The **Re
 
 Reference-row measurement details: 23.4 MB raw data xlsx, 56.1 MB with formulas, 71.7 MB evaluated CSV. Load phase 2m 30s; evaluate + save phase 5h 38m. Ratio we're chasing: **≈ 13× less memory, ≈ 113× faster on wall-clock**.
 
+## Measured results (Phase 12, 2026-04-20)
+
+### Tier results (50-column workbook: 20 data + 30 formula)
+
+| Tier | Rows | Workers | Wall-clock | Formulas evaluated |
+|---|---|---|---|---|
+| Small | 10,000 | 1 | 1.6s | 299,970 |
+| Medium | 100,000 | 1 | 15.9s | 2,999,970 |
+| Medium | 100,000 | 2 | 13.7s | 2,999,970 |
+| Medium | 100,000 | 4 | 13.3s | 2,999,970 |
+| Medium | 100,000 | 8 | 13.8s | 2,999,970 |
+
+### Parallel scaling curve (medium tier, 100k rows)
+
+| Workers | Wall-clock | Speedup vs 1 |
+|---|---|---|
+| 1 | 15.9s | 1.0x |
+| 2 | 13.7s | 1.16x |
+| 4 | 13.3s | 1.20x |
+| 8 | 13.8s | 1.15x |
+
+Parallel speedup is modest on this workload. The bottleneck is I/O: each worker re-opens the xlsx and seeks to its row range (calamine shared-strings parse + XML cursor seek). The evaluation itself is fast — the I/O overhead dominates for workbooks with many formula categories (30 cols including VLOOKUP/INDEX-MATCH which add lookup sheet loading per worker). Row-local-only workloads (Phase 10's 700k test) show better scaling.
+
+### Micro-benchmark highlights
+
+| Benchmark | Result |
+|---|---|
+| Parse 30 formulas | ~35 us per batch |
+| Arithmetic ops (add/mul/div) | 16-45 ns per eval (~22-62M ops/sec) |
+| String concat | ~280 ns per eval (heap allocation) |
+| VLOOKUP exact (1k table) | hash lookup, sub-microsecond |
+
 ## Methodology
 
 ### Hardware
