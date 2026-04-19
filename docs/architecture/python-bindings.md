@@ -74,60 +74,64 @@ strip = true
 ## `src/lib.rs`
 
 ```rust
+use std::path::PathBuf;
+
 use pyo3::prelude::*;
-use pyo3::exceptions::{PyIOError, PyRuntimeError};
-use pyo3::create_exception;
+use pyo3::exceptions::{PyOSError, PyRuntimeError};
+use pyo3::types::PyDict;
 
-create_exception!(xlstream, XlStreamError, pyo3::exceptions::PyException);
-create_exception!(xlstream, UnsupportedFormula, XlStreamError);
-create_exception!(xlstream, FormulaParseError, XlStreamError);
-create_exception!(xlstream, ClassificationError, XlStreamError);
-create_exception!(xlstream, CircularReferenceError, XlStreamError);
+use xlstream_core::XlStreamError as RustXlStreamError;
 
-impl From<xlstream_core::XlStreamError> for PyErr {
-    fn from(e: xlstream_core::XlStreamError) -> PyErr {
-        use xlstream_core::XlStreamError::*;
-        let msg = e.to_string();
-        match e {
-            Io { .. } | Xlsx(_) | XlsxWrite(_) => PyIOError::new_err(msg),
-            Unsupported { .. }       => UnsupportedFormula::new_err(msg),
-            FormulaParse { .. }      => FormulaParseError::new_err(msg),
-            Classification { .. }    => ClassificationError::new_err(msg),
-            CircularReference { .. } => CircularReferenceError::new_err(msg),
-            Internal(_)              => PyRuntimeError::new_err(msg),
-        }
+pyo3::create_exception!(xlstream, XlStreamError, pyo3::exceptions::PyException,
+    "Base class for all xlstream errors.");
+pyo3::create_exception!(xlstream, UnsupportedFormula, XlStreamError,
+    "A formula cannot be evaluated in streaming mode.");
+pyo3::create_exception!(xlstream, FormulaParseError, XlStreamError,
+    "A formula could not be parsed.");
+pyo3::create_exception!(xlstream, ClassificationError, XlStreamError,
+    "A formula could not be classified.");
+pyo3::create_exception!(xlstream, CircularReferenceError, XlStreamError,
+    "Formula columns form a dependency cycle.");
+
+fn to_pyerr(e: RustXlStreamError) -> PyErr {
+    let msg = e.to_string();
+    match e {
+        RustXlStreamError::Io { .. }
+        | RustXlStreamError::Xlsx(_)
+        | RustXlStreamError::XlsxWrite(_) => PyOSError::new_err(msg),
+        RustXlStreamError::Unsupported { .. }    => UnsupportedFormula::new_err(msg),
+        RustXlStreamError::FormulaParse { .. }   => FormulaParseError::new_err(msg),
+        RustXlStreamError::Classification { .. } => ClassificationError::new_err(msg),
+        RustXlStreamError::CircularReference { .. } => CircularReferenceError::new_err(msg),
+        RustXlStreamError::Internal(_)           => PyRuntimeError::new_err(msg),
     }
 }
 
-/// Evaluate formulas in an xlsx file and write the result.
+/// Evaluate formulas in an xlsx workbook and write the results.
 ///
-/// Arguments:
-///   input_path: path to the source xlsx.
-///   output_path: destination xlsx. If None, overwrite input_path.
-///   workers: number of worker threads. Default: number of CPUs.
-///
-/// Returns: a dict with {rows_processed, duration_ms, peak_rss_bytes}.
+/// The GIL is released for the entire Rust evaluation so other Python
+/// threads can run concurrently.
 #[pyfunction]
-#[pyo3(signature = (input_path, output_path=None, *, workers=None))]
+#[pyo3(signature = (input_path, output_path, *, workers=None))]
 fn evaluate(
     py: Python<'_>,
     input_path: &str,
-    output_path: Option<&str>,
+    output_path: &str,
     workers: Option<usize>,
 ) -> PyResult<Py<PyDict>> {
-    let input = std::path::PathBuf::from(input_path);
-    let output = output_path.map(std::path::PathBuf::from).unwrap_or_else(|| input.clone());
+    let input = PathBuf::from(input_path);
+    let output = PathBuf::from(output_path);
 
     // Release the GIL for the long-running Rust work.
-    let summary = py.detach(move || {
-        xlstream_eval::evaluate(&input, &output, workers)
-    })?;
+    let summary =
+        py.detach(move || xlstream_eval::evaluate(&input, &output, workers))
+            .map_err(to_pyerr)?;
 
     // Acquire the GIL to build the return dict.
-    let dict = pyo3::types::PyDict::new(py);
+    let dict = PyDict::new(py);
     dict.set_item("rows_processed", summary.rows_processed)?;
-    dict.set_item("duration_ms", summary.duration_ms)?;
-    dict.set_item("peak_rss_bytes", summary.peak_rss_bytes)?;
+    dict.set_item("formulas_evaluated", summary.formulas_evaluated)?;
+    dict.set_item("duration_ms", summary.duration.as_millis() as u64)?;
     Ok(dict.unbind())
 }
 
@@ -177,17 +181,17 @@ __version__ = "0.1.0"
 ```python
 from typing import Optional, TypedDict
 
-class EvaluateSummary(TypedDict):
+class EvaluateResult(TypedDict):
     rows_processed: int
+    formulas_evaluated: int
     duration_ms: int
-    peak_rss_bytes: int
 
 def evaluate(
     input_path: str,
-    output_path: Optional[str] = None,
+    output_path: str,
     *,
     workers: Optional[int] = None,
-) -> EvaluateSummary: ...
+) -> EvaluateResult: ...
 
 class XlStreamError(Exception): ...
 class UnsupportedFormula(XlStreamError): ...
@@ -218,7 +222,7 @@ maturin build --release
 
 ## GIL
 
-Every call that does > 10 ms of Rust work wraps it in `py.detach(|| ...)`. For `evaluate`, that's the entire inner function — the GIL is released for the whole Rust eval.
+Every call that does > 10 ms of Rust work wraps it in `py.detach(|| ...)`. For `evaluate`, that's the entire inner function — the GIL is released for the whole Rust eval. The result is converted back via `.map_err(to_pyerr)?` since error conversion uses a free function rather than a `From` impl (avoids name collision between the Python `XlStreamError` exception class from `create_exception!` and the Rust `xlstream_core::XlStreamError`, which is aliased as `RustXlStreamError`).
 
 Acquiring the GIL for the return dict is cheap (< 1 ms).
 
