@@ -296,18 +296,19 @@ fn numeric_for_compare(v: &Value) -> Option<f64> {
 
 /// Case-insensitive equality for criteria matching. Numbers compare by value,
 /// text compares case-insensitively, booleans compare directly.
+#[allow(clippy::float_cmp)]
 fn criteria_equal(v: &Value, target: &Value) -> bool {
     match (v, target) {
-        (Value::Number(a), Value::Number(b)) => (a - b).abs() < 1e-10,
+        (Value::Number(a), Value::Number(b)) => a == b,
         #[allow(clippy::cast_precision_loss)]
-        (Value::Number(a), Value::Integer(b)) => (a - *b as f64).abs() < 1e-10,
+        (Value::Number(a), Value::Integer(b)) => *a == *b as f64,
         #[allow(clippy::cast_precision_loss)]
-        (Value::Integer(a), Value::Number(b)) => (*a as f64 - b).abs() < 1e-10,
+        (Value::Integer(a), Value::Number(b)) => *a as f64 == *b,
         (Value::Integer(a), Value::Integer(b)) => a == b,
         (Value::Text(a), Value::Text(b)) => a.eq_ignore_ascii_case(b),
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Empty, Value::Empty) => true,
-        (Value::Empty, Value::Number(n)) | (Value::Number(n), Value::Empty) => n.abs() < 1e-10,
+        (Value::Empty, Value::Number(n)) | (Value::Number(n), Value::Empty) => *n == 0.0,
         (Value::Empty, Value::Text(s)) | (Value::Text(s), Value::Empty) => s.is_empty(),
         _ => false,
     }

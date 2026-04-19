@@ -51,10 +51,10 @@ In `xlstream-eval/src/builtins/aggregate.rs`:
 - [x] `SUMIF(range, criteria, sum_range?)` — conditional sum.
 - [x] `COUNTIF(range, criteria)`.
 - [x] `AVERAGEIF(range, criteria, avg_range?)`.
-- [ ] `SUMIFS(sum_range, (crit_range, crit)+)` — deferred to follow-up.
-- [ ] `COUNTIFS(...)` — deferred to follow-up.
-- [ ] `AVERAGEIFS(...)` — deferred to follow-up.
-- [ ] `MINIFS(...)`, `MAXIFS(...)` — deferred to follow-up.
+- [x] `SUMIFS(sum_range, (crit_range, crit)+)` — multi-criteria sum.
+- [x] `COUNTIFS(...)` — multi-criteria count.
+- [x] `AVERAGEIFS(...)` — multi-criteria average.
+- [ ] `MINIFS(...)`, `MAXIFS(...)` — deferred (v0.2).
 
 ### Prelude storage
 

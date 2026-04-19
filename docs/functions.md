@@ -60,17 +60,17 @@ Pre-computed at prelude when the range is a whole column or bounded range in a n
 |---|---|---|---|---|
 | `SUM` | `(range, ...)` | numeric sum | v0.1 | [x] |
 | `SUMIF` | `(range, criteria, sum_range?)` | conditional sum | v0.1 | [x] |
-| `SUMIFS` | `(sum_range, (crit_range, crit)+)` | multi-criteria sum | v0.1 | [ ] |
+| `SUMIFS` | `(sum_range, (crit_range, crit)+)` | multi-criteria sum | v0.1 | [x] |
 | `SUMPRODUCT` | `(range1, range2, ...)` | sum of element-wise products | v0.2 | [ ] |
 | `PRODUCT` | `(range, ...)` | numeric product | v0.1 | [x] |
 | `COUNT` | `(range, ...)` | count of numerics | v0.1 | [x] |
 | `COUNTA` | `(range, ...)` | count of non-empty | v0.1 | [x] |
 | `COUNTBLANK` | `(range)` | count of empty | v0.1 | [x] |
 | `COUNTIF` | `(range, criteria)` | conditional count | v0.1 | [x] |
-| `COUNTIFS` | `((crit_range, crit)+)` | multi-criteria count | v0.1 | [ ] |
+| `COUNTIFS` | `((crit_range, crit)+)` | multi-criteria count | v0.1 | [x] |
 | `AVERAGE` | `(range, ...)` | mean; empty -> `#DIV/0!` | v0.1 | [x] |
 | `AVERAGEIF` | `(range, criteria, avg_range?)` | conditional mean | v0.1 | [x] |
-| `AVERAGEIFS` | `(avg_range, (crit_range, crit)+)` | multi-criteria mean | v0.1 | [ ] |
+| `AVERAGEIFS` | `(avg_range, (crit_range, crit)+)` | multi-criteria mean | v0.1 | [x] |
 | `MIN` | `(range, ...)` | minimum | v0.1 | [x] |
 | `MAX` | `(range, ...)` | maximum | v0.1 | [x] |
 | `MINIFS` | `(min_range, (crit_range, crit)+)` | conditional min | v0.2 | [ ] |
