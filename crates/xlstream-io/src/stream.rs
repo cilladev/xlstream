@@ -98,6 +98,33 @@ impl<'a> CellStream<'a> {
         };
         inner.next_row()
     }
+
+    /// Advance the stream past all rows before `target_row`, discarding
+    /// their data. The next call to [`next_row`] returns `target_row` (or
+    /// the first row >= `target_row` if `target_row` has no data).
+    ///
+    /// Used by parallel workers to seek each reader to its row-range start.
+    /// Cost is O(skipped cells) — acceptable for v0.1; v0.2 adds row-offset
+    /// indexing for O(1) seek.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XlStreamError::Xlsx`] on calamine read failures.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_io::CellStream;
+    /// let mut s = CellStream::empty();
+    /// s.seek_to_row(10).unwrap(); // no-op on empty stream
+    /// assert_eq!(s.next_row().unwrap(), None);
+    /// ```
+    pub fn seek_to_row(&mut self, target_row: u32) -> Result<(), XlStreamError> {
+        let Some(inner) = self.inner.as_mut() else {
+            return Ok(());
+        };
+        inner.seek_to_row(target_row)
+    }
 }
 
 impl CellStreamInner<'_> {
@@ -144,6 +171,20 @@ impl CellStreamInner<'_> {
         }
     }
 
+    fn seek_to_row(&mut self, target_row: u32) -> Result<(), XlStreamError> {
+        loop {
+            if let Some((row, col, val)) = self.source.next_cell()? {
+                if row >= target_row {
+                    self.pending_cell = Some((row, col, val));
+                    return Ok(());
+                }
+            } else {
+                self.finished = true;
+                return Ok(());
+            }
+        }
+    }
+
     fn place_cell(&mut self, col: u32, value: Value) {
         let idx = col as usize;
         if idx >= self.buffer.len() {
@@ -176,5 +217,91 @@ mod tests {
         let s = CellStream::empty();
         let dbg = format!("{s:?}");
         assert!(dbg.contains("CellStream"), "expected CellStream in debug: {dbg}");
+    }
+
+    #[test]
+    fn seek_to_row_skips_rows_before_target() {
+        struct FakeSource {
+            cells: Vec<(u32, u32, Value)>,
+            pos: usize,
+        }
+        impl CellSource for FakeSource {
+            fn next_cell(&mut self) -> Result<Option<(u32, u32, Value)>, XlStreamError> {
+                if self.pos < self.cells.len() {
+                    let c = self.cells[self.pos].clone();
+                    self.pos += 1;
+                    Ok(Some(c))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+
+        let source = FakeSource {
+            cells: vec![
+                (0, 0, Value::Number(1.0)),
+                (1, 0, Value::Number(2.0)),
+                (2, 0, Value::Number(3.0)),
+                (3, 0, Value::Number(4.0)),
+            ],
+            pos: 0,
+        };
+        let mut stream = CellStream::new(Box::new(source), 1);
+        stream.seek_to_row(2).unwrap();
+        let row = stream.next_row().unwrap().unwrap();
+        assert_eq!(row.0, 2);
+        assert_eq!(row.1[0], Value::Number(3.0));
+    }
+
+    #[test]
+    fn seek_to_row_zero_is_noop() {
+        struct FakeSource {
+            cells: Vec<(u32, u32, Value)>,
+            pos: usize,
+        }
+        impl CellSource for FakeSource {
+            fn next_cell(&mut self) -> Result<Option<(u32, u32, Value)>, XlStreamError> {
+                if self.pos < self.cells.len() {
+                    let c = self.cells[self.pos].clone();
+                    self.pos += 1;
+                    Ok(Some(c))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+
+        let source = FakeSource {
+            cells: vec![(0, 0, Value::Number(1.0)), (1, 0, Value::Number(2.0))],
+            pos: 0,
+        };
+        let mut stream = CellStream::new(Box::new(source), 1);
+        stream.seek_to_row(0).unwrap();
+        let row = stream.next_row().unwrap().unwrap();
+        assert_eq!(row.0, 0);
+    }
+
+    #[test]
+    fn seek_past_end_returns_none() {
+        struct FakeSource {
+            cells: Vec<(u32, u32, Value)>,
+            pos: usize,
+        }
+        impl CellSource for FakeSource {
+            fn next_cell(&mut self) -> Result<Option<(u32, u32, Value)>, XlStreamError> {
+                if self.pos < self.cells.len() {
+                    let c = self.cells[self.pos].clone();
+                    self.pos += 1;
+                    Ok(Some(c))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+
+        let source = FakeSource { cells: vec![(0, 0, Value::Number(1.0))], pos: 0 };
+        let mut stream = CellStream::new(Box::new(source), 1);
+        stream.seek_to_row(999).unwrap();
+        assert!(stream.next_row().unwrap().is_none());
     }
 }
