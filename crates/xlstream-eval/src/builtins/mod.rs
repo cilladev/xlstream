@@ -6,6 +6,7 @@
 
 pub mod aggregate;
 mod conditional;
+mod multi_conditional;
 
 use xlstream_core::Value;
 use xlstream_parse::NodeRef;
@@ -36,6 +37,9 @@ pub(crate) fn dispatch(
         "XOR" => Some(conditional::builtin_xor(args, interp, scope)),
         "TRUE" => Some(conditional::builtin_true(args)),
         "FALSE" => Some(conditional::builtin_false(args)),
+        "SUMIFS" => Some(multi_conditional::builtin_sumifs(args, interp, scope)),
+        "COUNTIFS" => Some(multi_conditional::builtin_countifs(args, interp, scope)),
+        "AVERAGEIFS" => Some(multi_conditional::builtin_averageifs(args, interp, scope)),
         _ => None,
     }
 }

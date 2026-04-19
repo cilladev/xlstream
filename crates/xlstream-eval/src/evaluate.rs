@@ -7,8 +7,8 @@ use std::time::Instant;
 use xlstream_core::{col_row_to_a1, Value, XlStreamError};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
-    classify, extract_references, parse, rewrite, Ast, Classification, ClassificationContext,
-    Reference,
+    classify, extract_references, parse, rewrite, AggregateKey, Ast, Classification,
+    ClassificationContext, Reference,
 };
 
 use crate::interp::Interpreter;
@@ -92,18 +92,29 @@ pub fn evaluate(
     };
 
     // Collect aggregate keys from all rewritten ASTs and run prelude.
-    let mut all_agg_keys = Vec::new();
-    for ast in col_asts.values() {
-        all_agg_keys.extend(crate::prelude_plan::collect_aggregate_keys(ast));
-    }
-    // Deduplicate keys.
-    all_agg_keys.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
-    all_agg_keys.dedup();
+    let all_agg_keys: Vec<AggregateKey> = {
+        let mut seen = std::collections::HashSet::new();
+        col_asts
+            .values()
+            .flat_map(crate::prelude_plan::collect_aggregate_keys)
+            .filter(|k| seen.insert(k.clone()))
+            .collect()
+    };
 
-    let prelude = if all_agg_keys.is_empty() {
+    // Collect multi-conditional keys (SUMIFS/COUNTIFS/AVERAGEIFS).
+    let all_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
+        let mut seen = std::collections::HashSet::new();
+        col_asts
+            .values()
+            .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
+            .filter(|k| seen.insert(k.clone()))
+            .collect()
+    };
+
+    let prelude = if all_agg_keys.is_empty() && all_multi_keys.is_empty() {
         Prelude::empty()
     } else if let Some(ref main) = main_sheet {
-        crate::prelude_plan::execute_prelude(&mut reader, main, &all_agg_keys)?
+        crate::prelude_plan::execute_prelude(&mut reader, main, &all_agg_keys, &all_multi_keys)?
     } else {
         Prelude::empty()
     };

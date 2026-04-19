@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use xlstream_core::{CellError, Value};
+use xlstream_core::Value;
 use xlstream_eval::{Interpreter, Prelude, RowScope};
 use xlstream_parse::{classify, parse, rewrite, AggKind, AggregateKey, ClassificationContext};
 
@@ -93,8 +93,8 @@ fn mixed_formula_cell_div_sum_times_hundred() {
 }
 
 #[test]
-fn missing_aggregate_prelude_ref_returns_value_error() {
+fn missing_aggregate_prelude_ref_returns_none() {
     let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
     let prelude = Prelude::empty();
-    assert_eq!(prelude.get_aggregate(&key), Value::Error(CellError::Value));
+    assert_eq!(prelude.get_aggregate(&key), None);
 }

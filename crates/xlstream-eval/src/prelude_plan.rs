@@ -21,20 +21,8 @@ use crate::prelude::Prelude;
 /// values are consumed, call [`finish`](FoldState::finish) with the
 /// desired [`AggKind`] to extract the result.
 ///
-/// # Examples
-///
-/// ```
-/// use xlstream_core::Value;
-/// use xlstream_parse::AggKind;
-/// use xlstream_eval::prelude_plan::FoldState;
-///
-/// let mut state = FoldState::new();
-/// state.feed(&Value::Number(10.0));
-/// state.feed(&Value::Number(20.0));
-/// assert_eq!(state.finish(AggKind::Sum), Value::Number(30.0));
-/// ```
 #[derive(Debug, Clone)]
-pub struct FoldState {
+pub(crate) struct FoldState {
     sum: f64,
     count: u64,
     counta: u64,
@@ -51,16 +39,8 @@ pub struct FoldState {
 
 impl FoldState {
     /// Create a new empty accumulator.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use xlstream_eval::prelude_plan::FoldState;
-    /// let state = FoldState::new();
-    /// drop(state);
-    /// ```
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             sum: 0.0,
             count: 0,
@@ -80,19 +60,7 @@ impl FoldState {
     /// Follows range semantics: numeric values accumulate, text and
     /// booleans are skipped for numeric aggregates but counted for
     /// COUNTA, errors are captured (first one wins).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use xlstream_core::Value;
-    /// use xlstream_eval::prelude_plan::FoldState;
-    ///
-    /// let mut s = FoldState::new();
-    /// s.feed(&Value::Number(5.0));
-    /// s.feed(&Value::Text("x".into()));
-    /// s.feed(&Value::Empty);
-    /// ```
-    pub fn feed(&mut self, v: &Value) {
+    pub(crate) fn feed(&mut self, v: &Value) {
         match v {
             Value::Error(e) => {
                 if self.error.is_none() {
@@ -148,21 +116,8 @@ impl FoldState {
     /// For error-propagating aggregates (SUM, AVERAGE, MIN, MAX,
     /// PRODUCT, MEDIAN), returns the first captured error if any.
     /// COUNT, COUNTA, and COUNTBLANK never propagate errors.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use xlstream_core::Value;
-    /// use xlstream_parse::AggKind;
-    /// use xlstream_eval::prelude_plan::FoldState;
-    ///
-    /// let mut state = FoldState::new();
-    /// state.feed(&Value::Number(3.0));
-    /// state.feed(&Value::Number(7.0));
-    /// assert_eq!(state.finish(AggKind::Average), Value::Number(5.0));
-    /// ```
     #[must_use]
-    pub fn finish(mut self, kind: AggKind) -> Value {
+    pub(crate) fn finish(mut self, kind: AggKind) -> Value {
         match kind {
             AggKind::Sum => {
                 if let Some(e) = self.error {
@@ -299,12 +254,160 @@ fn collect_keys_recursive(node: xlstream_parse::NodeRef<'_>, keys: &mut Vec<Aggr
     }
 }
 
+/// Walk a rewritten AST and collect all [`MultiConditionalAggKey`]s
+/// needed by SUMIFS, COUNTIFS, AVERAGEIFS function nodes.
+#[must_use]
+pub(crate) fn collect_multi_conditional_keys(
+    ast: &Ast,
+) -> Vec<crate::prelude::MultiConditionalAggKey> {
+    let mut keys = Vec::new();
+    collect_multi_keys_recursive(ast.root(), &mut keys);
+    keys
+}
+
+fn collect_multi_keys_recursive(
+    node: xlstream_parse::NodeRef<'_>,
+    keys: &mut Vec<crate::prelude::MultiConditionalAggKey>,
+) {
+    match node.view() {
+        NodeView::Function { name } => {
+            let upper = name.to_ascii_uppercase();
+            let normalized = upper.strip_prefix("_XLFN.").unwrap_or(&upper);
+            match normalized {
+                "SUMIFS" => {
+                    if let Some(key) = extract_sumifs_key(node) {
+                        keys.push(key);
+                    }
+                }
+                "COUNTIFS" => {
+                    if let Some(key) = extract_countifs_key(node) {
+                        keys.push(key);
+                    }
+                }
+                "AVERAGEIFS" => {
+                    if let Some(key) = extract_averageifs_key(node) {
+                        keys.push(key);
+                    }
+                }
+                _ => {}
+            }
+            // Also recurse into args in case of nested function calls.
+            for arg in node.args() {
+                collect_multi_keys_recursive(arg, keys);
+            }
+        }
+        NodeView::BinaryOp { .. } => {
+            if let Some(left) = node.left() {
+                collect_multi_keys_recursive(left, keys);
+            }
+            if let Some(right) = node.right() {
+                collect_multi_keys_recursive(right, keys);
+            }
+        }
+        NodeView::UnaryOp { .. } => {
+            if let Some(operand) = node.operand() {
+                collect_multi_keys_recursive(operand, keys);
+            }
+        }
+        NodeView::Array { .. } => {
+            for row in node.array_cells() {
+                for cell in row {
+                    collect_multi_keys_recursive(cell, keys);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Extract column from a range-ref node (whole-column like `A:A`).
+fn extract_range_col(node: xlstream_parse::NodeRef<'_>) -> Option<u32> {
+    match node.view() {
+        NodeView::RangeRef { start_col: Some(sc), end_col: Some(ec), .. } if sc == ec => Some(sc),
+        _ => None,
+    }
+}
+
+/// Extract a `MultiConditionalAggKey` from a SUMIFS function node.
+/// `SUMIFS(sum_range, crit_range1, crit1, crit_range2, crit2, ...)`
+fn extract_sumifs_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+        return None;
+    }
+    let sum_col = extract_range_col(args[0])?;
+    let num_pairs = (args.len() - 1) / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    for i in 0..num_pairs {
+        let col = extract_range_col(args[1 + i * 2])?;
+        criteria_cols.push(col);
+    }
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Sum,
+        sum_col,
+        criteria_cols,
+        sheet: None,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from a COUNTIFS function node.
+/// `COUNTIFS(crit_range1, crit1, crit_range2, crit2, ...)`
+fn extract_countifs_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 2 || args.len() % 2 != 0 {
+        return None;
+    }
+    let num_pairs = args.len() / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    for i in 0..num_pairs {
+        let col = extract_range_col(args[i * 2])?;
+        criteria_cols.push(col);
+    }
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Count,
+        sum_col: 0,
+        criteria_cols,
+        sheet: None,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from an AVERAGEIFS function node.
+/// `AVERAGEIFS(avg_range, crit_range1, crit1, crit_range2, crit2, ...)`
+fn extract_averageifs_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+        return None;
+    }
+    let sum_col = extract_range_col(args[0])?;
+    let num_pairs = (args.len() - 1) / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    for i in 0..num_pairs {
+        let col = extract_range_col(args[1 + i * 2])?;
+        criteria_cols.push(col);
+    }
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Average,
+        sum_col,
+        criteria_cols,
+        sheet: None,
+    })
+}
+
 /// Execute the prelude pass: stream the main sheet, fold column values
 /// through [`FoldState`] accumulators, and build a filled [`Prelude`].
 ///
 /// Skips the first row (header). Each subsequent row feeds the relevant
 /// column values into accumulators. After the stream is exhausted,
 /// finishes each accumulator and stores the result.
+///
+/// Also computes multi-criteria conditional aggregate groupby tables
+/// for SUMIFS/COUNTIFS/AVERAGEIFS.
 ///
 /// # Errors
 ///
@@ -320,14 +423,15 @@ fn collect_keys_recursive(node: xlstream_parse::NodeRef<'_>, keys: &mut Vec<Aggr
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 }];
-/// let prelude = execute_prelude(&mut reader, "Sheet1", &keys).unwrap();
+/// let prelude = execute_prelude(&mut reader, "Sheet1", &keys, &[]).unwrap();
 /// ```
 pub fn execute_prelude(
     reader: &mut Reader,
     main_sheet: &str,
     simple_keys: &[AggregateKey],
+    multi_keys: &[crate::prelude::MultiConditionalAggKey],
 ) -> Result<Prelude, XlStreamError> {
-    if simple_keys.is_empty() {
+    if simple_keys.is_empty() && multi_keys.is_empty() {
         return Ok(Prelude::empty());
     }
 
@@ -343,6 +447,24 @@ pub fn execute_prelude(
         col_folds.insert(col, FoldState::new());
     }
 
+    // Collect all columns needed for multi-conditional keys.
+    let mut multi_needed_cols: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    for mk in multi_keys {
+        if mk.sum_col > 0 {
+            multi_needed_cols.insert(mk.sum_col);
+        }
+        for &c in &mk.criteria_cols {
+            multi_needed_cols.insert(c);
+        }
+    }
+
+    // Multi-conditional accumulators: for each key, a map from composite
+    // criteria key to FoldState.
+    let mut multi_folds: HashMap<usize, HashMap<String, FoldState>> = HashMap::new();
+    for i in 0..multi_keys.len() {
+        multi_folds.insert(i, HashMap::new());
+    }
+
     // Stream the sheet, skipping header row.
     let mut stream = reader.cells(main_sheet)?;
     let mut header_skipped = false;
@@ -353,15 +475,43 @@ pub fn execute_prelude(
             continue;
         }
 
+        // Feed simple aggregate folds.
         for (&col, fold) in &mut col_folds {
-            // col is 1-based
             let idx = (col as usize).saturating_sub(1);
             let val = row_values.get(idx).unwrap_or(&Value::Empty);
             fold.feed(val);
         }
+
+        // Feed multi-conditional folds.
+        for (i, mk) in multi_keys.iter().enumerate() {
+            // Build composite key from criteria columns.
+            let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
+            for &cc in &mk.criteria_cols {
+                let idx = (cc as usize).saturating_sub(1);
+                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                composite_parts.push(xlstream_core::coerce::to_text(val).to_ascii_lowercase());
+            }
+            let composite = composite_parts.join("\0");
+
+            // Get the sum/avg column value (for COUNTIFS, sum_col=0 so we
+            // feed a Number(1.0) to count).
+            let feed_val = if mk.sum_col > 0 {
+                let idx = (mk.sum_col as usize).saturating_sub(1);
+                row_values.get(idx).unwrap_or(&Value::Empty)
+            } else {
+                // COUNTIFS: count rows, feed 1.0
+                &Value::Number(1.0)
+            };
+
+            // Pre-populated for all indices in the loop above.
+            let Some(folds_map) = multi_folds.get_mut(&i) else {
+                continue;
+            };
+            folds_map.entry(composite).or_insert_with(FoldState::new).feed(feed_val);
+        }
     }
 
-    // Finish each fold and produce aggregate results.
+    // Finish simple aggregate folds.
     let mut aggregates: HashMap<AggregateKey, Value> = HashMap::new();
     for (col, fold) in col_folds {
         let kinds = col_kinds.get(&col).map_or(&[][..], |v| v.as_slice());
@@ -371,7 +521,30 @@ pub fn execute_prelude(
         }
     }
 
-    Ok(Prelude::with_aggregates(aggregates))
+    // Finish multi-conditional folds.
+    let mut multi_aggs: HashMap<crate::prelude::MultiConditionalAggKey, HashMap<String, Value>> =
+        HashMap::new();
+    for (i, mk) in multi_keys.iter().enumerate() {
+        // COUNTIFS feeds 1.0 per matching row, so finishing with Sum
+        // yields the count.
+        let finish_kind = match mk.kind {
+            AggKind::Count | AggKind::Sum => AggKind::Sum,
+            AggKind::Average => AggKind::Average,
+            other => other,
+        };
+        let folds_map = multi_folds.remove(&i).unwrap_or_default();
+        let mut inner: HashMap<String, Value> = HashMap::new();
+        for (composite_key, fold) in folds_map {
+            inner.insert(composite_key, fold.finish(finish_kind));
+        }
+        multi_aggs.insert(mk.clone(), inner);
+    }
+
+    if multi_aggs.is_empty() {
+        Ok(Prelude::with_aggregates(aggregates))
+    } else {
+        Ok(Prelude::with_all(aggregates, HashMap::new(), multi_aggs))
+    }
 }
 
 #[cfg(test)]

@@ -46,6 +46,11 @@ impl<'ctx> Interpreter<'ctx> {
         Self { prelude }
     }
 
+    /// Borrow the prelude data backing this interpreter.
+    pub(crate) fn prelude(&self) -> &Prelude {
+        self.prelude
+    }
+
     /// Evaluate a single AST node against the current row.
     ///
     /// Returns a [`Value`]. Never errors at the library level — unsupported
@@ -112,9 +117,11 @@ impl<'ctx> Interpreter<'ctx> {
             NodeView::Array { .. } => Value::Error(CellError::Value),
 
             NodeView::PreludeRef(key) => match key {
-                xlstream_parse::PreludeKey::Aggregate(agg_key) => {
-                    self.prelude.get_aggregate(agg_key)
-                }
+                xlstream_parse::PreludeKey::Aggregate(agg_key) => self
+                    .prelude
+                    .get_aggregate(agg_key)
+                    .cloned()
+                    .unwrap_or(Value::Error(CellError::Value)),
                 xlstream_parse::PreludeKey::Lookup(_) => Value::Error(CellError::Value),
             },
         }
