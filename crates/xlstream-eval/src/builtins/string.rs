@@ -274,6 +274,137 @@ pub(crate) fn builtin_textjoin(args: &[Value]) -> Value {
     Value::Text(parts.join(&delim).into())
 }
 
+// ---------------------------------------------------------------------------
+// FIND / SEARCH
+// ---------------------------------------------------------------------------
+
+/// `FIND(needle, haystack, start?)` — 1-based position, case-sensitive.
+///
+/// Returns `#VALUE!` if not found. Empty needle returns start position.
+pub(crate) fn builtin_find(args: &[Value]) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let needle = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let haystack = match text_arg(args, 1) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let start = match opt_positive_int(args, 2, 1) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if start == 0 {
+        return Value::Error(CellError::Value);
+    }
+
+    // Empty needle: Excel returns start position (if in range)
+    if needle.is_empty() {
+        let len = haystack.chars().count();
+        if start <= len + 1 {
+            #[allow(clippy::cast_precision_loss)]
+            return Value::Number(start as f64);
+        }
+        return Value::Error(CellError::Value);
+    }
+
+    // Convert to char-based search from start position
+    let hay_chars: Vec<char> = haystack.chars().collect();
+    let needle_chars: Vec<char> = needle.chars().collect();
+    let search_start = start.saturating_sub(1);
+
+    for i in search_start..hay_chars.len() {
+        if i + needle_chars.len() > hay_chars.len() {
+            break;
+        }
+        if hay_chars[i..i + needle_chars.len()] == needle_chars[..] {
+            #[allow(clippy::cast_precision_loss)]
+            return Value::Number((i + 1) as f64);
+        }
+    }
+    Value::Error(CellError::Value)
+}
+
+/// `SEARCH(needle, haystack, start?)` — like FIND but case-insensitive,
+/// supports `?` (single char) and `*` (any chars) wildcards.
+pub(crate) fn builtin_search(args: &[Value]) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let needle = match text_arg(args, 0) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let haystack = match text_arg(args, 1) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let start = match opt_positive_int(args, 2, 1) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if start == 0 {
+        return Value::Error(CellError::Value);
+    }
+
+    // Empty needle: return start position
+    if needle.is_empty() {
+        let len = haystack.chars().count();
+        if start <= len + 1 {
+            #[allow(clippy::cast_precision_loss)]
+            return Value::Number(start as f64);
+        }
+        return Value::Error(CellError::Value);
+    }
+
+    let hay_lower: Vec<char> = haystack.to_ascii_lowercase().chars().collect();
+    let needle_lower: Vec<char> = needle.to_ascii_lowercase().chars().collect();
+    let search_start = start.saturating_sub(1);
+
+    for i in search_start..hay_lower.len() {
+        if wildcard_match(&needle_lower, &hay_lower[i..]) {
+            #[allow(clippy::cast_precision_loss)]
+            return Value::Number((i + 1) as f64);
+        }
+    }
+    Value::Error(CellError::Value)
+}
+
+/// Recursive wildcard matcher. `pattern` may contain `?` (single char)
+/// and `*` (zero or more chars). Matches a prefix of `text` — succeeds
+/// when the entire pattern is consumed.
+fn wildcard_match(pattern: &[char], text: &[char]) -> bool {
+    if pattern.is_empty() {
+        return true;
+    }
+    match pattern[0] {
+        '?' => {
+            if text.is_empty() {
+                return false;
+            }
+            wildcard_match(&pattern[1..], &text[1..])
+        }
+        '*' => {
+            // Try matching zero chars, then one, two, ...
+            for skip in 0..=text.len() {
+                if wildcard_match(&pattern[1..], &text[skip..]) {
+                    return true;
+                }
+            }
+            false
+        }
+        ch => {
+            if text.is_empty() || text[0] != ch {
+                return false;
+            }
+            wildcard_match(&pattern[1..], &text[1..])
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -825,6 +956,138 @@ mod tests {
                 Value::Text("b".into()),
             ]),
             Value::Text("ab".into())
+        );
+    }
+
+    // ===== FIND =====
+
+    #[test]
+    fn find_basic() {
+        assert_eq!(
+            builtin_find(&[Value::Text("lo".into()), Value::Text("Hello".into())]),
+            Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn find_case_sensitive() {
+        assert_eq!(
+            builtin_find(&[Value::Text("LO".into()), Value::Text("Hello".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn find_not_found() {
+        assert_eq!(
+            builtin_find(&[Value::Text("xyz".into()), Value::Text("Hello".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn find_with_start_position() {
+        assert_eq!(
+            builtin_find(&[
+                Value::Text("l".into()),
+                Value::Text("Hello".into()),
+                Value::Number(4.0)
+            ]),
+            Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn find_empty_needle_returns_start() {
+        assert_eq!(
+            builtin_find(&[Value::Text("".into()), Value::Text("Hello".into())]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn find_error_propagation() {
+        assert_eq!(
+            builtin_find(&[Value::Error(CellError::Na), Value::Text("Hello".into())]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn find_at_start() {
+        assert_eq!(
+            builtin_find(&[Value::Text("He".into()), Value::Text("Hello".into())]),
+            Value::Number(1.0)
+        );
+    }
+
+    // ===== SEARCH =====
+
+    #[test]
+    fn search_case_insensitive() {
+        assert_eq!(
+            builtin_search(&[Value::Text("LO".into()), Value::Text("Hello".into())]),
+            Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn search_wildcard_question_mark() {
+        assert_eq!(
+            builtin_search(&[Value::Text("h?llo".into()), Value::Text("Hello".into())]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn search_wildcard_star() {
+        assert_eq!(
+            builtin_search(&[Value::Text("h*o".into()), Value::Text("Hello".into())]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn search_not_found() {
+        assert_eq!(
+            builtin_search(&[Value::Text("xyz".into()), Value::Text("Hello".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn search_error_propagation() {
+        assert_eq!(
+            builtin_search(&[Value::Error(CellError::Div0), Value::Text("Hello".into())]),
+            Value::Error(CellError::Div0)
+        );
+    }
+
+    #[test]
+    fn search_empty_needle_returns_start() {
+        assert_eq!(
+            builtin_search(&[Value::Text("".into()), Value::Text("Hello".into())]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn search_with_start_position() {
+        assert_eq!(
+            builtin_search(&[
+                Value::Text("l".into()),
+                Value::Text("Hello".into()),
+                Value::Number(4.0)
+            ]),
+            Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn search_star_matches_zero_chars() {
+        assert_eq!(
+            builtin_search(&[Value::Text("hel*lo".into()), Value::Text("Hello".into())]),
+            Value::Number(1.0)
         );
     }
 }

@@ -73,6 +73,8 @@ pub(crate) fn dispatch(
         "CLEAN" => Some(string::builtin_clean(&eval_args(args, interp, scope))),
         "CONCAT" | "CONCATENATE" => Some(string::builtin_concat(&eval_args(args, interp, scope))),
         "TEXTJOIN" => Some(string::builtin_textjoin(&eval_args(args, interp, scope))),
+        "FIND" => Some(string::builtin_find(&eval_args(args, interp, scope))),
+        "SEARCH" => Some(string::builtin_search(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
