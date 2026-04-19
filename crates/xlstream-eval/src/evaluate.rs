@@ -7,7 +7,8 @@ use std::time::Instant;
 use xlstream_core::{col_row_to_a1, Value, XlStreamError};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
-    classify, extract_references, parse, Ast, Classification, ClassificationContext, Reference,
+    classify, extract_references, parse, rewrite, Ast, Classification, ClassificationContext,
+    Reference,
 };
 
 use crate::interp::Interpreter;
@@ -90,7 +91,22 @@ pub fn evaluate(
         (Vec::new(), HashMap::new())
     };
 
-    let prelude = Prelude::empty();
+    // Collect aggregate keys from all rewritten ASTs and run prelude.
+    let mut all_agg_keys = Vec::new();
+    for ast in col_asts.values() {
+        all_agg_keys.extend(crate::prelude_plan::collect_aggregate_keys(ast));
+    }
+    // Deduplicate keys.
+    all_agg_keys.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
+    all_agg_keys.dedup();
+
+    let prelude = if all_agg_keys.is_empty() {
+        Prelude::empty()
+    } else if let Some(ref main) = main_sheet {
+        crate::prelude_plan::execute_prelude(&mut reader, main, &all_agg_keys)?
+    } else {
+        Prelude::empty()
+    };
     let interp = Interpreter::new(&prelude);
     let mut writer = Writer::create(output)?;
     let mut rows_processed: u64 = 0;
@@ -163,7 +179,8 @@ fn build_eval_plan(
 
         // Classify at first-occurrence position (convert 0-based to 1-based).
         let ctx = ClassificationContext::for_cell(main_sheet, row + 1, col + 1);
-        if let Classification::Unsupported(ref reason) = classify(&ast, &ctx) {
+        let verdict = classify(&ast, &ctx);
+        if let Classification::Unsupported(ref reason) = verdict {
             return Err(XlStreamError::Unsupported {
                 address: format!("{}!{}", main_sheet, col_row_to_a1(col + 1, row + 1)),
                 formula: text.clone(),
@@ -171,7 +188,10 @@ fn build_eval_plan(
                 doc_link: reason.doc_link(),
             });
         }
-        col_asts.insert(col, ast);
+
+        // Rewrite aggregate/lookup sub-expressions to PreludeRef nodes.
+        let rewritten = rewrite(ast, &ctx, &verdict);
+        col_asts.insert(col, rewritten);
     }
 
     // Build intra-row dependency graph; extract formula-column-to-formula-column edges.

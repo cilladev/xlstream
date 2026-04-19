@@ -1,7 +1,45 @@
 //! [`Prelude`] — data computed before the row-streaming pass.
 //!
-//! Empty in Phase 4. Phase 7 adds aggregate scalars, Phase 8 adds lookup
-//! indexes.
+//! Phase 7 adds aggregate scalars. Phase 8 adds lookup indexes.
+
+use std::collections::HashMap;
+
+use xlstream_core::{CellError, Value};
+use xlstream_parse::{AggKind, AggregateKey};
+
+/// Key for a conditional aggregate (SUMIF, COUNTIF, AVERAGEIF) prelude
+/// entry.
+///
+/// The prelude builds a `HashMap<String, Value>` for each
+/// `ConditionalAggKey`, mapping lowercased criteria values to
+/// pre-computed results.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::AggKind;
+/// use xlstream_eval::prelude::ConditionalAggKey;
+///
+/// let key = ConditionalAggKey {
+///     kind: AggKind::Sum,
+///     criteria_col: 1,
+///     sum_col: 2,
+///     sheet: None,
+/// };
+/// assert_eq!(key.kind, AggKind::Sum);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConditionalAggKey {
+    /// The aggregate function (Sum for SUMIF, Count for COUNTIF, Average
+    /// for AVERAGEIF).
+    pub kind: AggKind,
+    /// 1-based column index for the criteria range.
+    pub criteria_col: u32,
+    /// 1-based column index for the sum/count/average range.
+    pub sum_col: u32,
+    /// Sheet name (`None` = current streaming sheet).
+    pub sheet: Option<String>,
+}
 
 /// Prelude data computed before the row-streaming pass.
 ///
@@ -16,12 +54,16 @@
 /// drop(p);
 /// ```
 pub struct Prelude {
-    _private: (),
+    /// Aggregate scalars keyed by `AggregateKey`.
+    aggregates: HashMap<AggregateKey, Value>,
+    /// Conditional aggregate results keyed by `ConditionalAggKey`, with
+    /// inner maps from lowercased criteria value to result.
+    conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
 }
 
 impl Prelude {
-    /// Build an empty prelude. Used in Phase 4 tests and as the default
-    /// when no aggregates or lookups are needed.
+    /// Build an empty prelude. Used in tests and as the default when no
+    /// aggregates or lookups are needed.
     ///
     /// # Examples
     ///
@@ -31,18 +73,210 @@ impl Prelude {
     /// ```
     #[must_use]
     pub fn empty() -> Self {
-        Self { _private: () }
+        Self { aggregates: HashMap::new(), conditional_aggregates: HashMap::new() }
+    }
+
+    /// Build a prelude with aggregate scalars.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use xlstream_core::Value;
+    /// use xlstream_parse::{AggKind, AggregateKey};
+    /// use xlstream_eval::Prelude;
+    ///
+    /// let mut aggs = HashMap::new();
+    /// aggs.insert(
+    ///     AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 },
+    ///     Value::Number(100.0),
+    /// );
+    /// let prelude = Prelude::with_aggregates(aggs);
+    /// ```
+    #[must_use]
+    pub fn with_aggregates(aggregates: HashMap<AggregateKey, Value>) -> Self {
+        Self { aggregates, conditional_aggregates: HashMap::new() }
+    }
+
+    /// Build a prelude with both simple and conditional aggregates.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use xlstream_core::Value;
+    /// use xlstream_parse::{AggKind, AggregateKey};
+    /// use xlstream_eval::Prelude;
+    /// use xlstream_eval::prelude::ConditionalAggKey;
+    ///
+    /// let aggs = HashMap::new();
+    /// let cond = HashMap::new();
+    /// let prelude = Prelude::with_conditional(aggs, cond);
+    /// ```
+    #[must_use]
+    pub fn with_conditional(
+        aggregates: HashMap<AggregateKey, Value>,
+        conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
+    ) -> Self {
+        Self { aggregates, conditional_aggregates }
+    }
+
+    /// Look up a simple aggregate by key. Returns `#VALUE!` if not found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use xlstream_core::Value;
+    /// use xlstream_parse::{AggKind, AggregateKey};
+    /// use xlstream_eval::Prelude;
+    ///
+    /// let mut aggs = HashMap::new();
+    /// let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+    /// aggs.insert(key.clone(), Value::Number(42.0));
+    /// let prelude = Prelude::with_aggregates(aggs);
+    /// assert_eq!(prelude.get_aggregate(&key), Value::Number(42.0));
+    /// ```
+    #[must_use]
+    pub fn get_aggregate(&self, key: &AggregateKey) -> Value {
+        self.aggregates.get(key).cloned().unwrap_or(Value::Error(CellError::Value))
+    }
+
+    /// Look up a conditional aggregate by key and criteria value.
+    ///
+    /// The `criteria_value` is lowercased before lookup. Missing keys
+    /// return `Value::Number(0.0)` for Sum/Count types and
+    /// `Value::Error(CellError::Div0)` for Average.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use xlstream_core::Value;
+    /// use xlstream_parse::AggKind;
+    /// use xlstream_eval::Prelude;
+    /// use xlstream_eval::prelude::ConditionalAggKey;
+    ///
+    /// let key = ConditionalAggKey {
+    ///     kind: AggKind::Sum,
+    ///     criteria_col: 1,
+    ///     sum_col: 2,
+    ///     sheet: None,
+    /// };
+    /// let mut inner = HashMap::new();
+    /// inner.insert("east".to_string(), Value::Number(100.0));
+    /// let mut cond = HashMap::new();
+    /// cond.insert(key.clone(), inner);
+    /// let prelude = Prelude::with_conditional(HashMap::new(), cond);
+    /// assert_eq!(prelude.get_conditional(&key, "East"), Value::Number(100.0));
+    /// assert_eq!(prelude.get_conditional(&key, "West"), Value::Number(0.0));
+    /// ```
+    #[must_use]
+    pub fn get_conditional(&self, key: &ConditionalAggKey, criteria_value: &str) -> Value {
+        let lowered = criteria_value.to_ascii_lowercase();
+        if let Some(inner) = self.conditional_aggregates.get(key) {
+            if let Some(v) = inner.get(&lowered) {
+                return v.clone();
+            }
+        }
+        // Missing: return default based on kind
+        match key.kind {
+            AggKind::Average => Value::Error(CellError::Div0),
+            AggKind::Sum
+            | AggKind::Count
+            | AggKind::CountA
+            | AggKind::CountBlank
+            | AggKind::Min
+            | AggKind::Max
+            | AggKind::Product
+            | AggKind::Median => Value::Number(0.0),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
 
     use super::*;
 
     #[test]
     fn empty_prelude_constructs() {
         let _ = Prelude::empty();
+    }
+
+    #[test]
+    fn get_aggregate_returns_stored_value() {
+        let mut aggs = HashMap::new();
+        let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+        aggs.insert(key.clone(), Value::Number(42.0));
+        let prelude = Prelude::with_aggregates(aggs);
+        assert_eq!(prelude.get_aggregate(&key), Value::Number(42.0));
+    }
+
+    #[test]
+    fn get_aggregate_missing_returns_value_error() {
+        let prelude = Prelude::empty();
+        let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+        assert_eq!(prelude.get_aggregate(&key), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn get_conditional_returns_stored_value() {
+        let key =
+            ConditionalAggKey { kind: AggKind::Sum, criteria_col: 1, sum_col: 2, sheet: None };
+        let mut inner = HashMap::new();
+        inner.insert("east".to_string(), Value::Number(100.0));
+        let mut cond = HashMap::new();
+        cond.insert(key.clone(), inner);
+        let prelude = Prelude::with_conditional(HashMap::new(), cond);
+        assert_eq!(prelude.get_conditional(&key, "East"), Value::Number(100.0));
+    }
+
+    #[test]
+    fn get_conditional_case_insensitive_lookup() {
+        let key =
+            ConditionalAggKey { kind: AggKind::Sum, criteria_col: 1, sum_col: 2, sheet: None };
+        let mut inner = HashMap::new();
+        inner.insert("west".to_string(), Value::Number(50.0));
+        let mut cond = HashMap::new();
+        cond.insert(key.clone(), inner);
+        let prelude = Prelude::with_conditional(HashMap::new(), cond);
+        assert_eq!(prelude.get_conditional(&key, "WEST"), Value::Number(50.0));
+        assert_eq!(prelude.get_conditional(&key, "west"), Value::Number(50.0));
+    }
+
+    #[test]
+    fn get_conditional_missing_sum_returns_zero() {
+        let key =
+            ConditionalAggKey { kind: AggKind::Sum, criteria_col: 1, sum_col: 2, sheet: None };
+        let prelude = Prelude::empty();
+        assert_eq!(prelude.get_conditional(&key, "missing"), Value::Number(0.0));
+    }
+
+    #[test]
+    fn get_conditional_missing_average_returns_div0() {
+        let key =
+            ConditionalAggKey { kind: AggKind::Average, criteria_col: 1, sum_col: 2, sheet: None };
+        let prelude = Prelude::empty();
+        assert_eq!(prelude.get_conditional(&key, "missing"), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn with_conditional_stores_both() {
+        let agg_key = AggregateKey { kind: AggKind::Max, sheet: None, column: 3 };
+        let mut aggs = HashMap::new();
+        aggs.insert(agg_key.clone(), Value::Number(99.0));
+
+        let cond_key =
+            ConditionalAggKey { kind: AggKind::Sum, criteria_col: 1, sum_col: 2, sheet: None };
+        let mut inner = HashMap::new();
+        inner.insert("a".to_string(), Value::Number(10.0));
+        let mut cond = HashMap::new();
+        cond.insert(cond_key.clone(), inner);
+
+        let prelude = Prelude::with_conditional(aggs, cond);
+        assert_eq!(prelude.get_aggregate(&agg_key), Value::Number(99.0));
+        assert_eq!(prelude.get_conditional(&cond_key, "a"), Value::Number(10.0));
     }
 }

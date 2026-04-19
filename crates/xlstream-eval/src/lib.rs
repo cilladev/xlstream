@@ -22,14 +22,17 @@
 // constraint propagates to any workspace crate that depends on xlstream-io.
 #![allow(clippy::multiple_crate_versions)]
 
-mod builtins;
+pub mod builtins;
+pub mod criteria;
 mod evaluate;
 mod interp;
 pub mod ops;
-mod prelude;
+pub mod prelude;
+pub mod prelude_plan;
 mod scope;
 pub mod topo;
 
+pub use criteria::Criteria;
 pub use evaluate::{evaluate, EvaluateSummary};
 pub use interp::Interpreter;
 pub use prelude::Prelude;

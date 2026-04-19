@@ -10,9 +10,9 @@ use crate::scope::RowScope;
 /// Formula evaluator. Walks the AST via [`NodeView`] and resolves values
 /// against the current row scope.
 ///
-/// Handles literals, same-row cell references, and all operators
-/// (arithmetic, comparison, concatenation, unary). Functions return
-/// `#VALUE!` until Phase 6+.
+/// Handles literals, same-row cell references, all operators
+/// (arithmetic, comparison, concatenation, unary), conditional builtins,
+/// and prelude-resolved aggregate references.
 ///
 /// # Examples
 ///
@@ -28,7 +28,7 @@ use crate::scope::RowScope;
 /// assert_eq!(interp.eval(ast.root(), &scope), Value::Number(42.0));
 /// ```
 pub struct Interpreter<'ctx> {
-    _prelude: &'ctx Prelude,
+    prelude: &'ctx Prelude,
 }
 
 impl<'ctx> Interpreter<'ctx> {
@@ -43,7 +43,7 @@ impl<'ctx> Interpreter<'ctx> {
     /// ```
     #[must_use]
     pub fn new(prelude: &'ctx Prelude) -> Self {
-        Self { _prelude: prelude }
+        Self { prelude }
     }
 
     /// Evaluate a single AST node against the current row.
@@ -109,7 +109,14 @@ impl<'ctx> Interpreter<'ctx> {
                 }
             }
 
-            NodeView::Array { .. } | NodeView::PreludeRef(_) => Value::Error(CellError::Value),
+            NodeView::Array { .. } => Value::Error(CellError::Value),
+
+            NodeView::PreludeRef(key) => match key {
+                xlstream_parse::PreludeKey::Aggregate(agg_key) => {
+                    self.prelude.get_aggregate(agg_key)
+                }
+                xlstream_parse::PreludeKey::Lookup(_) => Value::Error(CellError::Value),
+            },
         }
     }
 }
