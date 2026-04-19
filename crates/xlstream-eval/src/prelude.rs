@@ -419,8 +419,8 @@ impl Prelude {
         self
     }
 
-    /// Return the `TODAY()` serial. Returns serial 0 if volatile data is
-    /// not set.
+    /// Return the `TODAY()` serial. Logs a warning and returns serial 0
+    /// if volatile data was never configured via [`with_volatile`].
     ///
     /// # Examples
     ///
@@ -431,11 +431,16 @@ impl Prelude {
     /// ```
     #[must_use]
     pub fn volatile_today(&self) -> ExcelDate {
-        self.volatile.map_or(ExcelDate::from_serial(0.0), |v| v.today)
+        if let Some(v) = self.volatile {
+            v.today
+        } else {
+            tracing::warn!("TODAY() called but volatile data not configured");
+            ExcelDate::from_serial(0.0)
+        }
     }
 
-    /// Return the `NOW()` serial. Returns serial 0 if volatile data is
-    /// not set.
+    /// Return the `NOW()` serial. Logs a warning and returns serial 0
+    /// if volatile data was never configured via [`with_volatile`].
     ///
     /// # Examples
     ///
@@ -446,7 +451,12 @@ impl Prelude {
     /// ```
     #[must_use]
     pub fn volatile_now(&self) -> ExcelDate {
-        self.volatile.map_or(ExcelDate::from_serial(0.0), |v| v.now)
+        if let Some(v) = self.volatile {
+            v.now
+        } else {
+            tracing::warn!("NOW() called but volatile data not configured");
+            ExcelDate::from_serial(0.0)
+        }
     }
 }
 

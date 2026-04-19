@@ -437,7 +437,9 @@ fn month_days_for_excel(year: i32, month: i32) -> i32 {
         #[allow(clippy::cast_sign_loss)]
         table[(month - 1) as usize]
     } else {
-        30 // fallback, should not be reached with valid input
+        debug_assert!(false, "month_days_for_excel called with invalid month {month}");
+        tracing::warn!(month, "month_days_for_excel: out-of-range month, defaulting to 30");
+        30
     }
 }
 
