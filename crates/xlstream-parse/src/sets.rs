@@ -131,6 +131,30 @@ pub fn is_volatile_unsupported(name: &str) -> bool {
     VOLATILE_UNSUPPORTED.contains(name.to_uppercase().as_str())
 }
 
+/// Functions whose range arguments should be expanded row-by-row
+/// rather than treated as aggregates or refused outright. Only
+/// bounded single-column ranges are accepted; unbounded or
+/// multi-column ranges are still refused.
+pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
+    "IRR", "NPV", "CONCAT", "CONCATENATE", "TEXTJOIN",
+    "NETWORKDAYS", "WORKDAY", "AND", "OR",
+};
+
+/// `true` if `name` is in [`RANGE_EXPANDING_FUNCTIONS`] (case-insensitive).
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::sets::is_range_expanding;
+/// assert!(is_range_expanding("IRR"));
+/// assert!(is_range_expanding("concat"));
+/// assert!(!is_range_expanding("SUM"));
+/// ```
+#[must_use]
+pub fn is_range_expanding(name: &str) -> bool {
+    RANGE_EXPANDING_FUNCTIONS.contains(name.to_uppercase().as_str())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -184,6 +208,21 @@ mod tests {
     }
 
     #[test]
+    fn range_expanding_set_lists_irr_concat_networkdays() {
+        assert!(is_range_expanding("IRR"));
+        assert!(is_range_expanding("irr"));
+        assert!(is_range_expanding("CONCAT"));
+        assert!(is_range_expanding("CONCATENATE"));
+        assert!(is_range_expanding("TEXTJOIN"));
+        assert!(is_range_expanding("NETWORKDAYS"));
+        assert!(is_range_expanding("WORKDAY"));
+        assert!(is_range_expanding("AND"));
+        assert!(is_range_expanding("OR"));
+        assert!(is_range_expanding("NPV"));
+        assert!(!is_range_expanding("SUM"));
+    }
+
+    #[test]
     #[allow(clippy::explicit_iter_loop)]
     fn all_set_entries_are_uppercase() {
         for set in [
@@ -193,6 +232,7 @@ mod tests {
             &VOLATILE_STREAMING_OK,
             &DYNAMIC_ARRAY_FUNCTIONS,
             &VOLATILE_UNSUPPORTED,
+            &RANGE_EXPANDING_FUNCTIONS,
         ] {
             for &entry in set.iter() {
                 assert_eq!(entry, entry.to_uppercase(), "set entry {entry:?} must be uppercase");

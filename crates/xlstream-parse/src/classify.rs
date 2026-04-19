@@ -318,6 +318,7 @@ enum Disposition {
 enum FnKind {
     Aggregate,
     Lookup,
+    RangeExpanding,
 }
 
 /// Classify a parsed formula for streaming evaluation.
@@ -407,6 +408,27 @@ fn classify_reference(
                         Disposition::Unsupported(UnsupportedReason::LookupSheetNotPrepared)
                     }
                 }
+                Some(FnKind::RangeExpanding) => {
+                    // Only bounded single-column ranges supported
+                    match r {
+                        Reference::Range {
+                            start_row: Some(_),
+                            end_row: Some(_),
+                            start_col: Some(sc),
+                            end_col: Some(ec),
+                            ..
+                        } if sc == ec => {
+                            if resolved.eq_ignore_ascii_case(ctx.current_sheet()) {
+                                Disposition::Mixed
+                            } else if ctx.is_lookup_sheet(resolved) {
+                                Disposition::Lookup
+                            } else {
+                                Disposition::Unsupported(UnsupportedReason::LookupSheetNotPrepared)
+                            }
+                        }
+                        _ => Disposition::Unsupported(UnsupportedReason::UnboundedRange),
+                    }
+                }
                 None => Disposition::Unsupported(UnsupportedReason::UnboundedRange),
             }
         }
@@ -436,6 +458,10 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
 
     if sets::is_lookup(name) {
         return fold_fn_args(args, ctx, FnKind::Lookup);
+    }
+
+    if sets::is_range_expanding(name) {
+        return fold_args(args, ctx, Some(FnKind::RangeExpanding));
     }
 
     fold_args(args, ctx, None)
@@ -485,6 +511,7 @@ fn fold_fn_args(args: &[Node], ctx: &ClassificationContext, kind: FnKind) -> Dis
     let target = match kind {
         FnKind::Aggregate => Disposition::Aggregate,
         FnKind::Lookup => Disposition::Lookup,
+        FnKind::RangeExpanding => Disposition::RowLocal,
     };
     for arg in args {
         let d = disposition(arg, ctx, Some(kind));
@@ -622,5 +649,52 @@ mod tests {
         let u = Disposition::Unsupported(UnsupportedReason::CircularRef);
         assert!(matches!(fold(u.clone(), Disposition::RowLocal), Disposition::Unsupported(_)));
         assert!(matches!(fold(Disposition::Aggregate, u), Disposition::Unsupported(_)));
+    }
+
+    #[test]
+    fn irr_with_bounded_range_classifies_as_mixed() {
+        let ast = crate::parse("IRR(B2:B10)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(matches!(result, Classification::Mixed), "expected Mixed, got {result:?}");
+    }
+
+    #[test]
+    fn irr_with_unbounded_range_is_unsupported() {
+        let ast = crate::parse("IRR(B:B)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert!(matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+    }
+
+    #[test]
+    fn concat_with_bounded_range_classifies() {
+        let ast = crate::parse("CONCAT(A2:A5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(
+            !matches!(result, Classification::Unsupported(_)),
+            "expected non-unsupported, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn concat_multi_column_range_is_unsupported() {
+        let ast = crate::parse("CONCAT(A2:C5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert!(matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+    }
+
+    #[test]
+    fn sum_whole_column_still_classifies_as_aggregate() {
+        let ast = crate::parse("SUM(A:A)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn networkdays_without_holidays_classifies() {
+        let ast = crate::parse("NETWORKDAYS(A2, B2)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert!(!matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
     }
 }
