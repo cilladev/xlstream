@@ -18,6 +18,9 @@ xlstream-io = { path = "../xlstream-io", version = "0.1.0" }
 rust_decimal.workspace = true
 ssfmt.workspace = true
 tracing.workspace = true
+rayon.workspace = true
+crossbeam-channel.workspace = true
+num_cpus.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }

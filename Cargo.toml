@@ -39,6 +39,7 @@ rust_decimal = { version = "1.41", features = ["maths"] }
 # Concurrency + utilities
 rayon = "1.10"
 crossbeam-channel = "0.5"
+num_cpus = "1.16"
 smallvec = "1.13"
 thiserror = "2.0"
 tracing = "0.1"
