@@ -1,7 +1,8 @@
 //! The [`evaluate`] entry point and [`EvaluateSummary`] return type.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 use xlstream_core::{col_row_to_a1, Value, XlStreamError};
@@ -15,6 +16,9 @@ use crate::interp::Interpreter;
 use crate::prelude::Prelude;
 use crate::scope::RowScope;
 use crate::topo::topo_sort;
+
+/// Message type sent from parallel workers to the writer loop.
+type WorkerMsg = Result<(u32, Vec<Value>, u64), XlStreamError>;
 
 /// Summary of a completed evaluation run.
 ///
@@ -44,8 +48,7 @@ struct EvalPlan {
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
     /// Data rows counted during prelude (or fallback count). Used by the
-    /// parallel streamer in Task 1.4; currently read only in tests.
-    #[allow(dead_code)]
+    /// parallel streamer to decide chunk sizes and dispatch logic.
     total_data_rows: u32,
 }
 
@@ -56,7 +59,11 @@ struct EvalPlan {
 /// intra-row topo evaluation order, then streams rows through the interpreter
 /// and writes results. All other sheets are copied verbatim.
 ///
-/// `workers` is reserved for Phase 10 row parallelism; currently ignored.
+/// `workers` controls parallelism:
+/// - `None` — auto-detect via `num_cpus::get()`.
+/// - `Some(1)` — force single-threaded.
+/// - `Some(n)` where `n > 1` — use `n` worker threads if the main sheet
+///   has >= 10,000 data rows; otherwise fall back to single-threaded.
 ///
 /// # Errors
 ///
@@ -78,14 +85,61 @@ struct EvalPlan {
 pub fn evaluate(
     input: &Path,
     output: &Path,
-    _workers: Option<usize>,
+    workers: Option<usize>,
 ) -> Result<EvaluateSummary, XlStreamError> {
     let start = Instant::now();
     let (plan, mut reader) = build_plan(input)?;
     let mut writer = Writer::create(output)?;
 
-    let (rows_processed, formulas_evaluated) =
-        stream_single_threaded(&mut reader, &mut writer, &plan)?;
+    let num_workers = workers.unwrap_or_else(num_cpus::get).max(1);
+
+    let use_parallel = num_workers > 1
+        && plan.main_sheet.is_some()
+        && !plan.col_asts.is_empty()
+        && plan.total_data_rows >= 10_000;
+
+    let (rows_processed, formulas_evaluated) = if use_parallel {
+        let main_sheet_name = plan
+            .main_sheet
+            .as_ref()
+            .ok_or_else(|| XlStreamError::Internal("no main sheet".into()))?
+            .clone();
+
+        tracing::info!(
+            workers = num_workers,
+            total_rows = plan.total_data_rows,
+            "parallel evaluation: spawning workers"
+        );
+
+        // Write non-main sheets first (passthrough).
+        for name in &plan.sheet_names {
+            if Some(name.as_str()) != plan.main_sheet.as_deref() {
+                let mut sh = writer.add_sheet(name)?;
+                let mut stream = reader.cells(name)?;
+                while let Some((row_idx, row_values)) = stream.next_row()? {
+                    sh.write_row(row_idx, &row_values)?;
+                }
+                drop(sh);
+            }
+        }
+
+        let prelude = Arc::new(plan.prelude);
+        let col_asts = Arc::new(plan.col_asts);
+
+        stream_parallel(
+            input,
+            &mut writer,
+            &prelude,
+            &col_asts,
+            &plan.topo_order,
+            &main_sheet_name,
+            plan.total_data_rows,
+            num_workers,
+        )?
+    } else {
+        tracing::debug!("single-threaded evaluation");
+        stream_single_threaded(&mut reader, &mut writer, &plan)?
+    };
 
     writer.finish()?;
     Ok(EvaluateSummary { rows_processed, formulas_evaluated, duration: start.elapsed() })
@@ -268,6 +322,169 @@ fn stream_single_threaded(
     }
 
     Ok((rows_processed, formulas_evaluated))
+}
+
+/// Parallel row evaluation. Spawns `num_workers` threads, each with its
+/// own calamine reader seeked to its row range. Results flow through a
+/// bounded channel; the caller drains them in row order.
+///
+/// Non-main sheets must be written by the caller before calling this.
+fn stream_parallel(
+    input: &Path,
+    output: &mut Writer,
+    prelude: &Arc<Prelude>,
+    col_asts: &Arc<HashMap<u32, Ast>>,
+    topo_order: &[u32],
+    main_sheet: &str,
+    total_data_rows: u32,
+    num_workers: usize,
+) -> Result<(u64, u64), XlStreamError> {
+    let chunk_size = (total_data_rows as usize).div_ceil(num_workers);
+
+    // Header row: read from a fresh reader, write before spawning workers.
+    let header_row = {
+        let mut header_reader = Reader::open(input)?;
+        let mut stream = header_reader.cells(main_sheet)?;
+        stream
+            .next_row()?
+            .ok_or_else(|| XlStreamError::Internal("main sheet has no rows".into()))?
+    };
+
+    let mut sh = output.add_sheet(main_sheet)?;
+    sh.write_row(header_row.0, &header_row.1)?;
+
+    let (tx, rx) = crossbeam_channel::bounded::<WorkerMsg>(num_workers * 1024);
+
+    let input_path = input.to_path_buf();
+    let main_name = main_sheet.to_string();
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_workers)
+        .build()
+        .map_err(|e| XlStreamError::Internal(format!("failed to build thread pool: {e}")))?;
+
+    for worker_id in 0..num_workers {
+        let tx = tx.clone();
+        let prelude = Arc::clone(prelude);
+        let col_asts = Arc::clone(col_asts);
+        let topo_order = topo_order.to_owned();
+        let input_path = input_path.clone();
+        let main_name = main_name.clone();
+
+        let start_row = 1 + u32::try_from(worker_id * chunk_size).unwrap_or(u32::MAX - 1);
+        let end_row = u32::try_from(1 + (worker_id + 1) * chunk_size)
+            .unwrap_or(u32::MAX)
+            .min(1 + total_data_rows);
+
+        pool.spawn(move || {
+            if let Err(e) = run_worker(
+                &input_path,
+                &main_name,
+                &prelude,
+                &col_asts,
+                &topo_order,
+                start_row,
+                end_row,
+                &tx,
+            ) {
+                let _ = tx.send(Err(e));
+            }
+        });
+    }
+
+    drop(tx);
+
+    let mut rows_processed: u64 = 1; // header already written
+    let mut formulas_evaluated: u64 = 0;
+    let mut expected_row: u32 = 1;
+    let mut buffer: BTreeMap<u32, (Vec<Value>, u64)> = BTreeMap::new();
+    let mut first_error: Option<XlStreamError> = None;
+
+    for msg in &rx {
+        match msg {
+            Ok((row_idx, values, formulas_count)) => {
+                buffer.insert(row_idx, (values, formulas_count));
+                while let Some((vals, fc)) = buffer.remove(&expected_row) {
+                    sh.write_row(expected_row, &vals)?;
+                    rows_processed += 1;
+                    formulas_evaluated += fc;
+                    expected_row += 1;
+                }
+            }
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+        }
+    }
+
+    while let Some((row_idx, (vals, fc))) = buffer.pop_first() {
+        if first_error.is_some() {
+            break;
+        }
+        sh.write_row(row_idx, &vals)?;
+        rows_processed += 1;
+        formulas_evaluated += fc;
+    }
+
+    drop(sh);
+
+    if let Some(e) = first_error {
+        return Err(e);
+    }
+
+    Ok((rows_processed, formulas_evaluated))
+}
+
+/// Worker: open reader, seek to `start_row`, evaluate
+/// [`start_row`, `end_row`), send each row through the channel.
+fn run_worker(
+    input: &Path,
+    main_sheet: &str,
+    prelude: &Prelude,
+    col_asts: &HashMap<u32, Ast>,
+    topo_order: &[u32],
+    start_row: u32,
+    end_row: u32,
+    tx: &crossbeam_channel::Sender<WorkerMsg>,
+) -> Result<(), XlStreamError> {
+    tracing::debug!(start_row, end_row, rows = end_row - start_row, "worker starting");
+
+    let mut reader = Reader::open(input)?;
+    let mut stream = reader.cells(main_sheet)?;
+    stream.seek_to_row(start_row)?;
+
+    let interp = Interpreter::new(prelude);
+
+    while let Some((row_idx, mut row_values)) = stream.next_row()? {
+        if row_idx >= end_row {
+            break;
+        }
+
+        let mut formulas_in_row: u64 = 0;
+        for &fcol in topo_order {
+            let Some(ast) = col_asts.get(&fcol) else {
+                continue;
+            };
+            let fcol_idx = fcol as usize;
+            if fcol_idx >= row_values.len() {
+                row_values.resize(fcol_idx + 1, Value::Empty);
+            }
+            let result = {
+                let scope = RowScope::new(&row_values, row_idx);
+                interp.eval(ast.root(), &scope)
+            };
+            row_values[fcol_idx] = result;
+            formulas_in_row += 1;
+        }
+
+        if tx.send(Ok((row_idx, row_values, formulas_in_row))).is_err() {
+            return Ok(());
+        }
+    }
+
+    Ok(())
 }
 
 /// Parse + classify all formula columns for `main_sheet`. Returns the
