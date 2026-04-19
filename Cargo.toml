@@ -10,6 +10,7 @@ members = [
     "crates/xlstream-eval",
     "crates/xlstream-cli",
     "bindings/python",
+    "benchmarks",
 ]
 default-members = [
     "crates/xlstream-core",
