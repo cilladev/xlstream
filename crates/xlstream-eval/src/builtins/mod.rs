@@ -24,7 +24,6 @@ use crate::scope::RowScope;
 ///
 /// Used by pure builtins (string, math, etc.) that don't need
 /// short-circuit evaluation.
-#[allow(dead_code)] // used once string/math/etc dispatch arms land
 fn eval_args(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Vec<Value> {
     args.iter().map(|a| interp.eval(*a, scope)).collect()
 }
@@ -62,6 +61,11 @@ pub(crate) fn dispatch(
         "XMATCH" | "_XLFN.XMATCH" => Some(lookup::builtin_xmatch(args, interp, scope)),
         "INDEX" => Some(lookup::builtin_index(args, interp, scope)),
         "CHOOSE" => Some(lookup::builtin_choose(args, interp, scope)),
+        // -- string builtins (pure, eager eval) --
+        "LEFT" => Some(string::builtin_left(&eval_args(args, interp, scope))),
+        "RIGHT" => Some(string::builtin_right(&eval_args(args, interp, scope))),
+        "MID" => Some(string::builtin_mid(&eval_args(args, interp, scope))),
+        "LEN" => Some(string::builtin_len(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
