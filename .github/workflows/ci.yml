@@ -96,6 +96,18 @@ jobs:
           tool: cargo-audit
       - run: cargo audit
 
+  # Golden-file + per-issue regression tests — accuracy gate.
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Golden-file regression (117 surfaces vs Excel)
+        run: cargo test -p xlstream-eval --test regression_base -- golden_file_regression --nocapture
+      - name: Per-issue regression tests
+        run: cargo test -p xlstream-eval --test regression_per_issue --nocapture
+
   # Per-PR performance gate — fails if micro-benchmarks regress >15%.
   bench-gate:
     runs-on: ubuntu-latest
