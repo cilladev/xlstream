@@ -452,6 +452,8 @@ fn values_match(expected: &Data, actual: &Data) -> bool {
         | (Data::Bool(false), Data::Int(0))
         | (Data::Int(0), Data::Bool(false))
         | (Data::Empty, Data::Empty) => true,
+        // Empty string ≈ Empty (rust_xlsxwriter discards empty strings)
+        (Data::String(s), Data::Empty) | (Data::Empty, Data::String(s)) if s.is_empty() => true,
         // Error (Excel) vs String (xlstream writes errors as text)
         (Data::Error(e), Data::String(s)) | (Data::String(s), Data::Error(e)) => {
             s == error_to_string(e)
