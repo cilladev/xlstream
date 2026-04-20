@@ -470,6 +470,7 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
 fn classify_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) -> Disposition {
     let upper = name.to_uppercase();
     let mut has_row_local_criteria = false;
+    let mut has_aggregate_arg = false;
     for (i, arg) in args.iter().enumerate() {
         if is_criteria_arg(&upper, i) && contains_row_local_ref(arg, ctx) {
             has_row_local_criteria = true;
@@ -483,11 +484,16 @@ fn classify_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) ->
         if matches!(d, Disposition::Unsupported(_)) {
             return d;
         }
+        if matches!(d, Disposition::Aggregate) {
+            has_aggregate_arg = true;
+        }
     }
     if has_row_local_criteria {
         Disposition::Mixed
-    } else {
+    } else if has_aggregate_arg {
         Disposition::Aggregate
+    } else {
+        Disposition::RowLocal
     }
 }
 
@@ -727,5 +733,33 @@ mod tests {
         let ast = crate::parse("SUMIF(A:A,\"EMEA\",B:B)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
         assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn aggregate_with_literal_args_is_row_local() {
+        let ast = crate::parse("PRODUCT(2,3,4)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn aggregate_with_cell_ref_args_is_row_local() {
+        let ast = crate::parse("PRODUCT(A2,B2)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn aggregate_with_range_arg_stays_aggregate() {
+        let ast = crate::parse("PRODUCT(A:A)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
+        assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn sum_with_literal_args_is_row_local() {
+        let ast = crate::parse("SUM(1,2,3)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
 }
