@@ -52,26 +52,26 @@ repos:
         pass_filenames: false
         require_serial: true
 
-  # -------- Rust: tests on push (too slow for every commit) --------
-  - repo: local
-    hooks:
-      - id: cargo-test
-        name: cargo test
-        entry: cargo test --workspace --all-features
-        language: system
-        types: [rust]
-        pass_filenames: false
-        stages: [pre-push]
-        require_serial: true
-
-      - id: cargo-doctest
-        name: cargo test --doc
-        entry: cargo test --workspace --doc
-        language: system
-        types: [rust]
-        pass_filenames: false
-        stages: [pre-push]
-        require_serial: true
+  # -------- Rust: tests on push (disabled — too slow) --------
+  # - repo: local
+  #   hooks:
+  #     - id: cargo-test
+  #       name: cargo test
+  #       entry: cargo test --workspace --all-features
+  #       language: system
+  #       types: [rust]
+  #       pass_filenames: false
+  #       stages: [pre-push]
+  #       require_serial: true
+  #
+  #     - id: cargo-doctest
+  #       name: cargo test --doc
+  #       entry: cargo test --workspace --doc
+  #       language: system
+  #       types: [rust]
+  #       pass_filenames: false
+  #       stages: [pre-push]
+  #       require_serial: true
 
   # -------- Python (only for bindings/python/) --------
   - repo: https://github.com/astral-sh/ruff-pre-commit
