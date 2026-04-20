@@ -138,7 +138,7 @@ impl FoldState {
             AggKind::CountBlank =>
             {
                 #[allow(clippy::cast_precision_loss)]
-                Value::Number(self.countblank as f64)
+                Value::Number((xlstream_core::EXCEL_MAX_ROWS - self.counta) as f64)
             }
             AggKind::Average => {
                 if let Some(e) = self.error {
@@ -868,12 +868,13 @@ mod tests {
     // ===== FoldState: COUNTBLANK =====
 
     #[test]
-    fn fold_countblank_counts_empty() {
+    fn fold_countblank_uses_excel_max_rows() {
         let mut s = FoldState::new();
         s.feed(&Value::Empty);
         s.feed(&Value::Number(0.0));
         s.feed(&Value::Empty);
-        assert_eq!(s.finish(AggKind::CountBlank), Value::Number(2.0));
+        // COUNTBLANK = EXCEL_MAX_ROWS - counta; counta=1 (the number)
+        assert_eq!(s.finish(AggKind::CountBlank), Value::Number(1_048_575.0));
     }
 
     // ===== FoldState: AVERAGE =====
