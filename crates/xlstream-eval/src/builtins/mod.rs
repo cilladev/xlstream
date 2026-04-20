@@ -79,6 +79,7 @@ pub(crate) fn expand_range(
 /// Look up `name` (case-insensitive) and call the matching builtin.
 ///
 /// Returns `None` for unknown functions — the caller decides the fallback.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn dispatch(
     name: &str,
     args: &[NodeRef<'_>],
@@ -105,6 +106,9 @@ pub(crate) fn dispatch(
         "SUMIF" => Some(multi_conditional::builtin_sumif(args, interp, scope)),
         "COUNTIF" => Some(multi_conditional::builtin_countif(args, interp, scope)),
         "AVERAGEIF" => Some(multi_conditional::builtin_averageif(args, interp, scope)),
+        "PRODUCT" => {
+            Some(aggregate::product(&eval_args(args, interp, scope)).unwrap_or_else(Value::Error))
+        }
         "VLOOKUP" => Some(lookup::builtin_vlookup(args, interp, scope)),
         "XLOOKUP" | "_XLFN.XLOOKUP" => Some(lookup::builtin_xlookup(args, interp, scope)),
         "HLOOKUP" => Some(lookup::builtin_hlookup(args, interp, scope)),
