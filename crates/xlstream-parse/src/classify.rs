@@ -35,7 +35,7 @@ pub enum UnsupportedReason {
     NonStaticCriteria,
     /// Dynamic-array spill (`FILTER`, `UNIQUE`, ...).
     DynamicArray,
-    /// Volatile function not in [`crate::sets::VOLATILE_STREAMING_OK`].
+    /// Volatile function not in `crate::sets::VOLATILE_STREAMING_OK`.
     VolatileUnsupported,
     /// `[Book.xlsx]Sheet1!A1`-style external workbook reference.
     ExternalReference,

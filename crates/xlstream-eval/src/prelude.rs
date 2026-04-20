@@ -503,7 +503,7 @@ impl Prelude {
     }
 
     /// Return the `TODAY()` serial. Logs a warning and returns serial 0
-    /// if volatile data was never configured via [`with_volatile`].
+    /// if volatile data was never configured via `with_volatile`.
     ///
     /// # Examples
     ///
@@ -523,7 +523,7 @@ impl Prelude {
     }
 
     /// Return the `NOW()` serial. Logs a warning and returns serial 0
-    /// if volatile data was never configured via [`with_volatile`].
+    /// if volatile data was never configured via `with_volatile`.
     ///
     /// # Examples
     ///

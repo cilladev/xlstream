@@ -4,7 +4,7 @@
 //! [`collect_aggregate_keys`] walks a rewritten AST for `PreludeRef`
 //! nodes and returns the set of [`AggregateKey`]s needed. The
 //! [`execute_prelude`] function streams the main sheet, folds each
-//! column's values through [`FoldState`], and builds a filled
+//! column's values through `FoldState`, and builds a filled
 //! [`Prelude`].
 
 use std::collections::HashMap;
@@ -399,7 +399,7 @@ fn extract_averageifs_key(
     })
 }
 
-/// Walk an AST and collect all [`BoundedRangeKey`]s referenced by
+/// Walk an AST and collect all `BoundedRangeKey`s referenced by
 /// `RangeRef` nodes with bounded rows and a single column.
 ///
 /// These are bounded ranges inside range-expanding functions that
@@ -474,7 +474,7 @@ fn collect_range_keys_recursive(
 }
 
 /// Execute the prelude pass: stream the main sheet, fold column values
-/// through [`FoldState`] accumulators, and build a filled [`Prelude`].
+/// through `FoldState` accumulators, and build a filled [`Prelude`].
 ///
 /// Skips the first row (header). Each subsequent row feeds the relevant
 /// column values into accumulators. After the stream is exhausted,

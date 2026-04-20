@@ -53,7 +53,7 @@ pub(crate) static VOLATILE_STREAMING_OK: Set<&'static str> = phf_set! {
     "TODAY", "NOW",
 };
 
-/// `true` if `name` is in [`UNSUPPORTED_FUNCTIONS`] (case-insensitive).
+/// `true` if `name` is in `UNSUPPORTED_FUNCTIONS` (case-insensitive).
 ///
 /// # Examples
 ///
@@ -66,7 +66,7 @@ pub fn is_unsupported(name: &str) -> bool {
     UNSUPPORTED_FUNCTIONS.contains(name.to_uppercase().as_str())
 }
 
-/// `true` if `name` is in [`AGGREGATE_FUNCTIONS`] (case-insensitive).
+/// `true` if `name` is in `AGGREGATE_FUNCTIONS` (case-insensitive).
 ///
 /// # Examples
 ///
@@ -79,7 +79,7 @@ pub fn is_aggregate(name: &str) -> bool {
     AGGREGATE_FUNCTIONS.contains(name.to_uppercase().as_str())
 }
 
-/// `true` if `name` is in [`LOOKUP_FUNCTIONS`] (case-insensitive).
+/// `true` if `name` is in `LOOKUP_FUNCTIONS` (case-insensitive).
 ///
 /// # Examples
 ///
@@ -92,7 +92,7 @@ pub fn is_lookup(name: &str) -> bool {
     LOOKUP_FUNCTIONS.contains(name.to_uppercase().as_str())
 }
 
-/// `true` if `name` is in [`VOLATILE_STREAMING_OK`] (case-insensitive).
+/// `true` if `name` is in `VOLATILE_STREAMING_OK` (case-insensitive).
 ///
 /// # Examples
 ///
@@ -105,7 +105,7 @@ pub fn is_volatile_streaming_ok(name: &str) -> bool {
     VOLATILE_STREAMING_OK.contains(name.to_uppercase().as_str())
 }
 
-/// `true` if `name` is in [`DYNAMIC_ARRAY_FUNCTIONS`] (case-insensitive).
+/// `true` if `name` is in `DYNAMIC_ARRAY_FUNCTIONS` (case-insensitive).
 ///
 /// # Examples
 ///
@@ -118,7 +118,7 @@ pub fn is_dynamic_array(name: &str) -> bool {
     DYNAMIC_ARRAY_FUNCTIONS.contains(name.to_uppercase().as_str())
 }
 
-/// `true` if `name` is in [`VOLATILE_UNSUPPORTED`] (case-insensitive).
+/// `true` if `name` is in `VOLATILE_UNSUPPORTED` (case-insensitive).
 ///
 /// # Examples
 ///
@@ -140,7 +140,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "NETWORKDAYS", "WORKDAY", "AND", "OR",
 };
 
-/// `true` if `name` is in [`RANGE_EXPANDING_FUNCTIONS`] (case-insensitive).
+/// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
 ///
 /// # Examples
 ///
