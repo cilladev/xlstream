@@ -96,7 +96,6 @@ fn sumifs_on_non_streaming_sheet() {
 }
 
 #[test]
-#[ignore = "bug: cross-sheet conditional aggregates return #VALUE! (see issue.md section 2)"]
 fn sumif_on_non_streaming_sheet() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
@@ -113,7 +112,6 @@ fn sumif_on_non_streaming_sheet() {
 }
 
 #[test]
-#[ignore = "bug: cross-sheet conditional aggregates return #VALUE! (see issue.md section 2)"]
 fn countif_on_non_streaming_sheet() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
@@ -130,7 +128,6 @@ fn countif_on_non_streaming_sheet() {
 }
 
 #[test]
-#[ignore = "bug: cross-sheet conditional aggregates return #VALUE! (see issue.md section 2)"]
 fn averageif_on_non_streaming_sheet() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
