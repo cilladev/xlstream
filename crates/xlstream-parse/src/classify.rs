@@ -469,16 +469,26 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
 
 fn classify_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) -> Disposition {
     let upper = name.to_uppercase();
+    let mut has_row_local_criteria = false;
     for (i, arg) in args.iter().enumerate() {
         if is_criteria_arg(&upper, i) && contains_row_local_ref(arg, ctx) {
-            return Disposition::Unsupported(UnsupportedReason::NonStaticCriteria);
+            has_row_local_criteria = true;
+            let d = disposition(arg, ctx, None);
+            if matches!(d, Disposition::Unsupported(_)) {
+                return d;
+            }
+            continue;
         }
         let d = disposition(arg, ctx, Some(FnKind::Aggregate));
-        if let Disposition::Unsupported(_) = d {
+        if matches!(d, Disposition::Unsupported(_)) {
             return d;
         }
     }
-    Disposition::Aggregate
+    if has_row_local_criteria {
+        Disposition::Mixed
+    } else {
+        Disposition::Aggregate
+    }
 }
 
 fn is_criteria_arg(fn_upper: &str, index: usize) -> bool {
@@ -696,5 +706,26 @@ mod tests {
         let ast = crate::parse("NETWORKDAYS(A2, B2)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
         assert!(!matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+    }
+
+    #[test]
+    fn sumif_with_row_local_criteria_classifies_as_mixed() {
+        let ast = crate::parse("SUMIF(A:A,A2,B:B)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+    }
+
+    #[test]
+    fn countif_with_row_local_criteria_classifies_as_mixed() {
+        let ast = crate::parse("COUNTIF(A:A,A2)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+    }
+
+    #[test]
+    fn sumif_with_static_criteria_still_classifies_as_aggregate() {
+        let ast = crate::parse("SUMIF(A:A,\"EMEA\",B:B)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
     }
 }
