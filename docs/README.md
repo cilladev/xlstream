@@ -46,7 +46,8 @@ Navigation for everything written about the project.
 - [`research/rust_xlsxwriter.md`](research/rust_xlsxwriter.md) — streaming xlsx writer.
 - [`research/pyo3-maturin.md`](research/pyo3-maturin.md) — Python binding tooling in 2026.
 - [`research/prior-art.md`](research/prior-art.md) — competitive landscape.
-- [`research/benchmarks.md`](research/benchmarks.md) — reference workloads and target numbers.
+- [`research/benchmarks.md`](research/benchmarks.md) — pre-build analysis and formualizer baseline.
+- [`benchmarks.md`](benchmarks.md) — measured xlstream performance numbers.
 
 ## Phases
 
