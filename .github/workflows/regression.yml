@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Golden-file regression (117 surfaces vs Excel)
-        run: cargo test -p xlstream-eval --test regression_base -- golden_file_regression --nocapture
-      - name: Per-issue regression tests
+      - name: Regression tests (base)
+        run: cargo test -p xlstream-eval --test regression_base -- --nocapture
+      - name: Regression tests (per-issue)
         run: cargo test -p xlstream-eval --test regression_per_issue -- --nocapture
