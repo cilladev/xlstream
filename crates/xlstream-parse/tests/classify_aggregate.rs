@@ -1,6 +1,6 @@
 //! Integration tests: formulas that classify as `AggregateOnly`.
 
-use xlstream_parse::{classify, parse, Classification, ClassificationContext, UnsupportedReason};
+use xlstream_parse::{classify, parse, Classification, ClassificationContext};
 
 #[test]
 fn sum_whole_column_is_aggregate_only() {
@@ -63,31 +63,22 @@ fn aggregate_with_range_on_main_streaming_sheet_is_aggregate_only() {
 }
 
 #[test]
-fn sumif_with_row_varying_criterion_is_non_static_criteria() {
+fn sumif_with_row_varying_criterion_classifies_as_mixed() {
     let ast = parse("SUMIF(A:A, B2, C:C)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert!(matches!(
-        classify(&ast, &ctx),
-        Classification::Unsupported(UnsupportedReason::NonStaticCriteria)
-    ));
+    assert_eq!(classify(&ast, &ctx), Classification::Mixed);
 }
 
 #[test]
-fn countif_with_row_varying_criterion_is_non_static_criteria() {
+fn countif_with_row_varying_criterion_classifies_as_mixed() {
     let ast = parse("COUNTIF(A:A, A2)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert!(matches!(
-        classify(&ast, &ctx),
-        Classification::Unsupported(UnsupportedReason::NonStaticCriteria)
-    ));
+    assert_eq!(classify(&ast, &ctx), Classification::Mixed);
 }
 
 #[test]
-fn sumifs_with_row_varying_criterion_is_non_static_criteria() {
+fn sumifs_with_row_varying_criterion_classifies_as_mixed() {
     let ast = parse("SUMIFS(C:C, A:A, D2, B:B, E2)").unwrap();
-    let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert!(matches!(
-        classify(&ast, &ctx),
-        Classification::Unsupported(UnsupportedReason::NonStaticCriteria)
-    ));
+    let ctx = ClassificationContext::for_cell("Sheet1", 2, 6);
+    assert_eq!(classify(&ast, &ctx), Classification::Mixed);
 }
