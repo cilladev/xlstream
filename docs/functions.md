@@ -20,19 +20,19 @@ All v0.1. Non-negotiable.
 
 | Symbol | Kind | Name | Tier | Phase | Status |
 |---|---|---|---|---|---|
-| `+` | binary | add / unary plus | v0.1 | 5 | [ ] |
-| `-` | binary / unary | subtract / negate | v0.1 | 5 | [ ] |
-| `*` | binary | multiply | v0.1 | 5 | [ ] |
-| `/` | binary | divide | v0.1 | 5 | [ ] |
-| `^` | binary | exponent | v0.1 | 5 | [ ] |
-| `&` | binary | text concatenation | v0.1 | 5 | [ ] |
-| `%` | postfix unary | percent (divide by 100) | v0.1 | 5 | [ ] |
-| `=` | binary | equality | v0.1 | 5 | [ ] |
-| `<>` | binary | inequality | v0.1 | 5 | [ ] |
-| `<` | binary | less-than | v0.1 | 5 | [ ] |
-| `>` | binary | greater-than | v0.1 | 5 | [ ] |
-| `<=` | binary | less-or-equal | v0.1 | 5 | [ ] |
-| `>=` | binary | greater-or-equal | v0.1 | 5 | [ ] |
+| `+` | binary | add / unary plus | v0.1 | 5 | [x] |
+| `-` | binary / unary | subtract / negate | v0.1 | 5 | [x] |
+| `*` | binary | multiply | v0.1 | 5 | [x] |
+| `/` | binary | divide | v0.1 | 5 | [x] |
+| `^` | binary | exponent | v0.1 | 5 | [x] |
+| `&` | binary | text concatenation | v0.1 | 5 | [x] |
+| `%` | postfix unary | percent (divide by 100) | v0.1 | 5 | [x] |
+| `=` | binary | equality | v0.1 | 5 | [x] |
+| `<>` | binary | inequality | v0.1 | 5 | [x] |
+| `<` | binary | less-than | v0.1 | 5 | [x] |
+| `>` | binary | greater-than | v0.1 | 5 | [x] |
+| `<=` | binary | less-or-equal | v0.1 | 5 | [x] |
+| `>=` | binary | greater-or-equal | v0.1 | 5 | [x] |
 
 ## Logical (Phase 6)
 
@@ -142,8 +142,8 @@ All v0.1. Hash-indexed exact match, binary-search approx, wildcard fallback. Sin
 | `ATAN` | `(x)` | returns radians | v0.2 | [x] |
 | `ATAN2` | `(y, x)` | note Excel arg order (y before x) | v0.2 | [x] |
 | `PI` | `()` | constant π | v0.1 | [x] |
-| `RAND` | `()` | single-evaluation-per-run (deterministic with seed) | v0.1 | [ ] |
-| `RANDBETWEEN` | `(low, high)` | single-evaluation-per-run | v0.1 | [ ] |
+| `RAND` | `()` | **unsupported** — volatile; deterministic seeding deferred | v0.1 | [ ] |
+| `RANDBETWEEN` | `(low, high)` | **unsupported** — volatile; deterministic seeding deferred | v0.1 | [ ] |
 
 ## Date / Time (Phase 9)
 
@@ -206,39 +206,41 @@ See [`architecture/streaming-model.md`](architecture/streaming-model.md) for *wh
 
 ## Tallies
 
-### v0.1 ship gate — 81 functions + 13 operators = 94 surfaces
+### Implemented — 104 functions + 13 operators = 117 surfaces
 
-| Category | v0.1 count |
+All v0.1 gate functions shipped (except RAND/RANDBETWEEN, marked unsupported). All v0.2 stretch functions also shipped early.
+
+| Category | Implemented |
 |---|---|
 | Operators | 13 |
 | Logical | 11 |
 | Aggregates | 15 |
 | Lookup | 7 |
-| Text | 16 |
-| Math | 12 |
-| Date/Time | 10 |
-| Info | 6 |
-| Financial | 4 |
+| Text | 19 |
+| Math | 23 |
+| Date/Time | 12 |
+| Info | 10 |
+| Financial | 6 |
 
-### v0.2 stretch — 27 additional functions
+### Not yet implemented — 3 functions (deferred to v0.2)
 
-| Category | v0.2 adds |
+| Category | Deferred |
 |---|---|
 | Aggregates | SUMPRODUCT, MINIFS, MAXIFS |
-| Text | PROPER, CLEAN, EXACT |
-| Math | CEILING, FLOOR, LN, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS, ATAN, ATAN2 |
-| Date/Time | NETWORKDAYS, WORKDAY |
-| Info | ISLOGICAL, ISNONTEXT, ISREF, TYPE |
-| Financial | IRR, RATE |
 
-### Grand total — 108 functions + 13 operators = 121 surfaces
+### Unsupported — 2 functions
+
+| Function | Reason |
+|---|---|
+| RAND | Volatile; deterministic seeding deferred |
+| RANDBETWEEN | Volatile; deterministic seeding deferred |
 
 ## How to add a new function
 
 1. Pick a home — category in this file, matching phase doc.
 2. Implement in the right `xlstream-eval/src/builtins/*.rs` module.
-3. Register in `BUILTIN_REGISTRY` (or `STATEFUL_BUILTINS`).
-4. Write ≥ 5 unit tests (happy, empty, error-propagation, coercion, edge case).
+3. Add a match arm in `dispatch()` (`builtins/mod.rs`).
+4. Write >= 5 unit tests (happy, empty, error-propagation, coercion, edge case).
 5. Tick the box here in the same PR.
 6. Update `CHANGELOG.md`.
 

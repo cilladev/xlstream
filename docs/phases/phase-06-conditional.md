@@ -99,7 +99,7 @@ Each function: at least 5 unit tests + 1 integration test.
 ## Integration tests
 
 - [x] Fixture with `IFS(Deal Value > 100000, "Platinum", Deal Value > 50000, "Gold", Deal Value > 10000, "Silver", TRUE, "Bronze")` — matches xlformula's benchmark.
-- [ ] Fixture with `IFERROR(VLOOKUP(...), "N/A")` — needs a lookup sheet; depends on Phase 8 too. Defer this one until Phase 8 lands.
+- [ ] Fixture with `IFERROR(VLOOKUP(...), "N/A")` — needs a lookup sheet; depends on Phase 8 too. Defer this one until Phase 8 lands. (deferred: cross-phase integration test)
 
 ## Done when
 

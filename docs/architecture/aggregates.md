@@ -107,20 +107,20 @@ Parallelism: plan steps are independent and run on separate rayon workers.
 
 ## Prelude storage
 
+See `xlstream-eval/src/prelude.rs` for the canonical definition.
+
 ```rust
 pub struct Prelude {
-    pub aggregates: HashMap<AggKey, Value>,
-    pub lookup_indexes: HashMap<LookupKey, LookupIndex>,
-    pub volatile: Volatile, // TODAY, NOW, RAND — single values
-}
-
-pub enum AggKey {
-    Whole { sheet: SheetId, col: u16, kind: AggKind },
-    Conditional { sheet: SheetId, ... },
+    aggregates: HashMap<AggregateKey, Value>,
+    conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
+    multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, Value>>,
+    lookup_sheets: HashMap<String, LookupSheet>,
+    volatile: Option<VolatileData>,  // TODAY, NOW, RAND — single values
+    cached_ranges: HashMap<BoundedRangeKey, Vec<Value>>,
 }
 ```
 
-The evaluator queries `prelude.aggregates` by `AggKey` at row eval time — `O(1)` hashmap hit.
+The evaluator queries `prelude.aggregates` (or conditional/multi-conditional variants) by key at row eval time — `O(1)` hashmap hit.
 
 ## Interaction with the evaluator
 
