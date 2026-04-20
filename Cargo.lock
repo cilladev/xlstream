@@ -2034,6 +2034,7 @@ dependencies = [
 name = "xlstream-eval"
 version = "0.1.0"
 dependencies = [
+ "calamine",
  "crossbeam-channel",
  "num_cpus",
  "rayon",

@@ -25,6 +25,7 @@ num_cpus.workspace = true
 [dev-dependencies]
 tempfile = { workspace = true }
 rust_xlsxwriter = { workspace = true }
+calamine = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
