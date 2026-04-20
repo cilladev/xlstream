@@ -5,6 +5,8 @@ Semver.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-20
+
 ### Added
 - Golden-file regression test suite comparing xlstream output against Excel-cached values (117 formula surfaces)
 - Per-issue regression test framework (`regression_per_issue.rs`) with ignored-until-fixed workflow
@@ -19,12 +21,12 @@ Semver.
 - `FLOOR(-2.3, 1)` returns -3 instead of `#NUM!`; removed legacy sign-mismatch check to match modern Excel (2010+)
 - `ISREF(A2)` returns TRUE; moved to lazy dispatch to inspect raw AST node before evaluation
 
-### Known Limitations
-- Empty string cells (e.g., `MID("x",2,3)` → `""`) are written as blank by `rust_xlsxwriter` (library discards empty strings); downstream readers see `Empty` instead of `""`. Golden-file comparison treats these as equivalent.
-
 ### Changed
-- Renamed test files: `regression.rs` → `regression_base.rs` (golden-file), `regression_base.rs` → `regression_per_issue.rs` (per-issue)
 - `classify_aggregate` returns `RowLocal` when all args are scalar (no column ranges); generalizes to SUM/COUNT/MIN/MAX with literal args
+- Renamed test files: `regression.rs` → `regression_base.rs` (golden-file), `regression_base.rs` → `regression_per_issue.rs` (per-issue)
+
+### Known limitations
+- Empty string cells (e.g., `MID("x",2,3)` → `""`) written as blank by `rust_xlsxwriter` (upstream library discards empty strings); downstream readers see `Empty` instead of `""`
 
 ## [0.1.0] - 2026-04-20
 
