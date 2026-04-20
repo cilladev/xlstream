@@ -55,6 +55,46 @@ fn build_cross_sheet_fixture(input: &std::path::Path) {
     wb.save(input).unwrap();
 }
 
+fn build_cross_sheet_fixture_with_sumifs(input: &std::path::Path) {
+    let mut wb = Workbook::new();
+
+    let ws_ref = wb.add_worksheet();
+    ws_ref.set_name("RefData").unwrap();
+    let data: &[(&str, f64)] =
+        &[("EMEA", 500.0), ("APAC", 300.0), ("AMER", 700.0), ("EMEA", 200.0), ("APAC", 400.0)];
+    for (i, &(region, amount)) in data.iter().enumerate() {
+        let r = i as u32;
+        ws_ref.write_string(r, 0, region).unwrap();
+        ws_ref.write_number(r, 1, amount).unwrap();
+    }
+
+    let ws_main = wb.add_worksheet();
+    ws_main.set_name("Main").unwrap();
+    ws_main.write_string(0, 0, "Label").unwrap();
+    ws_main.write_string(0, 1, "SumifsResult").unwrap();
+
+    ws_main.write_string(1, 0, "test").unwrap();
+    ws_main.write_formula(1, 1, Formula::new("=SUMIFS(RefData!B:B,RefData!A:A,\"EMEA\")")).unwrap();
+
+    wb.save(input).unwrap();
+}
+
+#[test]
+fn sumifs_on_non_streaming_sheet() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    build_cross_sheet_fixture_with_sumifs(&input);
+    evaluate(&input, &output, None).unwrap();
+
+    let mut reader = Reader::open(&output).unwrap();
+    let rows = read_all_rows(&mut reader, "Main");
+
+    // SUMIFS(RefData!B:B, RefData!A:A, "EMEA") = 500 + 200 = 700
+    assert_eq!(rows[1].1[1], Value::Number(700.0), "cross-sheet SUMIFS");
+}
+
 #[test]
 #[ignore = "bug: cross-sheet conditional aggregates return #VALUE! (see issue.md section 2)"]
 fn sumif_on_non_streaming_sheet() {

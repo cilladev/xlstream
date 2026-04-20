@@ -29,12 +29,12 @@ fn extract_static_criteria(
     coerce::to_text(&val).to_ascii_lowercase()
 }
 
-/// Extract column index from a range reference argument. Returns the
-/// 1-based column index if the argument is a whole-column range
-/// (e.g., `A:A`).
-fn extract_criteria_col(node: NodeRef<'_>) -> Option<u32> {
+/// Extract column index and optional sheet from a range reference argument.
+fn extract_criteria_col_and_sheet(node: NodeRef<'_>) -> Option<(u32, Option<String>)> {
     match node.view() {
-        NodeView::RangeRef { start_col: Some(sc), end_col: Some(ec), .. } if sc == ec => Some(sc),
+        NodeView::RangeRef { sheet, start_col: Some(sc), end_col: Some(ec), .. } if sc == ec => {
+            Some((sc, sheet.map(ToString::to_string)))
+        }
         _ => None,
     }
 }
@@ -54,7 +54,7 @@ pub(crate) fn builtin_sumifs(
         return Value::Error(CellError::Value);
     }
 
-    let Some(sum_col) = extract_criteria_col(args[0]) else {
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
         return Value::Error(CellError::Value);
     };
 
@@ -66,7 +66,7 @@ pub(crate) fn builtin_sumifs(
         let range_idx = 1 + i * 2;
         let crit_idx = 2 + i * 2;
 
-        let Some(col) = extract_criteria_col(args[range_idx]) else {
+        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -75,7 +75,7 @@ pub(crate) fn builtin_sumifs(
         criteria_values.push(val);
     }
 
-    let key = MultiConditionalAggKey { kind: AggKind::Sum, sum_col, criteria_cols, sheet: None };
+    let key = MultiConditionalAggKey { kind: AggKind::Sum, sum_col, criteria_cols, sheet };
 
     let composite = build_composite_key(&criteria_values);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -98,23 +98,25 @@ pub(crate) fn builtin_countifs(
     let num_pairs = args.len() / 2;
     let mut criteria_cols = Vec::with_capacity(num_pairs);
     let mut criteria_values = Vec::with_capacity(num_pairs);
+    let mut sheet: Option<String> = None;
 
     for i in 0..num_pairs {
         let range_idx = i * 2;
         let crit_idx = i * 2 + 1;
 
-        let Some(col) = extract_criteria_col(args[range_idx]) else {
+        let Some((col, s)) = extract_criteria_col_and_sheet(args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
+        if i == 0 {
+            sheet = s;
+        }
 
         let val = extract_static_criteria(args[crit_idx], interp, scope);
         criteria_values.push(val);
     }
 
-    // COUNTIFS uses sum_col = 0 as a sentinel (no sum column needed).
-    let key =
-        MultiConditionalAggKey { kind: AggKind::Count, sum_col: 0, criteria_cols, sheet: None };
+    let key = MultiConditionalAggKey { kind: AggKind::Count, sum_col: 0, criteria_cols, sheet };
 
     let composite = build_composite_key(&criteria_values);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -134,7 +136,7 @@ pub(crate) fn builtin_averageifs(
         return Value::Error(CellError::Value);
     }
 
-    let Some(sum_col) = extract_criteria_col(args[0]) else {
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
         return Value::Error(CellError::Value);
     };
 
@@ -146,7 +148,7 @@ pub(crate) fn builtin_averageifs(
         let range_idx = 1 + i * 2;
         let crit_idx = 2 + i * 2;
 
-        let Some(col) = extract_criteria_col(args[range_idx]) else {
+        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -155,8 +157,7 @@ pub(crate) fn builtin_averageifs(
         criteria_values.push(val);
     }
 
-    let key =
-        MultiConditionalAggKey { kind: AggKind::Average, sum_col, criteria_cols, sheet: None };
+    let key = MultiConditionalAggKey { kind: AggKind::Average, sum_col, criteria_cols, sheet };
 
     let composite = build_composite_key(&criteria_values);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -171,11 +172,11 @@ pub(crate) fn builtin_sumif(
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
-    let Some(criteria_col) = extract_criteria_col(args[0]) else {
+    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
         return Value::Error(CellError::Value);
     };
     let sum_col = if args.len() >= 3 {
-        let Some(sc) = extract_criteria_col(args[2]) else {
+        let Some((sc, _)) = extract_criteria_col_and_sheet(args[2]) else {
             return Value::Error(CellError::Value);
         };
         sc
@@ -187,7 +188,7 @@ pub(crate) fn builtin_sumif(
         kind: AggKind::Sum,
         sum_col,
         criteria_cols: vec![criteria_col],
-        sheet: None,
+        sheet,
     };
     let composite = build_composite_key(&[criteria_val]);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -202,7 +203,7 @@ pub(crate) fn builtin_countif(
     if args.len() != 2 {
         return Value::Error(CellError::Value);
     }
-    let Some(criteria_col) = extract_criteria_col(args[0]) else {
+    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
         return Value::Error(CellError::Value);
     };
     let criteria_val = extract_static_criteria(args[1], interp, scope);
@@ -210,7 +211,7 @@ pub(crate) fn builtin_countif(
         kind: AggKind::Count,
         sum_col: 0,
         criteria_cols: vec![criteria_col],
-        sheet: None,
+        sheet,
     };
     let composite = build_composite_key(&[criteria_val]);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -225,11 +226,11 @@ pub(crate) fn builtin_averageif(
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
-    let Some(criteria_col) = extract_criteria_col(args[0]) else {
+    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
         return Value::Error(CellError::Value);
     };
     let sum_col = if args.len() >= 3 {
-        let Some(sc) = extract_criteria_col(args[2]) else {
+        let Some((sc, _)) = extract_criteria_col_and_sheet(args[2]) else {
             return Value::Error(CellError::Value);
         };
         sc
@@ -241,7 +242,7 @@ pub(crate) fn builtin_averageif(
         kind: AggKind::Average,
         sum_col,
         criteria_cols: vec![criteria_col],
-        sheet: None,
+        sheet,
     };
     let composite = build_composite_key(&[criteria_val]);
     interp.prelude().get_multi_conditional(&key, &composite)

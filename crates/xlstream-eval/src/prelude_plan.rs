@@ -672,8 +672,11 @@ pub fn execute_prelude(
             }
         }
 
-        // Feed multi-conditional folds.
+        // Feed multi-conditional folds (main-sheet keys only).
         for (i, mk) in multi_keys.iter().enumerate() {
+            if mk.sheet.is_some() {
+                continue;
+            }
             // Build composite key from criteria columns.
             let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
             for &cc in &mk.criteria_cols {
@@ -698,6 +701,47 @@ pub fn execute_prelude(
                 continue;
             };
             folds_map.entry(composite).or_insert_with(FoldState::new).feed(feed_val);
+        }
+    }
+
+    // Release mutable borrow on reader before cross-sheet scanning.
+    drop(stream);
+
+    // Cross-sheet multi-conditional pass: scan non-main sheets.
+    let mut cross_sheet_keys: HashMap<
+        String,
+        Vec<(usize, &crate::prelude::MultiConditionalAggKey)>,
+    > = HashMap::new();
+    for (i, mk) in multi_keys.iter().enumerate() {
+        if let Some(ref sheet_name) = mk.sheet {
+            cross_sheet_keys.entry(sheet_name.clone()).or_default().push((i, mk));
+        }
+    }
+
+    for (sheet_name, sheet_keys) in &cross_sheet_keys {
+        let mut cs_stream = reader.cells(sheet_name)?;
+        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
+            for &(i, mk) in sheet_keys {
+                let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
+                for &cc in &mk.criteria_cols {
+                    let idx = (cc as usize).saturating_sub(1);
+                    let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                    composite_parts.push(xlstream_core::coerce::to_text(val).to_ascii_lowercase());
+                }
+                let composite = composite_parts.join("\0");
+
+                let feed_val = if mk.sum_col > 0 {
+                    let idx = (mk.sum_col as usize).saturating_sub(1);
+                    row_values.get(idx).unwrap_or(&Value::Empty)
+                } else {
+                    &Value::Number(1.0)
+                };
+
+                let Some(folds_map) = multi_folds.get_mut(&i) else {
+                    continue;
+                };
+                folds_map.entry(composite).or_insert_with(FoldState::new).feed(feed_val);
+            }
         }
     }
 
