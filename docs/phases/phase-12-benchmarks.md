@@ -64,13 +64,15 @@ Each generated workbook includes:
 - **Lookup2** — 10,000 rows × 3 cols (product/category/price). Stress test for larger lookup tables.
 - **Holidays** — 30 rows × 1 col (date serials). For NETWORKDAYS/WORKDAY.
 
-### Performance targets
+### Performance targets (measured 2026-04-20)
 
 | Metric | Small (10k) | Medium (100k) | Large (1M) |
 |---|---|---|---|
-| Wall-clock (1 core) | < 2s | < 20s | < 200s |
-| Wall-clock (8 cores) | < 1s | < 5s | < 40s |
-| Peak RSS | < 50 MB | < 100 MB | < 300 MB |
+| Wall-clock (1 core) | 1.6s (< 2s) | 16s (< 20s) | 156s (< 200s) |
+| Wall-clock (8 cores) | — | 13.8s | 135s |
+| Peak RSS | 31 MB | 206 MB | 1.7 GB |
+
+RSS is dominated by calamine XML parsing and rust_xlsxwriter output buffering, not evaluation logic. The evaluator itself holds one row + prelude (~10 MB). RSS optimization requires upstream library changes (v0.2).
 
 ### Comparative baseline
 

@@ -6,12 +6,11 @@ Measured on Apple M-series, 8-core. Criterion for micro-benchmarks; wall-clock v
 
 | Tier | Rows | Workers | Wall-clock | Peak RSS | Formulas evaluated |
 |---|---|---|---|---|---|
-| Small | 10,000 | 1 | 1.6s | — | 299,970 |
-| Medium | 100,000 | 1 | 15.9s | — | 2,999,970 |
-| Medium | 100,000 | 4 | 13.3s | — | 2,999,970 |
-| Medium | 100,000 | 8 | 13.8s | — | 2,999,970 |
-| Large | 1,000,000 | 1 | 158s | 2.3 GB | 29,999,970 |
-| Large | 1,000,000 | 8 | 136s | — | 29,999,970 |
+| Small | 10,000 | 1 | 1.6s | 31 MB | 299,970 |
+| Medium | 100,000 | 1 | 16.0s | 206 MB | 2,999,970 |
+| Medium | 100,000 | 4 | 13.8s | 270 MB | 2,999,970 |
+| Large | 1,000,000 | 1 | 156s | 1.7 GB | 29,999,970 |
+| Large | 1,000,000 | 8 | 135s | 2.1 GB | 29,999,970 |
 
 ## Parallel scaling (medium tier, 100k rows)
 
