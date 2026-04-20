@@ -8,12 +8,22 @@ Semver.
 ### Added
 - Golden-file regression test suite comparing xlstream output against Excel-cached values (117 formula surfaces)
 - Per-issue regression test framework (`regression_per_issue.rs`) with ignored-until-fixed workflow
+- `EXCEL_MAX_ROWS` (1,048,576) and `EXCEL_MAX_COLS` (16,384) constants in xlstream-core
 
 ### Fixed
 - SUMIF/COUNTIF/AVERAGEIF with row-local criteria (e.g., `SUMIF(A:A,A2,B:B)`) no longer rejected at classification with `NonStaticCriteria`; pre-computes grouped aggregate maps in prelude, O(1) lookup per row
+- Cross-sheet conditional aggregates (e.g., `SUMIF(RefData!A:A,"EMEA",RefData!B:B)`) now correctly scan non-main sheets during prelude; previously returned `#VALUE!` or 0
+- `PRODUCT(2,3,4)` with literal/cell-ref args no longer returns `#VALUE!`; aggregate functions with all-scalar args now classify as RowLocal and evaluate inline
+- `COUNTA(H:H)` includes header row in prelude scan; previously undercounted by 1
+- `COUNTBLANK(H:H)` uses `EXCEL_MAX_ROWS - COUNTA` for whole-column ranges to match Excel's 1M+ row grid semantics
+- `FLOOR(-2.3, 1)` returns -3 instead of `#NUM!`; removed legacy sign-mismatch check to match modern Excel (2010+)
+
+### Known Limitations
+- Empty string cells (e.g., `MID("x",2,3)` → `""`) are written as blank by `rust_xlsxwriter` (library discards empty strings); downstream readers see `Empty` instead of `""`. Golden-file comparison treats these as equivalent.
 
 ### Changed
 - Renamed test files: `regression.rs` → `regression_base.rs` (golden-file), `regression_base.rs` → `regression_per_issue.rs` (per-issue)
+- `classify_aggregate` returns `RowLocal` when all args are scalar (no column ranges); generalizes to SUM/COUNT/MIN/MAX with literal args
 
 ## [0.1.0] - 2026-04-20
 
