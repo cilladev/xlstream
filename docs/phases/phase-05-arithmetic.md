@@ -76,7 +76,7 @@ For each op: at least 5 tests.
 - [x] `-2^2 = -4` (parser precedence); `(-2)^2 = 4` (explicit parens).
 - [x] `-(-1) = 1`.
 - [x] `"a" & "b" & "c" = "abc"`.
-- [ ] `2 ^ 3 ^ 2` — right-associative? Check Excel. Update test.
+- [x] `2 ^ 3 ^ 2` — right-associative (`2^3^2 = 512`). Tested in `crates/xlstream-eval/tests/precedence.rs`.
 - [x] `10 + "5" = 15`.
 - [x] `10 & "5" = "105"`.
 

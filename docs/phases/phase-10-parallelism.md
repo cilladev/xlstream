@@ -44,7 +44,7 @@
 - [x] calamine's `XlsxCellReader` doesn't natively seek. Implement:
   - [x] `fn seek_to_row(&mut self, target: u32) -> Result<(), XlStreamError>` that discards cells until `row >= target`.
   - [x] For worker 8 of 8 at 350k: the discard takes ~0.5–1 s. Document as known cost for v0.1.
-- [ ] Optimisation for v0.2: pre-scan xlsx to build a row-offset index.
+- [ ] Optimisation for v0.2: pre-scan xlsx to build a row-offset index. (deferred: v0.2)
 
 ### Thread pool
 
@@ -60,7 +60,7 @@
 ### Volatile determinism
 
 - [x] `Prelude::volatile` carries a single `TODAY` / `NOW` per run. All workers share it via `Arc<Prelude>`.
-- [ ] `RAND()` / `RANDBETWEEN` deterministic seeding — deferred: no RAND/RANDBETWEEN builtins implemented. Will add deterministic seeding when those builtins land.
+- [ ] `RAND()` / `RANDBETWEEN` deterministic seeding — deferred: no RAND/RANDBETWEEN builtins implemented. Will add deterministic seeding when those builtins land. (blocked: RAND/RANDBETWEEN not implemented)
 
 ### Tests
 

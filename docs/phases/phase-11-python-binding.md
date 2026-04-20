@@ -79,19 +79,19 @@ In `bindings/python/tests/`:
 ### CI wheels
 
 - [x] `.github/workflows/ci.yml` has a `python` job per OS that runs `maturin develop` + pytest (already scaffolded with guard).
-- [ ] `.github/workflows/release.yml` uses `PyO3/maturin-action@v1` to build wheels on:
-  - [ ] Linux x86_64 (manylinux).
-  - [ ] Linux aarch64.
-  - [ ] macOS x86_64.
-  - [ ] macOS arm64.
-  - [ ] Windows x64.
-- [ ] abi3-py39 means one wheel per (os, arch), covering 3.9+.
-- [ ] sdist job.
+- [ ] `.github/workflows/release.yml` uses `PyO3/maturin-action@v1` to build wheels on: (deferred: CI platform matrix)
+  - [ ] Linux x86_64 (manylinux). (deferred: CI platform matrix)
+  - [ ] Linux aarch64. (deferred: CI platform matrix)
+  - [ ] macOS x86_64. (deferred: CI platform matrix)
+  - [ ] macOS arm64. (deferred: CI platform matrix)
+  - [ ] Windows x64. (deferred: CI platform matrix)
+- [ ] abi3-py39 means one wheel per (os, arch), covering 3.9+. (deferred: CI platform matrix)
+- [ ] sdist job. (deferred: CI platform matrix)
 
 ### Wheel testing
 
-- [ ] In release.yml, after building wheels, run pytest against the built wheel (not against `maturin develop`). Ensures the released artefact works.
-- [ ] Clean Python environment per OS; `pip install dist/*.whl`; `pytest`.
+- [ ] In release.yml, after building wheels, run pytest against the built wheel (not against `maturin develop`). Ensures the released artefact works. (deferred: CI platform matrix)
+- [ ] Clean Python environment per OS; `pip install dist/*.whl`; `pytest`. (deferred: CI platform matrix)
 
 ### Documentation
 

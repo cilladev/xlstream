@@ -5,7 +5,7 @@
 
 **Streaming Excel formula evaluation engine.** Rust core with Python bindings.
 
-Evaluates xlsx formulas in a single streaming pass -- no dependency graph, no full-workbook buffering. 80+ Excel functions, row-parallel execution, bounded memory.
+Evaluates xlsx formulas in a single streaming pass -- no dependency graph, no full-workbook buffering. 117 Excel functions, row-parallel execution, bounded memory.
 
 ## Performance
 
@@ -53,14 +53,14 @@ let summary = xlstream_eval::evaluate(&input, &output, Some(8))?;
 
 | Category | Count | Examples |
 |---|---|---|
-| Arithmetic / operators | 15 | `+`, `-`, `*`, `/`, `^`, `&`, comparisons |
+| Operators | 13 | `+`, `-`, `*`, `/`, `^`, `&`, `%`, comparisons |
 | Conditionals / logical | 11 | IF, IFS, SWITCH, IFERROR, AND, OR, NOT |
 | Aggregates | 15 | SUM, AVERAGE, SUMIF, COUNTIFS, MEDIAN |
 | Lookups | 7 | VLOOKUP, XLOOKUP, INDEX/MATCH, CHOOSE |
 | String | 19 | LEFT, UPPER, TRIM, CONCAT, TEXT, FIND |
 | Date | 12 | TODAY, YEAR, EDATE, NETWORKDAYS |
 | Math | 23 | ROUND, MOD, ABS, SQRT, LOG, SIN, PI |
-| Info | 9 | ISNUMBER, ISTEXT, ISERROR, TYPE |
+| Info | 10 | ISNUMBER, ISTEXT, ISERROR, ISBLANK, NA, TYPE |
 | Financial | 6 | PMT, PV, FV, NPV, IRR, RATE |
 | **Total** | **117** | [Full list](docs/functions.md) |
 

@@ -81,8 +81,8 @@ In `xlstream-eval/src/builtins/math.rs`:
 - [x] `LN`, `LOG` (log10 by default in Excel), `LOG10`, `LOG(x, base)`, `EXP`.
 - [x] `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`.
 - [x] `PI()`.
-- [ ] `RAND()` — with the deterministic-per-run rule via prelude volatiles.
-- [ ] `RANDBETWEEN(low, high)`.
+- [ ] `RAND()` — with the deterministic-per-run rule via prelude volatiles. (unsupported: volatile functions, deterministic seeding deferred)
+- [ ] `RANDBETWEEN(low, high)`. (unsupported: volatile functions, deterministic seeding deferred)
 
 ### Math tests
 

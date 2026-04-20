@@ -54,7 +54,7 @@ In `xlstream-eval/src/builtins/aggregate.rs`:
 - [x] `SUMIFS(sum_range, (crit_range, crit)+)` — multi-criteria sum.
 - [x] `COUNTIFS(...)` — multi-criteria count.
 - [x] `AVERAGEIFS(...)` — multi-criteria average.
-- [ ] `MINIFS(...)`, `MAXIFS(...)` — deferred (v0.2).
+- [ ] `MINIFS(...)`, `MAXIFS(...)` — deferred (v0.2). (deferred: v0.2)
 
 ### Prelude storage
 
@@ -76,7 +76,7 @@ In `xlstream-eval/src/builtins/aggregate.rs`:
 - [x] `COUNTIF` with blank / non-blank.
 - [x] Criteria respects case-insensitivity for text.
 - [x] Aggregates over a range with one error -> propagate that error.
-- [ ] Large column performance smoke: SUM over 400k cells < 500 ms — deferred to Phase 12.
+- [ ] Large column performance smoke: SUM over 400k cells < 500 ms — deferred to Phase 12. (deferred: covered by Phase 12 benchmarks)
 
 ## Integration tests
 

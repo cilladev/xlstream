@@ -1,6 +1,6 @@
 # Phases — roadmap
 
-> **Current phase: 7 — Aggregates.** See [`phase-07-aggregates.md`](phase-07-aggregates.md).
+> **Current phase: 13 — Docs polish.** See [`phase-13-docs.md`](phase-13-docs.md).
 
 ## How this works
 
@@ -65,10 +65,10 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 | 7 | Aggregates | [`phase-07-aggregates.md`](phase-07-aggregates.md) | ✓ complete |
 | 8 | Lookups | [`phase-08-lookups.md`](phase-08-lookups.md) | ✓ complete |
 | 9 | Strings, dates, math | [`phase-09-strings-dates-math.md`](phase-09-strings-dates-math.md) | ✓ complete |
-| 10 | Parallelism | [`phase-10-parallelism.md`](phase-10-parallelism.md) | not started |
-| 11 | Python binding | [`phase-11-python-binding.md`](phase-11-python-binding.md) | not started |
-| 12 | Benchmarks | [`phase-12-benchmarks.md`](phase-12-benchmarks.md) | not started |
-| 13 | Docs polish | [`phase-13-docs.md`](phase-13-docs.md) | not started |
+| 10 | Parallelism | [`phase-10-parallelism.md`](phase-10-parallelism.md) | ✓ complete |
+| 11 | Python binding | [`phase-11-python-binding.md`](phase-11-python-binding.md) | ✓ complete |
+| 12 | Benchmarks | [`phase-12-benchmarks.md`](phase-12-benchmarks.md) | ✓ complete |
+| 13 | Docs polish | [`phase-13-docs.md`](phase-13-docs.md) | in progress |
 | 14 | Release v0.1.0 | [`phase-14-release.md`](phase-14-release.md) | not started |
 
 ## Estimated effort

@@ -81,6 +81,19 @@ At minimum:
 - `cargo fmt --check` clean.
 - For Python: `pytest` in `bindings/python/tests/` green.
 
+## Adding a new builtin function
+
+1. Check [`docs/functions.md`](docs/functions.md) -- pick an unticked function.
+2. Read the architecture doc for its category (e.g., `docs/architecture/lookups.md` for VLOOKUP).
+3. Write tests first in the appropriate test module under `crates/xlstream-eval/src/builtins/`.
+   - At minimum: happy path, empty input, error propagation, type coercion, edge case.
+4. Implement in the matching `builtins/*.rs` module (e.g., `text.rs`, `math.rs`, `lookup.rs`).
+5. Add a match arm in `crates/xlstream-eval/src/builtins/mod.rs` `dispatch()`.
+6. If the function needs prelude data (aggregates, lookups), use the lazy dispatch path instead.
+7. Add rustdoc with `# Examples` block.
+8. Tick the box in `docs/functions.md` in the same PR.
+9. Run `make check`.
+
 ## Code style
 
 See [`docs/standards/code-style.md`](docs/standards/code-style.md).

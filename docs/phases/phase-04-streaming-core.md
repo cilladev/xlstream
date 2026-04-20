@@ -65,7 +65,7 @@
 ### Performance smoke
 
 - [x] 10k rows × 10 columns (all `=A2` style, trivially resolvable): < 2 s. (measured: ~0.67s)
-- [ ] Peak RSS: < 50 MB.
+- [x] Peak RSS: < 50 MB. (measured: 31 MB)
 
 ### CLI
 

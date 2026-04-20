@@ -51,7 +51,6 @@ xlstream/
 │   └── python/             PyO3 + maturin Python package
 ├── benchmarks/             criterion benches + reference workbooks
 ├── fixtures/               .xlsx test fixtures + expected outputs
-├── tests/                  cross-crate integration tests
 └── docs/                   everything you're reading
 ```
 
@@ -121,17 +120,17 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 
 ## Performance budgets (enforced by CI, eventually)
 
-| Workload | Peak RSS | Wall-clock |
-|---|---|---|
-| 10,000 × 20 (10 formula cols) | < 50 MB | < 2 s |
-| 100,000 × 20 (10 formula cols) | < 150 MB | < 15 s |
-| 700,000 × 20 (10 formula cols) | < 250 MB | < 3 min |
+| Workload | Target RSS | Measured RSS | Target time | Measured time |
+|---|---|---|---|---|
+| 10k × 20 (10 formula cols) | < 50 MB | 31 MB | < 2 s | 1.6s |
+| 100k × 20 (10 formula cols) | < 150 MB | 206 MB | < 15 s | 16.0s |
+| 700k × 20 (10 formula cols) | < 250 MB | ~734 MB* | < 3 min | ~48s* |
 
-These are targets for v0.1. They will tighten in later releases.
+*Measured on a 50-col workbook (20 data + 30 formula). RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## Current state
 
-See [`docs/phases/README.md`](docs/phases/README.md) for the phase you are in.
+Phases 0-12 complete. Phase 13 (docs polish) in progress. See [`docs/phases/README.md`](docs/phases/README.md).
 
 ## Tone
 

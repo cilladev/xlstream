@@ -38,11 +38,12 @@ pub fn extract_references(ast: &Ast) -> References { ... }
 
 pub enum Classification {
     RowLocal,
-    AggregateOnly(Vec<AggKey>),
-    LookupOnly(Vec<LookupUse>),
-    Mixed { row_local: Vec<NodeId>, aggregates: Vec<AggKey>, lookups: Vec<LookupUse> },
-    Unsupported { reason: UnsupportedReason, doc_link: &'static str },
+    AggregateOnly,
+    LookupOnly,
+    Mixed,
+    Unsupported(UnsupportedReason),
 }
+// UnsupportedReason exposes a doc_link() -> &'static str method.
 
 pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification { ... }
 ```
@@ -70,7 +71,7 @@ rewritten:
    └─ BinaryOp(*)
       ├─ BinaryOp(/)
       │  ├─ CellRef(Deal Value, current_row)
-      │  └─ PreludeRef(AggKey::Sum, sheet, col="Deal Value")
+      │  └─ PreludeRef(AggregateKey { kind: AggKind::Sum, col="Deal Value" })
       └─ Number(100)
 ```
 
@@ -107,7 +108,7 @@ Classification has its own test file with ~30 cases covering every shape:
 #[test] fn offset_refused() {
     assert!(matches!(
         classify("OFFSET(A1, 1, 0)"),
-        Classification::Unsupported { .. }
+        Classification::Unsupported(_)
     ));
 }
 // ...

@@ -68,7 +68,7 @@ See [`docs/operations/github-setup.md`](../operations/github-setup.md) for the s
 
 ### First commit
 
-- [ ] Everything above committed. PR from a `chore/foundation` branch to `main`. Merged.
+- [ ] Everything above committed. PR from a `chore/foundation` branch to `main`. Merged. <!-- n/a: repo bootstrapped directly on main -->
 - [ ] CI green on the foundation commit (all jobs will be mostly no-ops since no Rust code exists yet — OK).
 
 ## Sample files

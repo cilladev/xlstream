@@ -45,7 +45,7 @@ In `xlstream-eval/src/builtins/lookup.rs` — all **stateful** (need prelude + A
 - [x] `HLOOKUP` — same but row-oriented (exact + approx).
 - [x] `XLOOKUP(key, lookup_arr, return_arr, not_found?, match_mode?, search_mode?)`:
   - [x] Exact match with optional fallback.
-  - [ ] Wildcard, approx — deferred to v0.2.
+  - [ ] Wildcard, approx — deferred to v0.2. (deferred: v0.2)
 - [x] `MATCH(key, arr, match_type?)` — returns index (1-based).
 - [x] `XMATCH` — XLOOKUP-flavoured MATCH (exact only).
 - [x] `INDEX(array, row, col?)` — constant lookup into a pre-loaded range, no index build needed.
@@ -79,7 +79,7 @@ For multi-key via `&` + helper column:
 ### Perf smoke
 
 - [x] Exact lookup on a 10k-row lookup table (#[ignore] smoke test).
-- [ ] 400k rows × 4 VLOOKUP: total eval < 30 s single-threaded.
+- [ ] 400k rows × 4 VLOOKUP: total eval < 30 s single-threaded. (deferred: covered by Phase 12 benchmarks)
 
 ## Integration tests
 
