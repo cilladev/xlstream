@@ -96,12 +96,42 @@ jobs:
           tool: cargo-audit
       - run: cargo audit
 
-  # Per-PR benchmark smoke test.
-  bench-smoke:
+  # Per-PR performance gate — fails if micro-benchmarks regress >15%.
+  bench-gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Run quick benchmark
-        run: cargo bench --bench quick -p xlstream-benchmarks -- --sample-size 10
+      - name: Run micro-benchmarks
+        run: cargo bench --bench parse --bench arithmetic --bench lookup -p xlstream-benchmarks -- --output-format bencher | tee output.txt
+      - name: Compare against baseline
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: output.txt
+          alert-threshold: '115%'
+          fail-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          comment-on-alert: true
+
+  # On merge to main — update benchmark baseline.
+  bench-update:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run micro-benchmarks
+        run: cargo bench --bench parse --bench arithmetic --bench lookup -p xlstream-benchmarks -- --output-format bencher | tee output.txt
+      - name: Update baseline
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
