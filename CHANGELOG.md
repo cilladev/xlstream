@@ -3,6 +3,18 @@
 All notable changes to xlstream. Format: [Keep a Changelog](https://keepachangelog.com/).
 Semver.
 
+## [Unreleased]
+
+### Added
+- Golden-file regression test suite comparing xlstream output against Excel-cached values (117 formula surfaces)
+- Per-issue regression test framework (`regression_per_issue.rs`) with ignored-until-fixed workflow
+
+### Fixed
+- SUMIF/COUNTIF/AVERAGEIF with row-local criteria (e.g., `SUMIF(A:A,A2,B:B)`) no longer rejected at classification with `NonStaticCriteria`; pre-computes grouped aggregate maps in prelude, O(1) lookup per row
+
+### Changed
+- Renamed test files: `regression.rs` → `regression_base.rs` (golden-file), `regression_base.rs` → `regression_per_issue.rs` (per-issue)
+
 ## [0.1.0] - 2026-04-20
 
 ### Added
