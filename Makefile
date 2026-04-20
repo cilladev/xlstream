@@ -139,20 +139,40 @@ audit: ## cargo audit (security advisories)
 
 ## Rust — benchmarks
 
+.PHONY: bench-generate
+bench-generate: ## generate benchmark fixture xlsx files (10k + 100k)
+	cargo run -p xlstream-benchmarks --release --bin generate-fixtures -- --tier small --output-dir benchmarks/fixtures/
+	cargo run -p xlstream-benchmarks --release --bin generate-fixtures -- --tier medium --output-dir benchmarks/fixtures/
+
+.PHONY: bench-rust
+bench-rust: bench-generate ## run Rust criterion benchmarks
+	cargo bench -p xlstream-benchmarks
+
+.PHONY: bench-python
+bench-python: bench-generate ## run Python API benchmark on medium fixture
+	@python3 -c "import xlstream" 2>/dev/null || (echo "Error: xlstream not installed. Run: cd bindings/python && maturin develop --release" && exit 1)
+	@echo "=== Python API benchmark (100k rows) ==="
+	@python3 -c "\
+	import time, xlstream; \
+	start = time.time(); \
+	r = xlstream.evaluate('benchmarks/fixtures/bench_medium.xlsx', '/tmp/bench_py_1w.xlsx', workers=1); \
+	e1 = time.time() - start; \
+	print(f'  1 worker:  {e1:.1f}s  rows={r[\"rows_processed\"]:,}  formulas={r[\"formulas_evaluated\"]:,}'); \
+	start = time.time(); \
+	r = xlstream.evaluate('benchmarks/fixtures/bench_medium.xlsx', '/tmp/bench_py_8w.xlsx', workers=8); \
+	e8 = time.time() - start; \
+	print(f'  8 workers: {e8:.1f}s  rows={r[\"rows_processed\"]:,}  formulas={r[\"formulas_evaluated\"]:,}'); \
+	print(f'  Speedup:   {e1/e8:.2f}x'); \
+	"
+
 .PHONY: bench
-bench: ## cargo bench --workspace (full)
-	cargo bench --workspace
+bench: bench-rust bench-python ## run all benchmarks (Rust + Python)
+	@echo ""
+	@echo "=== All benchmarks complete ==="
 
 .PHONY: bench-quick
 bench-quick: ## quick smoke benchmark (per-PR CI equivalent)
-	cargo bench --bench quick -- --sample-size 10
-
-.PHONY: bench-reference
-bench-reference: ## evaluate the 400k-row reference workload with RSS tracking
-	cargo run --release -p xlstream-cli -- evaluate \
-		benchmarks/fixtures/reference_400k.xlsx \
-		--output /tmp/xlstream-out.xlsx \
-		--verbose
+	cargo bench --bench quick -p xlstream-benchmarks -- --sample-size 10
 
 # -----------------------------------------------------------------------------
 # Python bindings
@@ -220,12 +240,12 @@ docs-check: ## verify internal markdown links (requires markdown-link-check; opt
 ## fixtures
 
 .PHONY: fixtures
-fixtures: ## regenerate benchmark xlsx fixtures (deterministic, seeded)
-	cargo run --release --bin generate-fixtures -p xlstream-benchmarks
+fixtures: ## regenerate all benchmark xlsx fixtures (10k + 100k + 1M)
+	cargo run --release --bin generate-fixtures -p xlstream-benchmarks -- --tier all --output-dir benchmarks/fixtures/
 
 .PHONY: fixtures-clean
-fixtures-clean: ## remove generated fixtures (keeps committed ones)
-	rm -f benchmarks/fixtures/reference_*.xlsx benchmarks/fixtures/stress_*.xlsx
+fixtures-clean: ## remove generated fixture xlsx files
+	rm -f benchmarks/fixtures/*.xlsx
 
 # -----------------------------------------------------------------------------
 # release (local dry-runs)
