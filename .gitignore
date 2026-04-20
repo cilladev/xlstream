@@ -40,6 +40,8 @@ Thumbs.db
 
 # xlsx files — generated, never committed (too large, binary)
 *.xlsx
+# Except regression test fixtures (Excel-verified golden files)
+!crates/xlstream-eval/tests/fixtures/*.xlsx
 
 # Benchmark artefacts
 /benchmarks/results/*.json

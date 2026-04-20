@@ -102,22 +102,35 @@ fn reference_workload_small() {
 }
 ```
 
+## Regression testing
+
+Two complementary approaches live in `crates/xlstream-eval/tests/`. See `tests/README.md` for full details.
+
+### Golden-file regression (`regression.rs`)
+
+A single workbook (`tests/fixtures/regression.xlsx`) exercises all 117 supported surfaces. Excel is the oracle.
+
+1. Generate: `cargo test -p xlstream-eval --test regression -- generate_fixture --ignored --nocapture`
+2. Open in Excel, save (populates cached values), commit.
+3. Run: `cargo test -p xlstream-eval --test regression`
+
+The test evaluates the fixture through xlstream and compares every formula cell against Excel's cached value. Volatile functions (TODAY, NOW) are skipped. Float comparison uses epsilon 1e-6. Cell errors from Excel are matched against xlstream's error-string representation.
+
+**When to regenerate:** after adding new formula columns to the `FORMULAS` spec in `regression.rs`.
+
+### Base regression tests (`regression_base.rs`)
+
+Per-bug regression tests. Each test builds a minimal fixture programmatically and asserts exact output. No Excel needed.
+
+- Tests land BEFORE the fix (`#[ignore = "blocked: ..."]`).
+- Fix un-ignores the test.
+- Test + fix commit together.
+
+Naming: `test_<short_description>`.
+
 ## Excel parity
 
-Every builtin function has at least one test asserting its output against values produced by real Excel. We maintain a small corpus:
-
-```
-fixtures/excel-parity/
-├── inputs/
-│   ├── arithmetic.xlsx
-│   ├── lookups.xlsx
-│   └── ...
-└── expected/
-    ├── arithmetic.json    # { "Sheet1!D2": 42.0, ... }
-    └── ...
-```
-
-To regenerate, open the input in Excel and re-save. Commit both files together.
+Every builtin function has at least one test asserting its output against values produced by real Excel. The golden-file regression suite (`regression.rs`) is the primary mechanism — it covers all 117 surfaces in a single workbook verified by Excel.
 
 ## The 1900 leap year test
 
