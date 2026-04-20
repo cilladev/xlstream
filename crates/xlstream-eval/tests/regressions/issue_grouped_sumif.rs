@@ -23,7 +23,6 @@ fn read_all_rows(reader: &mut Reader, sheet: &str) -> Vec<(u32, Vec<Value>)> {
 }
 
 #[test]
-#[ignore = "blocked: grouped aggregate criteria not yet implemented (see issue.md)"]
 fn sumif_row_local_criteria() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
@@ -64,7 +63,6 @@ fn sumif_row_local_criteria() {
 }
 
 #[test]
-#[ignore = "blocked: grouped aggregate criteria not yet implemented (see issue.md)"]
 fn countif_row_local_criteria() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
@@ -99,7 +97,6 @@ fn countif_row_local_criteria() {
 }
 
 #[test]
-#[ignore = "blocked: grouped aggregate criteria not yet implemented (see issue.md)"]
 fn reported_formula_if_abs_sumif_row_local() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
