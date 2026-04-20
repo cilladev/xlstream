@@ -1,5 +1,5 @@
 //! AST rewrite: replace aggregate/lookup sub-expressions with
-//! [`PreludeRef`](crate::ast::Node::PreludeRef) nodes keyed by
+//! `PreludeRef` nodes keyed by
 //! [`PreludeKey`].
 
 use crate::ast::{Ast, Node, NumLiteral};
@@ -129,7 +129,7 @@ pub enum PreludeKey {
 }
 
 /// Rewrite an AST by replacing aggregate/lookup sub-expressions with
-/// [`Node::PreludeRef`] nodes.
+/// `Node::PreludeRef` nodes.
 ///
 /// Only rewrites formulas classified as `AggregateOnly`, `LookupOnly`, or
 /// `Mixed`. `RowLocal` and `Unsupported` pass through untouched.

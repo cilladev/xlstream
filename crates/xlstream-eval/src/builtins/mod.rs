@@ -1,6 +1,6 @@
 //! Builtin function dispatch.
 //!
-//! Entry point: [`dispatch`]. The interpreter calls this for every
+//! Entry point: `dispatch`. The interpreter calls this for every
 //! `NodeView::Function` node. Returns `Some(value)` if the function is
 //! known, `None` otherwise (caller falls back to `#VALUE!`).
 

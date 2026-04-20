@@ -100,7 +100,7 @@ impl<'a> CellStream<'a> {
     }
 
     /// Advance the stream past all rows before `target_row`, discarding
-    /// their data. The next call to [`next_row`] returns `target_row` (or
+    /// their data. The next call to `next_row` returns `target_row` (or
     /// the first row >= `target_row` if `target_row` has no data).
     ///
     /// Used by parallel workers to seek each reader to its row-range start.
