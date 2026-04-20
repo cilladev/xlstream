@@ -8,9 +8,9 @@ Build the fastest, leanest Excel formula evaluation engine in Python's reach, by
 
 Data scientists, analysts, and finance teams generate Excel workbooks programmatically, often with hundreds of thousands of rows and a handful of formula columns. Existing Python-callable evaluators do not scale:
 
-| Engine | Approach | Measured on 400k × 20 reference workload |
+| Engine | Approach | Measured on 700k × 20 reference workload |
 |---|---|---|
-| `formualizer` (Rust, graph-based) | Full dependency DAG | **3.3 GB RSS, 5h 40m wall-clock** (measured 2026-04-17: Deals 400,001×20 + Thresholds 26×4 + Region Info 6×4) |
+| `formualizer` (Rust, graph-based) | Full dependency DAG | **3.3 GB RSS, 5h 40m wall-clock** (measured 2026-04-17: Deals 700,001×20 + Thresholds 26×4 + Region Info 6×4) |
 | `pycel`, `xlcalculator`, `formulas` (pure Python) | Graph + interpreter | Hours → days; OOM on lookups at scale |
 | `xlwings` | Drives real Excel via COM | Requires Excel installed; slow |
 | LibreOffice `soffice --headless` | Shells out to LO | 1–3 GB RAM, minutes-to-tens-of-minutes; installs 600 MB of LibreOffice |
@@ -47,7 +47,7 @@ Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` —
 - Dates: Excel serial conversions, `TODAY`, `NOW` (evaluated once per run), `DATE`, `YEAR`, `MONTH`, `DAY`, `WEEKDAY`, `EDATE`, `EOMONTH`, `DATEDIF`.
 - Errors: `#DIV/0!`, `#VALUE!`, `#REF!`, `#NAME?`, `#N/A`, `#NUM!`, `#NULL!`, propagated per Excel semantics.
 - Python binding: `xlstream.evaluate(input_path, output_path=None)` + streaming API.
-- Peak RSS < 250 MB on 400k × 20 reference workload.
+- Peak RSS < 250 MB on 700k × 20 reference workload.
 - Wall-clock < 3 minutes on same workload, 8-core machine.
 
 ### Explicitly out of scope for v0.1
@@ -79,7 +79,7 @@ Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` —
 
 v0.1 ships when all of the following hold:
 
-1. Reference workload (400k × 20, 10 formula cols including 4 VLOOKUP into hash-indexed lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a typical laptop (8-core M-series or x86 equivalent). For context: formualizer on the same workload takes 5h 40m at 3.3 GB peak.
+1. Reference workload (700k × 20, 10 formula cols including 4 VLOOKUP into hash-indexed lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a typical laptop (8-core M-series or x86 equivalent). For context: formualizer on the same workload takes 5h 40m at 3.3 GB peak.
 2. `pip install xlstream` on Linux, macOS, Windows across Python 3.9–3.14 works.
 3. Every public Rust API has rustdoc with a doctested example.
 4. All built-in functions have unit tests referencing Excel ground truth.

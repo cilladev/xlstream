@@ -1,84 +1,102 @@
 # xlstream
 
-Streaming Excel formula evaluation engine. Rust core, Python bindings.
+![CI](https://github.com/cilladev/xlstream/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)
 
-> **Status:** pre-alpha. Not yet published to crates.io or PyPI. See [`docs/phases/README.md`](docs/phases/README.md) for progress.
+**Streaming Excel formula evaluation engine.** Rust core with Python bindings.
 
-## What it does
+Evaluates xlsx formulas in a single streaming pass -- no dependency graph, no full-workbook buffering. 80+ Excel functions, row-parallel execution, bounded memory.
 
-Reads an `.xlsx` file row-by-row, evaluates formulas in a bounded-memory streaming traversal, and writes a new `.xlsx` with computed values. Built for workbooks where formulas are mostly row-local with shared lookup sheets that fit in memory and whole-column aggregates — the shape of ~90% of real business spreadsheets.
+## Performance
 
-Target for v0.1: evaluate a 400,000-row × 20-column xlsx in **under 3 minutes wall-clock** with **peak RSS under 250 MB**.
+| | xlstream | formualizer |
+|---|---|---|
+| 700k rows x 20 cols | **48s** | 5h 40m |
+| Peak memory | **734 MB** | 3.3 GB |
+| Architecture | Streaming (2-pass) | Full dependency graph |
 
-## Why another engine
+**425x faster** on the same workbook. [Full benchmarks](docs/benchmarks.md)
 
-Existing Python-callable engines either hold the whole workbook in memory as a dependency graph (`formualizer`: **3.3 GB RSS, 5h 40m wall-clock** on our 400k × 20 reference workload, measured 2026-04-17) or are pure-Python and orders of magnitude slower (`pycel`, `xlcalculator`, `formulas`). xlstream trades feature breadth for architectural simplicity: streaming, two-pass, no circular refs, no iterative calc, no full dynamic-array spills. In return: roughly **13× less memory and 100× faster wall-clock** on the workloads that matter.
-
-## Getting started (once v0.1 ships)
-
-```bash
-pip install xlstream
-```
-
-```python
-import xlstream
-xlstream.evaluate("input.xlsx", "output.xlsx")
-```
-
-## Python
+## Install
 
 ```bash
 pip install xlstream
 ```
+
+## Usage
+
+### Python
 
 ```python
 import xlstream
 
 result = xlstream.evaluate("input.xlsx", "output.xlsx")
-print(result["rows_processed"])       # rows written
-print(result["formulas_evaluated"])   # formula cells evaluated
-print(result["duration_ms"])          # wall-clock ms
+# {'rows_processed': 700001, 'formulas_evaluated': 7000000, 'duration_ms': 48000}
 
-# Parallel evaluation
-result = xlstream.evaluate("input.xlsx", "output.xlsx", workers=4)
+# Parallel (row-sharded across cores)
+result = xlstream.evaluate("input.xlsx", "output.xlsx", workers=8)
 ```
 
-See [`bindings/python/README.md`](bindings/python/README.md) for development setup.
-
-## Development setup
-
-Clone the repo, then from the project root:
+### CLI
 
 ```bash
-make install
+xlstream evaluate input.xlsx -o output.xlsx -w 8 --verbose
 ```
 
-That's it. One command does everything:
+### Rust
 
-- Verifies prerequisites (`git`, `python3`, `rustup`) are on PATH.
-- Creates a Python virtualenv at `.venv/`.
-- Installs the Rust toolchain + components from `rust-toolchain.toml`.
-- Installs `maturin`, `pytest`, `ruff`, `pre-commit` into the venv.
-- Installs git hooks (pre-commit, commit-msg, pre-push).
+```rust
+let summary = xlstream_eval::evaluate(&input, &output, Some(8))?;
+```
 
-Then:
+## What it supports
+
+| Category | Count | Examples |
+|---|---|---|
+| Arithmetic / operators | 15 | `+`, `-`, `*`, `/`, `^`, `&`, comparisons |
+| Conditionals / logical | 11 | IF, IFS, SWITCH, IFERROR, AND, OR, NOT |
+| Aggregates | 15 | SUM, AVERAGE, SUMIF, COUNTIFS, MEDIAN |
+| Lookups | 7 | VLOOKUP, XLOOKUP, INDEX/MATCH, CHOOSE |
+| String | 19 | LEFT, UPPER, TRIM, CONCAT, TEXT, FIND |
+| Date | 12 | TODAY, YEAR, EDATE, NETWORKDAYS |
+| Math | 23 | ROUND, MOD, ABS, SQRT, LOG, SIN, PI |
+| Info | 9 | ISNUMBER, ISTEXT, ISERROR, TYPE |
+| Financial | 6 | PMT, PV, FV, NPV, IRR, RATE |
+| **Total** | **117** | [Full list](docs/functions.md) |
+
+## What it doesn't support
+
+OFFSET, INDIRECT, FILTER, UNIQUE, SORT, LAMBDA, LET -- these require random cell access which breaks streaming. Named ranges and table references are v0.2. See [limitations](docs/architecture/streaming-model.md).
+
+## Error handling
+
+```python
+try:
+    xlstream.evaluate("input.xlsx", "output.xlsx")
+except xlstream.UnsupportedFormula as e:
+    print(e)  # names the cell, formula, and reason
+except xlstream.FormulaParseError as e:
+    print(e)
+except OSError as e:
+    print(e)  # file not found, corrupt xlsx
+```
+
+## Development
 
 ```bash
-source .venv/bin/activate   # activate the venv
-make check                  # validate: cargo fmt + clippy + tests + doctests
-make help                   # see every available command
+make install    # one-time: venv + rust + python + git hooks
+make check      # fmt + clippy + tests + doctests
+make bench      # benchmarks (rust + python)
+make help       # all commands
 ```
-
-Prerequisites: `rustup` (https://rustup.rs), Python 3.9+, `git`, GNU make. Linux / macOS primary; Windows works via WSL.
 
 ## Documentation
 
-- **Product brief:** [`docs/brief.md`](docs/brief.md)
-- **Architecture:** [`docs/architecture/`](docs/architecture/)
-- **Phased roadmap:** [`docs/phases/`](docs/phases/)
-- **Research / competitive analysis:** [`docs/research/`](docs/research/)
-- **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md) + [`docs/standards/`](docs/standards/)
+- [Architecture](docs/architecture/) -- streaming model, crate layout, parallelism
+- [Benchmarks](docs/benchmarks.md) -- measured performance across tiers
+- [Functions](docs/functions.md) -- canonical list with status
+- [Contributing](CONTRIBUTING.md) -- code standards, PR workflow
 
-## Licence
+## License
 
 Dual-licensed under Apache-2.0 or MIT, at your option.

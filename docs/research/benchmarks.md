@@ -6,8 +6,8 @@ For measured xlstream performance numbers, see [`docs/benchmarks.md`](../benchma
 
 ## The reference workload
 
-`benchmark_large_400k.xlsx`:
-- Main sheet: 400,000 rows x 20 columns.
+`benchmark_large_formulas.xlsx`:
+- Main sheet: 700,001 rows x 20 columns.
 - 10 data columns + 10 formula columns.
 - Formula mix: 2 simple arithmetic, 2 aggregate (SUM, SUMIF), 4 VLOOKUP (single-key into lookup sheets), 2 conditional (IFS, IF + VLOOKUP).
 - Plus 2 lookup sheets (Thresholds: 25 rows with a pre-computed `RegionBusiness` helper column; Region Info: 5 rows).
@@ -19,7 +19,7 @@ This mirrors a realistic trading/finance/retail analytics workbook.
 
 | Workload | formualizer RSS | formualizer wall |
 |---|---|---|
-| **Reference (400k)** | **3.3 GB** | **5h 40m** |
+| **Reference (700k)** | **3.3 GB** | **5h 40m** |
 
 Reference-row details: 23.4 MB raw data xlsx, 56.1 MB with formulas, 71.7 MB evaluated CSV. Load phase 2m 30s; evaluate + save phase 5h 38m.
 

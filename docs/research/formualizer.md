@@ -8,7 +8,7 @@ Deep review conducted April 2026 on `~/Projects/formualizer/` at commit 0.5.x. T
 
 ## Measured on our reference workload
 
-Run on 2026-04-17 against `benchmark_large_data_400000.xlsx` (Deals: 400,001 × 20, Thresholds: 26 × 4, Region Info: 6 × 4):
+Run on 2026-04-17 against `benchmark_large_formulas.xlsx` (Deals: 700,001 × 20, Thresholds: 26 × 4, Region Info: 6 × 4):
 
 | Phase | Value |
 |---|---|
@@ -41,7 +41,7 @@ The 5h 40m is what we're racing. Our target on the identical workload: **< 3 min
 5. **Evaluate** — topological scheduler, rayon-parallel within topological layers.
 6. **Writeback** — computed values overlay → umya in-memory → xlsx save.
 
-### Scale at 400k × 20 (measured 3.3 GB peak)
+### Scale at 700k × 20 (measured 3.3 GB peak)
 
 The 3.3 GB peak breaks down roughly as (estimates, not individually measured):
 
@@ -78,7 +78,7 @@ Fixes (6)(7) are ~200–500 MB of low-hanging fruit but don't meaningfully move 
 3. **umya save** — full serialisation, ~30–60 s.
 4. **Per-cell dispatch** — scheduler indirection on every cell.
 5. **Computed-overlay writeback** — extra pass over every formula cell.
-6. **Linear / binary-search lookups** — no hash index for VLOOKUP / XLOOKUP / MATCH exact match. 400k × 10 formulas × lookup scan = O(rows × lookup_table_size) comparisons.
+6. **Linear / binary-search lookups** — no hash index for VLOOKUP / XLOOKUP / MATCH exact match. 700k × 10 formulas × lookup scan = O(rows × lookup_table_size) comparisons.
 
 ## What's good
 

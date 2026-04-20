@@ -19,7 +19,7 @@ Surveyed April 2026.
 
 ## Where each fits
 
-- **formualizer** — Rust, high function coverage, graph-based. Measured 3.3 GB RSS and 5h 40m wall-clock on 400k × 20. We reuse the parser; we replace the engine.
+- **formualizer** — Rust, high function coverage, graph-based. Measured 3.3 GB RSS and 5h 40m wall-clock on 700k × 20. We reuse the parser; we replace the engine.
 - **IronCalc** — new, promising, full spreadsheet including UI. pip-installable as `ironcalc`. Focused on being a LibreOffice/Excel replacement, not specifically a batch evaluator. Different niche from us.
 - **HyperFormula** — GPL; unusable for commercial embedding without a paid licence. Also TS, not Python-reachable without subprocess.
 - **pycel / xlcalculator / formulas / koala2** — pure Python; correct but 10–100× slower than Rust-backed engines. Fine for < 10k-row workloads.
@@ -75,8 +75,8 @@ If you're an agent implementing a phase, `functions.md` is what you tick boxes a
 ## Benchmark gap
 
 Nobody publishes standardised "evaluate N-row xlsx" benchmarks. We produce one as part of v0.1:
-- Reference workload: `benchmark_large_400k.xlsx` (400k × 20, 10 formula columns, 2 lookup sheets).
-- Published results in `docs/research/benchmarks.md`.
+- Reference workload: `benchmark_large_formulas.xlsx` (700k × 20, 10 formula columns, 2 lookup sheets).
+- Published results in [`docs/benchmarks.md`](../benchmarks.md).
 - Plot over time on `gh-pages` via criterion + github-action-benchmark.
 
 ## References
