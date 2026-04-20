@@ -15,10 +15,6 @@ name = "generate-fixtures"
 path = "src/bin/generate_fixtures.rs"
 
 [[bench]]
-name = "quick"
-harness = false
-
-[[bench]]
 name = "parse"
 harness = false
 
@@ -32,10 +28,6 @@ harness = false
 
 [[bench]]
 name = "aggregate"
-harness = false
-
-[[bench]]
-name = "end_to_end"
 harness = false
 
 [dependencies]

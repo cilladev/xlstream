@@ -96,10 +96,12 @@ fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
         Command::Evaluate { input, output, workers, verbose } => {
             let summary = xlstream_eval::evaluate(&input, &output, workers)?;
             if verbose {
+                let rss_mb = memory_stats::memory_stats().map_or(0, |s| s.physical_mem / 1_000_000);
                 info!(
                     rows = summary.rows_processed,
                     formulas = summary.formulas_evaluated,
                     duration_ms = summary.duration.as_millis(),
+                    rss_mb,
                     "evaluate complete"
                 );
             }

@@ -2015,6 +2015,7 @@ name = "xlstream-cli"
 version = "0.1.1"
 dependencies = [
  "clap",
+ "memory-stats",
  "tracing",
  "tracing-subscriber",
  "xlstream-core",

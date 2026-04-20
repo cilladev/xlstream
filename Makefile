@@ -137,43 +137,6 @@ audit: ## cargo audit (security advisories)
 	@command -v cargo-audit >/dev/null || cargo install cargo-audit --locked
 	cargo audit
 
-## Rust — benchmarks
-
-.PHONY: bench-generate
-bench-generate: ## generate benchmark fixture xlsx files (10k + 100k)
-	cargo run -p xlstream-benchmarks --release --bin generate-fixtures -- --tier small --output-dir benchmarks/fixtures/
-	cargo run -p xlstream-benchmarks --release --bin generate-fixtures -- --tier medium --output-dir benchmarks/fixtures/
-
-.PHONY: bench-rust
-bench-rust: bench-generate ## run Rust criterion benchmarks
-	cargo bench -p xlstream-benchmarks
-
-.PHONY: bench-python
-bench-python: bench-generate ## run Python API benchmark on medium fixture
-	@python3 -c "import xlstream" 2>/dev/null || (echo "Error: xlstream not installed. Run: cd bindings/python && maturin develop --release" && exit 1)
-	@echo "=== Python API benchmark (100k rows) ==="
-	@python3 -c "\
-	import time, xlstream; \
-	start = time.time(); \
-	r = xlstream.evaluate('benchmarks/fixtures/bench_medium.xlsx', '/tmp/bench_py_1w.xlsx', workers=1); \
-	e1 = time.time() - start; \
-	print(f'  1 worker:  {e1:.1f}s  rows={r[\"rows_processed\"]:,}  formulas={r[\"formulas_evaluated\"]:,}'); \
-	start = time.time(); \
-	r = xlstream.evaluate('benchmarks/fixtures/bench_medium.xlsx', '/tmp/bench_py_8w.xlsx', workers=8); \
-	e8 = time.time() - start; \
-	print(f'  8 workers: {e8:.1f}s  rows={r[\"rows_processed\"]:,}  formulas={r[\"formulas_evaluated\"]:,}'); \
-	print(f'  Speedup:   {e1/e8:.2f}x'); \
-	"
-
-.PHONY: bench
-bench: bench-rust bench-python ## run all benchmarks (Rust + Python)
-	@echo ""
-	@echo "=== All benchmarks complete ==="
-
-.PHONY: bench-quick
-bench-quick: ## quick smoke benchmark (per-PR CI equivalent)
-	cargo bench --bench quick -p xlstream-benchmarks -- --sample-size 10
-
 # -----------------------------------------------------------------------------
 # Python bindings
 # -----------------------------------------------------------------------------
@@ -199,6 +162,25 @@ py-lint: ## ruff check + format check on bindings/python
 .PHONY: py-fmt
 py-fmt: ## ruff format + fix
 	cd bindings/python && ruff format . && ruff check --fix .
+
+# -----------------------------------------------------------------------------
+# benchmarks
+# -----------------------------------------------------------------------------
+
+## benchmarks
+
+.PHONY: bench-fixtures
+bench-fixtures: ## generate all benchmark fixtures (10k + 100k + 1M)
+	cargo run -p xlstream-benchmarks --release --bin generate-fixtures -- --tier all --output-dir benchmarks/fixtures/
+
+.PHONY: bench
+bench: ## run criterion micro-benchmarks (parse, arithmetic, lookup)
+	cargo bench -p xlstream-benchmarks
+
+.PHONY: bench-report
+bench-report: ## run all benchmarks and generate report (usage: make bench-report VERSION=0.1.2)
+	@test -n "$(VERSION)" || (echo "error: VERSION required. usage: make bench-report VERSION=0.1.2" && exit 1)
+	./scripts/bench-report.sh $(VERSION)
 
 # -----------------------------------------------------------------------------
 # pre-commit (manual runs)
@@ -234,20 +216,6 @@ docs-check: ## verify internal markdown links (requires markdown-link-check; opt
 		echo "skip: install markdown-link-check for link checking"
 
 # -----------------------------------------------------------------------------
-# fixtures
-# -----------------------------------------------------------------------------
-
-## fixtures
-
-.PHONY: fixtures
-fixtures: ## regenerate all benchmark xlsx fixtures (10k + 100k + 1M)
-	cargo run --release --bin generate-fixtures -p xlstream-benchmarks -- --tier all --output-dir benchmarks/fixtures/
-
-.PHONY: fixtures-clean
-fixtures-clean: ## remove generated fixture xlsx files
-	rm -f benchmarks/fixtures/*.xlsx
-
-# -----------------------------------------------------------------------------
 # release (local dry-runs)
 # -----------------------------------------------------------------------------
 
@@ -281,7 +249,7 @@ clean: ## remove cargo target, Python build artefacts, caches
 	find . -type d -name '.mypy_cache' -exec rm -rf {} + 2>/dev/null || true
 
 .PHONY: clean-all
-clean-all: clean fixtures-clean ## clean + regeneratable fixtures
+clean-all: clean ## clean + venv
 	rm -rf .venv
 
 .PHONY: ci-local

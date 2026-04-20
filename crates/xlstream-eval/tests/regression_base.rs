@@ -479,7 +479,6 @@ fn generate_fixture() {
 }
 
 #[test]
-#[ignore = "102 known mismatches — un-ignore after fixes in docs/issues/ land"]
 fn golden_file_regression() {
     let fixture = regression_path();
     if !fixture.exists() {
