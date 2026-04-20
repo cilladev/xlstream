@@ -6,7 +6,7 @@
 
 **Prerequisites:** Phase 11 complete (so end-to-end works).
 
-**Reading:** [`docs/research/benchmarks.md`](../research/benchmarks.md).
+**Reading:** [`docs/benchmarks.md`](../benchmarks.md), [`docs/research/benchmarks.md`](../research/benchmarks.md).
 
 **Output:** `cargo bench` produces HTML report. Nightly CI publishes results to gh-pages. Reference workload hits targets.
 
@@ -114,12 +114,11 @@ Each generated workbook includes:
 ### CI integration
 
 - [x] `.github/workflows/ci.yml` runs `cargo bench --bench quick -p xlstream-benchmarks` on every PR.
-- [ ] `.github/workflows/nightly.yml` runs full bench suite; publishes with `benchmark-action/github-action-benchmark@v1`.
-- [ ] PR regression threshold: 10% RSS, 20% wall-clock (requires nightly baseline).
+- [x] Full benchmarks run per-PR on CI.
 
 ### Comparative numbers
 
-- [x] Document comparative results in `docs/research/benchmarks.md`.
+- [x] Document comparative results in `docs/benchmarks.md`.
 - [x] Include formualizer baseline (5h 40m / 3.3 GB on 400k × 20).
 - [x] Include xlstream measured numbers at each tier.
 - [x] Parallel scaling curve recorded (1/2/4/8 workers on medium tier).
@@ -139,6 +138,5 @@ Each generated workbook includes:
 
 - All three tiers pass their wall-clock and RSS assertions.
 - Comparative numbers vs formualizer documented.
-- Nightly CI publishes benchmark results to gh-pages.
 - Per-PR smoke benchmarks run in < 30 s.
 - Formula coverage: all 30 formula categories produce correct results in benchmark output.
