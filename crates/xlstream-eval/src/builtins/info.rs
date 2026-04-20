@@ -166,11 +166,10 @@ pub fn builtin_isnontext(args: &[Value]) -> Value {
 // ISREF
 // ---------------------------------------------------------------------------
 
-/// `ISREF(x)` — always `false`.
+/// `ISREF(x)` — legacy eager-eval stub (always returns `false`).
 ///
-/// By the time builtins run, all references have already been resolved
-/// to concrete values. A proper implementation would require the parser
-/// to preserve ref-vs-value distinction, which is out of scope for v0.1.
+/// Superseded by the lazy dispatch in `builtins/mod.rs` which inspects
+/// the raw AST node. Kept for doc-test backward compat.
 ///
 /// # Examples
 ///

@@ -14,8 +14,8 @@ pub(crate) mod math;
 mod multi_conditional;
 pub(crate) mod string;
 
-use xlstream_core::Value;
-use xlstream_parse::NodeRef;
+use xlstream_core::{CellError, Value};
+use xlstream_parse::{NodeRef, NodeView};
 
 use crate::interp::Interpreter;
 use crate::scope::RowScope;
@@ -181,7 +181,14 @@ pub(crate) fn dispatch(
         "ISNA" => Some(info::builtin_isna(&eval_args(args, interp, scope))),
         "ISLOGICAL" => Some(info::builtin_islogical(&eval_args(args, interp, scope))),
         "ISNONTEXT" => Some(info::builtin_isnontext(&eval_args(args, interp, scope))),
-        "ISREF" => Some(info::builtin_isref(&eval_args(args, interp, scope))),
+        "ISREF" => {
+            if args.is_empty() {
+                return Some(Value::Error(CellError::Value));
+            }
+            let is_ref =
+                matches!(args[0].view(), NodeView::CellRef { .. } | NodeView::RangeRef { .. });
+            Some(Value::Bool(is_ref))
+        }
         "NA" => Some(info::builtin_na(&eval_args(args, interp, scope))),
         "TYPE" => Some(info::builtin_type(&eval_args(args, interp, scope))),
         // -- financial builtins (pure, eager eval) --

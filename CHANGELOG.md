@@ -17,6 +17,7 @@ Semver.
 - `COUNTA(H:H)` includes header row in prelude scan; previously undercounted by 1
 - `COUNTBLANK(H:H)` uses `EXCEL_MAX_ROWS - COUNTA` for whole-column ranges to match Excel's 1M+ row grid semantics
 - `FLOOR(-2.3, 1)` returns -3 instead of `#NUM!`; removed legacy sign-mismatch check to match modern Excel (2010+)
+- `ISREF(A2)` returns TRUE; moved to lazy dispatch to inspect raw AST node before evaluation
 
 ### Known Limitations
 - Empty string cells (e.g., `MID("x",2,3)` → `""`) are written as blank by `rust_xlsxwriter` (library discards empty strings); downstream readers see `Empty` instead of `""`. Golden-file comparison treats these as equivalent.
