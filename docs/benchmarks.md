@@ -41,6 +41,39 @@ Modest speedup on this workload. Bottleneck is I/O: each worker re-opens the xls
 
 Ratio: ~425x faster, ~4.5x less memory.
 
+## Memory analysis
+
+### Targets vs actuals
+
+| Tier | Target (CLAUDE.md) | Actual | Status |
+|---|---|---|---|
+| Small (10k) | < 50 MB | 31 MB | Pass |
+| Medium (100k) | < 100 MB | 206 MB | Miss (2x) |
+| Large (1M) | < 300 MB | 1.7 GB | Miss (5.7x) |
+
+The original target (< 250 MB for 400k rows) was based on the assumption that streaming evaluation would keep memory flat. The evaluation logic does — it holds ~10 MB (one row buffer + prelude scalars + lookup indexes). The memory overshoot comes from the I/O libraries.
+
+### Where the memory goes
+
+| Component | Memory | Can we control it? |
+|---|---|---|
+| Evaluator (row buffer + prelude) | ~10 MB | Yes — already minimal |
+| calamine XML parsing | ~60% of RSS | No — upstream library |
+| rust_xlsxwriter shared strings + output | ~30% of RSS | No — upstream library |
+| Lookup sheet data (pre-loaded) | ~5-10 MB | Yes — proportional to lookup sheet size |
+
+**calamine** decompresses the xlsx ZIP archive and parses the sheet XML. Even though it offers a "streaming" cell reader (`XlsxCellReader`), it still loads the shared string table and XML structure into memory. For a 412 MB xlsx, this is hundreds of MB.
+
+**rust_xlsxwriter** in `constant_memory` mode flushes rows to a temp file, keeping row data flat. But it accumulates the shared string table (every unique string in the output) in memory. A workbook with millions of text cells builds a large string table.
+
+### Path to < 250 MB (v0.2)
+
+1. **Fork or contribute to calamine** — implement true streaming XML parsing without buffering the shared string table. The shared strings could be memory-mapped or loaded lazily.
+2. **Reduce rust_xlsxwriter string table** — write strings inline instead of via the shared string table (trade file size for memory). Or implement a flushing shared string table.
+3. **Alternative: use a different xlsx reader** — no production-quality streaming Rust xlsx reader exists as of 2026. Building one from scratch (zip streaming + SAX-style XML) is a multi-week project.
+
+For v0.1, the memory profile is acceptable: 4.5x less than formualizer on the same workload. The wall-clock performance (425x faster) is the primary win.
+
 ## Running benchmarks
 
 ```bash
