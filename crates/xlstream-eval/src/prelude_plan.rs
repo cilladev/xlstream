@@ -289,6 +289,21 @@ fn collect_multi_keys_recursive(
                         keys.push(key);
                     }
                 }
+                "SUMIF" => {
+                    if let Some(key) = extract_sumif_key(node) {
+                        keys.push(key);
+                    }
+                }
+                "COUNTIF" => {
+                    if let Some(key) = extract_countif_key(node) {
+                        keys.push(key);
+                    }
+                }
+                "AVERAGEIF" => {
+                    if let Some(key) = extract_averageif_key(node) {
+                        keys.push(key);
+                    }
+                }
                 _ => {}
             }
             // Also recurse into args in case of nested function calls.
@@ -395,6 +410,62 @@ fn extract_averageifs_key(
         kind: AggKind::Average,
         sum_col,
         criteria_cols,
+        sheet: None,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from a SUMIF function node.
+/// `SUMIF(criteria_range, criteria, [sum_range])`
+fn extract_sumif_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 2 || args.len() > 3 {
+        return None;
+    }
+    let criteria_col = extract_range_col(args[0])?;
+    let sum_col = if args.len() >= 3 { extract_range_col(args[2])? } else { criteria_col };
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Sum,
+        sum_col,
+        criteria_cols: vec![criteria_col],
+        sheet: None,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from a COUNTIF function node.
+/// `COUNTIF(criteria_range, criteria)`
+fn extract_countif_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() != 2 {
+        return None;
+    }
+    let criteria_col = extract_range_col(args[0])?;
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Count,
+        sum_col: 0,
+        criteria_cols: vec![criteria_col],
+        sheet: None,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from an AVERAGEIF function node.
+/// `AVERAGEIF(criteria_range, criteria, [avg_range])`
+fn extract_averageif_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 2 || args.len() > 3 {
+        return None;
+    }
+    let criteria_col = extract_range_col(args[0])?;
+    let sum_col = if args.len() >= 3 { extract_range_col(args[2])? } else { criteria_col };
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Average,
+        sum_col,
+        criteria_cols: vec![criteria_col],
         sheet: None,
     })
 }
@@ -895,5 +966,56 @@ mod tests {
         let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
         let keys = collect_aggregate_keys(&rewritten);
         assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_sumif() {
+        let ast = xlstream_parse::parse("SUMIF(A:A,A2,B:B)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].kind, AggKind::Sum);
+        assert_eq!(keys[0].sum_col, 2);
+        assert_eq!(keys[0].criteria_cols, vec![1]);
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_countif() {
+        let ast = xlstream_parse::parse("COUNTIF(A:A,A2)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].kind, AggKind::Count);
+        assert_eq!(keys[0].sum_col, 0);
+        assert_eq!(keys[0].criteria_cols, vec![1]);
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_averageif() {
+        let ast = xlstream_parse::parse("AVERAGEIF(A:A,A2,B:B)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].kind, AggKind::Average);
+        assert_eq!(keys[0].sum_col, 2);
+        assert_eq!(keys[0].criteria_cols, vec![1]);
+    }
+
+    #[test]
+    fn collect_multi_keys_sumif_without_sum_range_uses_criteria_col() {
+        let ast = xlstream_parse::parse("SUMIF(A:A,A2)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].sum_col, 1);
+        assert_eq!(keys[0].criteria_cols, vec![1]);
     }
 }
