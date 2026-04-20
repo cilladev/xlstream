@@ -1,9 +1,13 @@
-# Benchmarks — reference workloads and targets
+# Benchmarks — research and pre-build analysis
+
+Pre-build investigation: formualizer baseline, workload design, methodology decisions.
+
+For measured xlstream performance numbers, see [`docs/benchmarks.md`](../benchmarks.md).
 
 ## The reference workload
 
 `benchmark_large_400k.xlsx`:
-- Main sheet: 400,000 rows × 20 columns.
+- Main sheet: 400,000 rows x 20 columns.
 - 10 data columns + 10 formula columns.
 - Formula mix: 2 simple arithmetic, 2 aggregate (SUM, SUMIF), 4 VLOOKUP (single-key into lookup sheets), 2 conditional (IFS, IF + VLOOKUP).
 - Plus 2 lookup sheets (Thresholds: 25 rows with a pre-computed `RegionBusiness` helper column; Region Info: 5 rows).
@@ -11,17 +15,24 @@
 
 This mirrors a realistic trading/finance/retail analytics workbook.
 
-## Scale tiers
+## Formualizer baseline (measured 2026-04-17)
 
-| Tier | Rows | Data cols | Formula cols | On disk |
-|---|---|---|---|---|
-| Smoke | 1,000 | 10 | 10 | ~100 KB |
-| Small | 10,000 | 20 | 10 | ~1 MB |
-| Medium | 100,000 | 20 | 10 | ~15 MB |
-| Reference | 400,000 | 20 | 10 | ~56 MB |
-| Stress | 1,000,000 | 20 | 10 | ~140 MB |
+| Workload | formualizer RSS | formualizer wall |
+|---|---|---|
+| **Reference (400k)** | **3.3 GB** | **5h 40m** |
 
-## Targets for v0.1
+Reference-row details: 23.4 MB raw data xlsx, 56.1 MB with formulas, 71.7 MB evaluated CSV. Load phase 2m 30s; evaluate + save phase 5h 38m.
+
+Extrapolated formualizer numbers (unconfirmed):
+
+| Workload | formualizer RSS | formualizer wall |
+|---|---|---|
+| Smoke (1k) | ~400 MB | ~3 s |
+| Small (10k) | ~700 MB | ~1 min |
+| Medium (100k) | ~1.5 GB | ~20 min |
+| Stress (1M) | likely OOM / hour+ | very long |
+
+## Pre-build targets for v0.1
 
 | Tier | Peak RSS | Wall-clock (8-core) |
 |---|---|---|
@@ -31,118 +42,24 @@ This mirrors a realistic trading/finance/retail analytics workbook.
 | Reference | < 250 MB | < 180 s (3 min) |
 | Stress | < 500 MB | < 450 s (7.5 min) |
 
-Stretch goals (v0.2):
-- Reference in < 60 s.
-- Stress in < 180 s.
-
-## Baseline comparison
-
-xlstream vs. formualizer on identical hardware and identical workloads. The **Reference** row for formualizer is a real measurement (2026-04-17); other rows are extrapolated and will be confirmed by our benchmark harness. xlstream numbers are targets; will be measured once v0.1 is runnable.
-
-| Workload | formualizer RSS | formualizer wall | xlstream RSS (target) | xlstream wall (target) |
-|---|---|---|---|---|
-| Smoke (1k) | ~400 MB | ~3 s | < 40 MB | < 0.5 s |
-| Small (10k) | ~700 MB | ~1 min | < 50 MB | < 2 s |
-| Medium (100k) | ~1.5 GB | ~20 min | < 150 MB | < 15 s |
-| **Reference (400k)** | **3.3 GB (measured)** | **5h 40m (measured)** | **< 250 MB** | **< 3 min** |
-| Stress (1M) | likely OOM / hour+ | very long | < 500 MB | < 7.5 min |
-
-Reference-row measurement details: 23.4 MB raw data xlsx, 56.1 MB with formulas, 71.7 MB evaluated CSV. Load phase 2m 30s; evaluate + save phase 5h 38m. Ratio we're chasing: **≈ 13× less memory, ≈ 113× faster on wall-clock**.
-
-## Measured results (Phase 12, 2026-04-20)
-
-### Tier results (50-column workbook: 20 data + 30 formula)
-
-| Tier | Rows | Workers | Wall-clock | Formulas evaluated |
-|---|---|---|---|---|
-| Small | 10,000 | 1 | 1.6s | 299,970 |
-| Medium | 100,000 | 1 | 15.9s | 2,999,970 |
-| Medium | 100,000 | 2 | 13.7s | 2,999,970 |
-| Medium | 100,000 | 4 | 13.3s | 2,999,970 |
-| Medium | 100,000 | 8 | 13.8s | 2,999,970 |
-
-### Parallel scaling curve (medium tier, 100k rows)
-
-| Workers | Wall-clock | Speedup vs 1 |
-|---|---|---|
-| 1 | 15.9s | 1.0x |
-| 2 | 13.7s | 1.16x |
-| 4 | 13.3s | 1.20x |
-| 8 | 13.8s | 1.15x |
-
-Parallel speedup is modest on this workload. The bottleneck is I/O: each worker re-opens the xlsx and seeks to its row range (calamine shared-strings parse + XML cursor seek). The evaluation itself is fast — the I/O overhead dominates for workbooks with many formula categories (30 cols including VLOOKUP/INDEX-MATCH which add lookup sheet loading per worker). Row-local-only workloads (Phase 10's 700k test) show better scaling.
-
-### Micro-benchmark highlights
-
-| Benchmark | Result |
-|---|---|
-| Parse 30 formulas | ~35 us per batch |
-| Arithmetic ops (add/mul/div) | 16-45 ns per eval (~22-62M ops/sec) |
-| String concat | ~280 ns per eval (heap allocation) |
-| VLOOKUP exact (1k table) | hash lookup, sub-microsecond |
-
 ## Methodology
 
 ### Hardware
 
 - Apple M-series (for macOS and arm64 Linux), 8-core.
 - x86_64 Linux CI runner (2 vCPU) for Linux benchmarks.
-- Windows runs on CI only; target numbers same as Linux x86_64.
 
 ### Timing
 
-`criterion` for micro-benchmarks. Wall-clock measured end-to-end via `std::time::Instant` in a small binary.
+`criterion` for micro-benchmarks. Wall-clock measured end-to-end via `std::time::Instant`.
 
 ### Memory
 
-Peak RSS via `memory-stats` crate. Reported as the maximum seen over the evaluation.
+Peak RSS via `memory-stats` crate.
 
-### Correctness
+### Fixture generation
 
-Every benchmark run also asserts output equality against a golden xlsx. Speed without correctness is not a pass.
-
-## CI integration
-
-### Every PR (fast)
-
-- Smoke + Small benchmarks only. Must not regress by more than 10% RSS or 20% wall-clock vs main.
-
-### Nightly
-
-- Full tier. Plotted via `benchmark-action/github-action-benchmark@v1`, pushed to `gh-pages`.
-- Reference tier wall-clock must stay < 180 s. RSS must stay < 250 MB.
-
-### Release (pre-tag)
-
-- Full tier + stress. Manually reviewed before shipping.
-
-## Fixture generation
-
-`benchmarks/fixtures/scripts/generate_reference.rs` produces `benchmark_large_400k.xlsx` deterministically (seeded RNG). Not committed to git — too large. CI regenerates before benchmarks run. Local: `cargo run -p xlstream-benchmarks --bin generate-fixtures`.
-
-## Golden outputs
-
-`benchmark_large_400k_golden.xlsx` — Excel-computed expected output. Generated once by opening `benchmark_large_400k.xlsx` in real Excel and saving. Committed to LFS (it's ~80 MB after evaluation). If Excel license isn't available, LibreOffice headless is acceptable for approximation; note that `=0.1+0.2=0.3` will differ.
-
-## Sub-benchmarks
-
-Per-component micro-benches in `benchmarks/benches/`:
-
-- `parse_bench.rs` — formula parsing throughput.
-- `lookup_bench.rs` — hash lookup on 10k-row table.
-- `aggregate_bench.rs` — SUM/COUNT over 400k-cell column.
-- `builtin_bench.rs` — per-builtin throughput (IF, VLOOKUP, SUM, etc.).
-- `end_to_end_bench.rs` — full pipeline at each tier.
-
-Targets, roughly:
-- Parse: > 500k formulas/sec.
-- Lookup: > 10M hits/sec on hot cache.
-- Aggregate (numeric column): > 100M cells/sec single-threaded.
-- Per-row eval overhead: < 1 microsecond/cell on row-local formula.
-
-## Publishing results
-
-`docs/research/benchmark-results.md` auto-updated by nightly CI with a summary table and links to criterion HTML output on gh-pages.
+`cargo run -p xlstream-benchmarks --bin generate-fixtures` produces workbooks deterministically (seeded RNG). Not committed to git. CI regenerates before benchmarks run.
 
 ## Non-goals
 
@@ -151,9 +68,4 @@ Targets, roughly:
 
 ## When to add a new benchmark
 
-Any PR that:
-- Adds a new builtin function.
-- Changes a hot-path structure.
-- Modifies allocation strategy.
-
-...must include at least one micro-bench for the changed thing. PR description includes the before/after numbers.
+Any PR that adds a builtin, changes a hot path, or modifies allocation strategy must include a micro-bench. PR description includes before/after numbers.
