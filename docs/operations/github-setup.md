@@ -76,7 +76,7 @@ Repo → Settings → Security & analysis:
 
 Repo → Settings → Actions → *General*:
 
-- *Workflow permissions*: "Read and write permissions" — needed for the nightly benchmark workflow to push to `gh-pages`.
+- *Workflow permissions*: "Read and write permissions" — needed if future workflows push to `gh-pages`.
 - *Allow GitHub Actions to create and approve pull requests*: leave **off** unless a specific workflow needs it.
 
 ## 7. Issue / PR templates (optional, v0.1 polish)

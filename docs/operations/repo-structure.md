@@ -79,7 +79,7 @@ xlstream/                         # the repo
 │   ├── workflows/
 │   │   ├── ci.yml                # build, test, lint
 │   │   ├── release.yml           # on tag push
-│   │   └── nightly.yml           # benchmarks, fuzz
+│   │   └── pre-commit.yml        # pre-commit hooks
 │   └── dependabot.yml
 │
 └── fuzz/                         # cargo-fuzz targets

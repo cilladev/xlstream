@@ -206,7 +206,7 @@ fn bench_vlookup_10k(c: &mut Criterion) {
 
 `benchmarks/fixtures/reference_400k.xlsx` is the ground truth. Every perf claim in the docs comes from this workload.
 
-CI runs a reduced version (50k rows) on every PR. Full 400k run is a nightly workflow.
+CI runs the `quick` bench (5k rows) on every PR. Full tier benchmarks run locally via `make bench`.
 
 ## Memory profiling
 

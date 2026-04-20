@@ -44,7 +44,7 @@
 - [x] `.github/workflows/pre-commit.yml` runs the full pre-commit suite (all stages including pre-push) on every PR and push to main.
 - [x] `.github/workflows/ci.yml` — platform matrix (Linux / macOS / Windows) for `cargo test` + Python `maturin develop` + pytest + `cargo audit` + per-PR benchmark smoke.
 - [x] `.github/workflows/release.yml` — tag-triggered wheel building across OS matrix + sdist + gated `publish-pypi` (via PyPI Trusted Publishing / OIDC — no token) + gated `publish-crates` (crates published in dep order: core → parse → io → eval).
-- [x] `.github/workflows/nightly.yml` — scheduled + manual-dispatch benchmarks with criterion + fuzz targets.
+- [x] ~~`.github/workflows/nightly.yml`~~ — removed. Benchmarks run per-PR via `bench-smoke` job in `ci.yml`.
 - [x] `.github/dependabot.yml` — weekly updates for cargo, pip (bindings/python), and github-actions.
 - [x] `Makefile` at repo root — `make help` lists every command.
 

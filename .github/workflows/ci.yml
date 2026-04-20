@@ -96,7 +96,7 @@ jobs:
           tool: cargo-audit
       - run: cargo audit
 
-  # Per-PR benchmark smoke test. Fast; full runs are in nightly.yml.
+  # Per-PR benchmark smoke test.
   bench-smoke:
     runs-on: ubuntu-latest
     steps:
