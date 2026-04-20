@@ -12,7 +12,7 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-xlstream-core = { path = "../xlstream-core", version = "0.1.0" }
+xlstream-core = { path = "../xlstream-core", version = "0.1.1" }
 calamine.workspace = true
 rust_xlsxwriter.workspace = true
 

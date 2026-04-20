@@ -1,12 +1,15 @@
 # Benchmarks — measured performance
 
-Measured on Apple M-series, 8-core. Criterion for micro-benchmarks; wall-clock via `std::time::Instant`.
+Measured on iMac 2020 (3.6 GHz 10-core Intel i9, 128 GB DDR4). Criterion for micro-benchmarks; wall-clock via `std::time::Instant`.
+
+**Version:** v0.1.1 (2026-04-20)
 
 ## Tier results (50-column workbook: 20 data + 30 formula)
 
 | Tier | Rows | Workers | Wall-clock | Peak RSS | Formulas evaluated |
 |---|---|---|---|---|---|
-| Small | 10,000 | 1 | 1.6s | 31 MB | 299,970 |
+| Quick | 5,000 | 1 | 67.6ms | — | ~150,000 |
+| Small | 10,000 | 1 | 1.66s | 31 MB | 299,970 |
 | Medium | 100,000 | 1 | 16.0s | 206 MB | 2,999,970 |
 | Medium | 100,000 | 4 | 13.8s | 270 MB | 2,999,970 |
 | Large | 1,000,000 | 1 | 156s | 1.7 GB | 29,999,970 |
@@ -34,10 +37,10 @@ Modest speedup on this workload. Bottleneck is I/O: each worker re-opens the xls
 
 ## Comparative summary
 
-| Engine | Workload | Wall-clock | Peak RSS |
-|---|---|---|---|
-| formualizer (measured 2026-04-17) | 700k x 20 | 5h 40m | 3.3 GB |
-| xlstream single-threaded (measured) | 700k x 20 | 48s | 734 MB |
+| Engine | Workload | Wall-clock | Peak RSS | Measured |
+|---|---|---|---|---|
+| formualizer | 700k x 20 | 5h 40m | 3.3 GB | 2026-04-17 |
+| xlstream single-threaded | 700k x 20 | 48s | 734 MB | 2026-04-19 |
 
 Ratio: ~425x faster, ~4.5x less memory.
 
@@ -88,6 +91,9 @@ make bench-python
 
 # Run everything
 make bench
+
+# Quick smoke (CI runs this per PR)
+cargo bench --bench quick -p xlstream-benchmarks -- --sample-size 10
 ```
 
 Criterion HTML reports: `target/criterion/report/index.html`.
@@ -97,3 +103,12 @@ Criterion HTML reports: `target/criterion/report/index.html`.
 `cargo run -p xlstream-benchmarks --release --bin generate-fixtures -- --tier all`
 
 Deterministic (seed=42). Produces `bench_small.xlsx`, `bench_medium.xlsx`, `bench_large.xlsx`. Not committed — regenerated before bench runs.
+
+## Updating this file
+
+After any release or batch of changes that could affect performance:
+
+1. Run `make bench` (or at minimum quick + small tier)
+2. Update the **Version** line at the top with the new version and date
+3. Update the tier table with measured numbers
+4. If any number regressed > 10% from previous, investigate before shipping
