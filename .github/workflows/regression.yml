@@ -22,4 +22,4 @@ jobs:
       - name: Golden-file regression (117 surfaces vs Excel)
         run: cargo test -p xlstream-eval --test regression_base -- golden_file_regression --nocapture
       - name: Per-issue regression tests
-        run: cargo test -p xlstream-eval --test regression_per_issue --nocapture
+        run: cargo test -p xlstream-eval --test regression_per_issue -- --nocapture
