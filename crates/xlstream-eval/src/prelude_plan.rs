@@ -649,12 +649,11 @@ pub fn execute_prelude(
         let excel_row = calamine_row_idx + 1; // 1-based
         calamine_row_idx += 1;
 
-        if !header_skipped {
+        if header_skipped {
+            data_row_count = data_row_count.saturating_add(1);
+        } else {
             header_skipped = true;
-            continue;
         }
-
-        data_row_count = data_row_count.saturating_add(1);
 
         // Feed simple aggregate folds.
         for (&col, fold) in &mut col_folds {
