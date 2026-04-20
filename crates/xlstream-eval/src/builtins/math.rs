@@ -274,9 +274,6 @@ pub(crate) fn builtin_floor(args: &[Value]) -> Value {
     if sig == 0.0 {
         return Value::Number(0.0);
     }
-    if x < 0.0 && sig > 0.0 {
-        return Value::Error(CellError::Num);
-    }
     Value::Number((x / sig).floor() * sig)
 }
 
@@ -944,11 +941,9 @@ mod tests {
     }
 
     #[test]
-    fn floor_negative_x_positive_sig_returns_num() {
-        assert_eq!(
-            builtin_floor(&[Value::Number(-5.0), Value::Number(1.0)]),
-            Value::Error(CellError::Num)
-        );
+    fn floor_negative_x_positive_sig_rounds_toward_neg_infinity() {
+        assert_eq!(builtin_floor(&[Value::Number(-5.0), Value::Number(1.0)]), Value::Number(-5.0));
+        assert_eq!(builtin_floor(&[Value::Number(-2.3), Value::Number(1.0)]), Value::Number(-3.0));
     }
 
     #[test]
