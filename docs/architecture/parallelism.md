@@ -104,13 +104,13 @@ fn run_worker(
 
 ## calamine reader per worker
 
-Each worker opens its own calamine `Xlsx` handle and seeks to its row range. We cannot share a single reader across threads (it's not `Sync`). Opening N readers is O(1) for shared-strings extraction since each parses `sharedStrings.xml`; we eat the N× shared-strings load cost as a floor. For the 400k-row 56 MB reference workload, shared-strings is a few MB — ~8× this is acceptable.
+Each worker opens its own calamine `Xlsx` handle and seeks to its row range. We cannot share a single reader across threads (it's not `Sync`). Opening N readers is O(1) for shared-strings extraction since each parses `sharedStrings.xml`; we eat the N× shared-strings load cost as a floor. For the 700k-row 56 MB reference workload, shared-strings is a few MB — ~8× this is acceptable.
 
 **Optimisation (v0.2):** load `sharedStrings.xml` once, share across workers via `Arc<Vec<String>>` injected into each reader. Requires a fork or PR to calamine.
 
 ## `seek_to_row`
 
-calamine's `XlsxCellReader` doesn't natively support "skip to row N without emitting cells up to N." We build our own by consuming and discarding cells until the row index reaches the target. On the 400k-row reference workload, worker 8 skips 350k rows — measurable but acceptable (~0.5–1s of discard).
+calamine's `XlsxCellReader` doesn't natively support "skip to row N without emitting cells up to N." We build our own by consuming and discarding cells until the row index reaches the target. On the 700k-row reference workload, worker 8 skips 350k rows — measurable but acceptable (~0.5–1s of discard).
 
 **Optimisation (v0.2):** index the xlsx's sheet XML offsets by row (one pass; stored in memory) — O(1) seek.
 
@@ -131,7 +131,7 @@ Python API: `xlstream.evaluate(input, output, workers=4)`.
 ## Measured expectations
 
 From formualizer-comparable numbers in the brief:
-- Single-threaded streaming eval (pure per-row, no parallelism): ~8–12 minutes on 400k × 20 (conservative).
+- Single-threaded streaming eval (pure per-row, no parallelism): ~8–12 minutes on 700k × 20 (conservative).
 - 8-worker streaming: ~1.5–2 minutes (near-linear scaling for pure row-local; diluted by prelude + writer serialisation).
 
 Benchmark harness is in `benchmarks/` — see [phase-12](../phases/phase-12-benchmarks.md).

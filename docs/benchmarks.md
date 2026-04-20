@@ -36,7 +36,7 @@ Modest speedup on this workload. Bottleneck is I/O: each worker re-opens the xls
 
 | Engine | Workload | Wall-clock | Peak RSS |
 |---|---|---|---|
-| formualizer (measured 2026-04-17) | 400k x 20 | 5h 40m | 3.3 GB |
+| formualizer (measured 2026-04-17) | 700k x 20 | 5h 40m | 3.3 GB |
 | xlstream single-threaded (measured) | 700k x 20 | 48s | 734 MB |
 
 Ratio: ~425x faster, ~4.5x less memory.
@@ -51,7 +51,7 @@ Ratio: ~425x faster, ~4.5x less memory.
 | Medium (100k) | < 100 MB | 206 MB | Miss (2x) |
 | Large (1M) | < 300 MB | 1.7 GB | Miss (5.7x) |
 
-The original target (< 250 MB for 400k rows) was based on the assumption that streaming evaluation would keep memory flat. The evaluation logic does — it holds ~10 MB (one row buffer + prelude scalars + lookup indexes). The memory overshoot comes from the I/O libraries.
+The original target (< 250 MB for 700k rows) was based on the assumption that streaming evaluation would keep memory flat. The evaluation logic does — it holds ~10 MB (one row buffer + prelude scalars + lookup indexes). The memory overshoot comes from the I/O libraries.
 
 ### Where the memory goes
 
