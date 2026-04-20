@@ -3,7 +3,7 @@
 All notable changes to xlstream. Format: [Keep a Changelog](https://keepachangelog.com/).
 Semver.
 
-## [Unreleased]
+## [0.1.0] - 2026-04-20
 
 ### Added
 
