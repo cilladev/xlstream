@@ -38,12 +38,12 @@ Thumbs.db
 .env
 .envrc
 
+# xlsx files — generated, never committed (too large, binary)
+*.xlsx
+
 # Benchmark artefacts
 /benchmarks/results/*.json
 /benchmarks/results/*.html
-
-# Large fixture xlsx files — keep generators, not artefacts
-/fixtures/generated/*.xlsx
 
 # Coverage
 tarpaulin-report.html
