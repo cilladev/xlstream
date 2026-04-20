@@ -162,6 +162,91 @@ pub(crate) fn builtin_averageifs(
     interp.prelude().get_multi_conditional(&key, &composite)
 }
 
+/// `SUMIF(criteria_range, criteria, [sum_range])`
+pub(crate) fn builtin_sumif(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let Some(criteria_col) = extract_criteria_col(args[0]) else {
+        return Value::Error(CellError::Value);
+    };
+    let sum_col = if args.len() >= 3 {
+        let Some(sc) = extract_criteria_col(args[2]) else {
+            return Value::Error(CellError::Value);
+        };
+        sc
+    } else {
+        criteria_col
+    };
+    let criteria_val = extract_static_criteria(args[1], interp, scope);
+    let key = MultiConditionalAggKey {
+        kind: AggKind::Sum,
+        sum_col,
+        criteria_cols: vec![criteria_col],
+        sheet: None,
+    };
+    let composite = build_composite_key(&[criteria_val]);
+    interp.prelude().get_multi_conditional(&key, &composite)
+}
+
+/// `COUNTIF(criteria_range, criteria)`
+pub(crate) fn builtin_countif(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let Some(criteria_col) = extract_criteria_col(args[0]) else {
+        return Value::Error(CellError::Value);
+    };
+    let criteria_val = extract_static_criteria(args[1], interp, scope);
+    let key = MultiConditionalAggKey {
+        kind: AggKind::Count,
+        sum_col: 0,
+        criteria_cols: vec![criteria_col],
+        sheet: None,
+    };
+    let composite = build_composite_key(&[criteria_val]);
+    interp.prelude().get_multi_conditional(&key, &composite)
+}
+
+/// `AVERAGEIF(criteria_range, criteria, [avg_range])`
+pub(crate) fn builtin_averageif(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let Some(criteria_col) = extract_criteria_col(args[0]) else {
+        return Value::Error(CellError::Value);
+    };
+    let sum_col = if args.len() >= 3 {
+        let Some(sc) = extract_criteria_col(args[2]) else {
+            return Value::Error(CellError::Value);
+        };
+        sc
+    } else {
+        criteria_col
+    };
+    let criteria_val = extract_static_criteria(args[1], interp, scope);
+    let key = MultiConditionalAggKey {
+        kind: AggKind::Average,
+        sum_col,
+        criteria_cols: vec![criteria_col],
+        sheet: None,
+    };
+    let composite = build_composite_key(&[criteria_val]);
+    interp.prelude().get_multi_conditional(&key, &composite)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
