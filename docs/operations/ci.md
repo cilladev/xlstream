@@ -1,13 +1,13 @@
 # CI
 
-GitHub Actions. **Four** workflows: `pre-commit`, `ci`, `release`, `nightly`.
+GitHub Actions. **Three** workflows: `pre-commit`, `ci`, `release`.
 
 ## Division of labour
 
 - **`pre-commit.yml`** — runs the same hooks contributors run locally (fmt, clippy, test, doctests, ruff, typos, commit-msg format). Catches cases where a contributor skipped local hooks or used `--no-verify`. One OS (Ubuntu) — this is correctness, not platform matrix.
 - **`ci.yml`** — platform matrix: (Linux / macOS / Windows) × (cargo test, cargo audit, Python wheel build + pytest). What pre-commit can't cover.
 - **`release.yml`** — tag-triggered wheel builds + crates.io + PyPI publish.
-- **`nightly.yml`** — scheduled benchmark runs + fuzz targets.
+- Benchmarks run per-PR via the `bench-smoke` job in `ci.yml`.
 
 The `pre-commit` + `ci` split avoids running clippy and tests twice. See the file for the exact job list.
 
@@ -78,7 +78,7 @@ jobs:
 
   bench-smoke:
     runs-on: ubuntu-latest
-    # Quick sanity benchmark on every PR — full runs live in nightly.
+    # Quick sanity benchmark on every PR.
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -183,44 +183,6 @@ jobs:
 ```
 
 Crate publish order matters — dependents must wait for dependencies. `xlstream-core` first, then `parse` / `io` (which depend on core), then `eval` (which depends on all three).
-
-## `nightly.yml` — scheduled
-
-```yaml
-name: Nightly
-
-on:
-  schedule:
-    - cron: "17 3 * * *"   # 03:17 UTC daily
-  workflow_dispatch:
-
-jobs:
-  benchmarks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo bench --workspace
-      - name: Publish results to gh-pages
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: 'criterion'
-          output-file-path: target/criterion
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-
-  fuzz:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [fuzz_parser, fuzz_xlsx_reader, fuzz_classifier]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo install cargo-fuzz
-      - run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=600  # 10 min per target
-```
 
 ## Required secrets
 

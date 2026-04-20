@@ -8,7 +8,7 @@
 
 **Reading:** [`docs/benchmarks.md`](../benchmarks.md), [`docs/research/benchmarks.md`](../research/benchmarks.md).
 
-**Output:** `cargo bench` produces HTML report. Nightly CI publishes results to gh-pages. Reference workload hits targets.
+**Output:** `cargo bench` produces HTML report. Per-PR smoke bench in CI. Reference workload hits targets.
 
 ## Workload tiers
 
