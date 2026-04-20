@@ -13,7 +13,6 @@ use xlstream_core::Value;
 use xlstream_eval::evaluate;
 
 #[test]
-#[ignore = "bug: PRODUCT with literal args returns #VALUE! (see issue.md section 3)"]
 fn product_literal_args() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
@@ -39,7 +38,6 @@ fn product_literal_args() {
 }
 
 #[test]
-#[ignore = "bug: PRODUCT with literal args returns #VALUE! (see issue.md section 3)"]
 fn product_cell_ref_args() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.xlsx");
