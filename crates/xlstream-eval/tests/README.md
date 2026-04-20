@@ -30,14 +30,14 @@ Broad coverage across all supported functions. Excel is the oracle.
 
 1. Generate the fixture (one-time, or after adding formulas):
    ```sh
-   cargo test -p xlstream-eval --test regression -- generate_fixture --ignored --nocapture
+   cargo test -p xlstream-eval --test regression_base -- generate_fixture --ignored --nocapture
    ```
 2. Open `tests/fixtures/regression.xlsx` in Excel.
 3. Let formulas compute, then save. Excel populates cached values.
 4. Commit the file.
 5. Run:
    ```sh
-   cargo test -p xlstream-eval --test regression
+   cargo test -p xlstream-eval --test regression_base
    ```
 
 The test evaluates the fixture through xlstream and compares every cell
@@ -105,8 +105,8 @@ cargo test -p xlstream-eval
 cargo test -p xlstream-eval -- --include-ignored
 
 # Just the golden-file test
-cargo test -p xlstream-eval --test regression
+cargo test -p xlstream-eval --test regression_base
 
-# Just the base regression tests (includes ignored)
-cargo test -p xlstream-eval --test regression_base -- --include-ignored
+# Just the per-issue regression tests (includes ignored)
+cargo test -p xlstream-eval --test regression_per_issue -- --include-ignored
 ```

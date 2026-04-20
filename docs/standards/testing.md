@@ -106,17 +106,17 @@ fn reference_workload_small() {
 
 Two complementary approaches live in `crates/xlstream-eval/tests/`. See `tests/README.md` for full details.
 
-### Golden-file regression (`regression.rs`)
+### Golden-file regression (`regression_base.rs`)
 
 A single workbook (`tests/fixtures/regression.xlsx`) exercises all 117 supported surfaces. Excel is the oracle.
 
-1. Generate: `cargo test -p xlstream-eval --test regression -- generate_fixture --ignored --nocapture`
+1. Generate: `cargo test -p xlstream-eval --test regression_base -- generate_fixture --ignored --nocapture`
 2. Open in Excel, save (populates cached values), commit.
-3. Run: `cargo test -p xlstream-eval --test regression`
+3. Run: `cargo test -p xlstream-eval --test regression_base`
 
 The test evaluates the fixture through xlstream and compares every formula cell against Excel's cached value. Volatile functions (TODAY, NOW) are skipped. Float comparison uses epsilon 1e-6. Cell errors from Excel are matched against xlstream's error-string representation.
 
-**When to regenerate:** after adding new formula columns to the `FORMULAS` spec in `regression.rs`.
+**When to regenerate:** after adding new formula columns to the `FORMULAS` spec in `regression_base.rs`.
 
 ### Base regression tests (`regression_base.rs`)
 
@@ -130,7 +130,7 @@ Naming: `test_<short_description>`.
 
 ## Excel parity
 
-Every builtin function has at least one test asserting its output against values produced by real Excel. The golden-file regression suite (`regression.rs`) is the primary mechanism — it covers all 117 surfaces in a single workbook verified by Excel.
+Every builtin function has at least one test asserting its output against values produced by real Excel. The golden-file regression suite (`regression_base.rs`) is the primary mechanism — it covers all 117 surfaces in a single workbook verified by Excel.
 
 ## The 1900 leap year test
 
