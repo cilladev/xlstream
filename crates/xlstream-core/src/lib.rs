@@ -33,3 +33,6 @@ pub use cell_error::CellError;
 pub use date::ExcelDate;
 pub use error::XlStreamError;
 pub use value::Value;
+
+/// Maximum row count in an Excel xlsx worksheet (2^20).
+pub const EXCEL_MAX_ROWS: u64 = 1_048_576;
