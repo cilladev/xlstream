@@ -36,3 +36,5 @@ pub use value::Value;
 
 /// Maximum row count in an Excel xlsx worksheet (2^20).
 pub const EXCEL_MAX_ROWS: u64 = 1_048_576;
+/// Maximum column count in an Excel xlsx worksheet (2^14).
+pub const EXCEL_MAX_COLS: u16 = 16_384;
