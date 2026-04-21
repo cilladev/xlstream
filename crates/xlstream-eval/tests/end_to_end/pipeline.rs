@@ -1,14 +1,4 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::float_cmp,
-    clippy::cast_precision_loss,
-    clippy::needless_range_loop
-)]
-
-mod helpers;
-
+use super::helpers;
 use xlstream_core::{Value, XlStreamError};
 use xlstream_eval::evaluate;
 use xlstream_io::Reader;

@@ -5,7 +5,6 @@
 //! Plain aggregates (SUM, COUNT, etc.) on the streaming sheet work fine.
 //!
 //! See: issue.md section 2.
-#![allow(clippy::float_cmp)]
 
 use rust_xlsxwriter::{Formula, Workbook};
 use tempfile::TempDir;
