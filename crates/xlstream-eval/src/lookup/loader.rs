@@ -71,6 +71,8 @@ pub fn load_lookup_sheets(
             })?;
 
         // TODO(perf): calamine requires separate passes for cells and formulas
+        // Calamine's API limitation — you can't read cells and formulas in one pass.
+        // This is a performance note, not missing work. Can't fix without calamine changes
         let formulas = reader.formulas(original_name)?;
 
         let mut stream = reader.cells(original_name)?;
