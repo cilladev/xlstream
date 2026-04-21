@@ -14,6 +14,16 @@ When you land a function, tick the box **here** in the same PR that lands the im
 
 **v0.1 ship gate:** every `v0.1` row ticked, `cargo test` green, benchmark budget met. `v0.2` rows may ship later.
 
+## Reference types
+
+| Type | Status | Notes |
+|---|---|---|
+| Cell reference (`A2`, `Sheet1!B3`) | [x] | Row-local only |
+| Range reference (`A:A`, `A1:B10`) | [x] | Aggregate/lookup context only |
+| Named range (`MyRange`) | [x] | Resolved via `defined_names()` at classification time (v0.2) |
+| Table reference (`Table1[Column]`) | [ ] | v0.2 planned |
+| External reference (`[Book.xlsx]Sheet1!A1`) | - | Violates single-file model |
+
 ## Operators
 
 All v0.1. Non-negotiable.
