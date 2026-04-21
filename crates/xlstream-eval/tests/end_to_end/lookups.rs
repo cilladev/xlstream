@@ -1,11 +1,4 @@
 //! End-to-end tests for lookup functions through the full evaluate pipeline.
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss
-)]
 
 use std::path::Path;
 

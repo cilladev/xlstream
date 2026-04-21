@@ -5,7 +5,6 @@
 //! `NonStaticCriteria`. Fix requires grouped-aggregate prelude maps.
 //!
 //! See: issue.md section 1.
-#![allow(clippy::float_cmp)]
 
 use rust_xlsxwriter::{Formula, Workbook};
 use tempfile::TempDir;

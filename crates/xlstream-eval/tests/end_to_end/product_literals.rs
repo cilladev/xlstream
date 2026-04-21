@@ -5,7 +5,6 @@
 //! prelude ref. Scalar-only args should classify as `RowLocal`.
 //!
 //! See: issue.md section 3.
-#![allow(clippy::float_cmp)]
 
 use rust_xlsxwriter::{Formula, Workbook};
 use tempfile::TempDir;
