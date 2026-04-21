@@ -4,22 +4,20 @@
 
 ## What you are building
 
-`xlstream` is a **streaming Excel formula evaluation engine** written in Rust, with Python bindings. It reads `.xlsx` files row-by-row, evaluates formulas in a single (or two-pass) streaming traversal, and writes the results to a new `.xlsx` — all in bounded memory regardless of file size.
+`xlstream` is a **streaming Excel formula evaluation engine** written in Rust, with Python bindings. It reads `.xlsx` files row-by-row, evaluates formulas in a single (or two-pass) streaming traversal (no dependency graph, no full-workbook buffering), and writes the results to a new `.xlsx` — all in bounded memory regardless of file size.
 
-**Design goal in one sentence:** evaluate a 700,000-row × 20-column xlsx in under 3 minutes of wall-clock time with peak RSS under 250 MB.
-
-We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* engine for the subset of workloads where formulas are mostly **row-local** with **shared lookup sheets that fit in memory** and **whole-column aggregates** — which is ~90% of real business workbooks. Lookup sheets can have thousands to hundreds of thousands of rows; "fits in memory" is the real constraint, not "small."
+We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* Excel formula evaluator — supporting ~465 of Excel's ~500 functions, everything that fits a streaming architecture.
 
 ## Why this exists
 
-The alternative, `formualizer` (Rust, graph-based), takes **5h 40m wall-clock at 3.3 GB peak RSS** to evaluate a 700k × 20 workbook (measured 2026-04-17). That's architectural: the graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no iterative calc, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we target **~13× less memory and ~100× faster wall-clock** on the identical workload.
+The alternative, `formualizer` (Rust, graph-based), takes **5h 40m wall-clock at 3.3 GB peak RSS** to evaluate a 700k × 20 workbook (measured 2026-04-17). That's architectural: the graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading the ~51 functions that require full-workbook buffering (OFFSET, INDIRECT, dynamic arrays, LAMBDA) for architectural simplicity (streaming, two-pass) we achieved **~4.5× less memory and ~425× faster wall-clock** on the identical workload.
 
 Full background: [`docs/brief.md`](docs/brief.md) and [`docs/research/formualizer.md`](docs/research/formualizer.md).
 
 ## Non-negotiables
 
 1. **Correctness first, speed second.** A fast wrong answer is useless. Every formula implementation lands with tests against known Excel outputs.
-2. **No unsafe Rust in the MVP.** If performance ever demands it, justify in a design doc first, contain it behind a safe wrapper, and document the invariants.
+2. **No unsafe Rust.** If performance ever demands it, justify in a design doc first, contain it behind a safe wrapper, and document the invariants.
 3. **No panics in library code.** Every error path returns a typed `Result<_, XlStreamError>`. Panics are for "impossible" invariant violations only and must never be reachable from user input.
 4. **Peak memory is a test, not an aspiration.** Every new feature is benchmarked on the 700k-row reference workload. Regressions > 10% RSS block merges.
 5. **Every public API has rustdoc + at least one example.** Missing docs = failing CI.
@@ -122,11 +120,11 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 
 | Workload | Target RSS | Measured RSS | Target time | Measured time |
 |---|---|---|---|---|
-| 10k × 20 (10 formula cols) | < 50 MB | 31 MB | < 2 s | 1.6s |
-| 100k × 20 (10 formula cols) | < 150 MB | 206 MB | < 15 s | 16.0s |
-| 700k × 20 (10 formula cols) | < 250 MB | ~734 MB* | < 3 min | ~48s* |
+| 10k × 20 | < 50 MB | 38 MB | < 2 s | 1.65s |
+| 100k × 20 | < 150 MB | 250 MB | < 15 s | 15.8s |
+| 700k × 20 | < 250 MB | ~734 MB | < 3 min | ~48s |
 
-*Measured on a 50-col workbook (20 data + 30 formula). RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`docs/benchmarks.md`](docs/benchmarks.md).
+RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ## Current state
 

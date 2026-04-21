@@ -3,19 +3,39 @@
 ![CI](https://github.com/cilladev/xlstream/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)
 
-**Streaming Excel formula evaluation engine.** Rust core with Python bindings.
+`xlstream` is a **streaming Excel formula evaluation engine** written in Rust, with Python bindings. It reads `.xlsx` files row-by-row, evaluates formulas in a single (or two-pass) streaming traversal (no dependency graph, no full-workbook buffering), and writes the results to a new `.xlsx` — all in bounded memory regardless of file size.
 
-Evaluates xlsx formulas in a single streaming pass -- no dependency graph, no full-workbook buffering. 117 Excel functions, row-parallel execution, bounded memory.
+We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* Excel formula evaluator — supporting ~465 +of Excel's ~500 functions, everything that fits a streaming architecture
 
 ## Performance
 
-| | xlstream | formualizer |
-|---|---|---|
-| 700k rows x 20 cols | **48s** | 5h 40m |
-| Peak memory | **734 MB** | 3.3 GB |
-| Architecture | Streaming (2-pass) | Full dependency graph |
-
 **425x faster** on the same workbook. [Full benchmarks](docs/benchmarks.md)
+
+|                     | xlstream           | formualizer           |
+| ------------------- | ------------------ | --------------------- |
+| 700k rows x 20 cols | **48s**            | 5h 40m                |
+| Peak memory         | **734 MB**         | 3.3 GB                |
+| Architecture        | Streaming (2-pass) | Full dependency graph |
+
+
+## Supported functions
+
+113 functions + 13 operators across 9 categories. [Full list with cross-reference](docs/functions.md).
+
+| Category   | Count | Examples                                          |
+| ---------- | ----- | ------------------------------------------------- |
+| Operators  | 13    | `+`, `-`, `*`, `/`, `^`, `&`, `%`, comparisons    |
+| Logical    | 11    | IF, IFS, SWITCH, IFERROR, AND, OR, NOT, XOR       |
+| Aggregates | 15    | SUM, SUMIF, SUMIFS, AVERAGE, COUNTIF, MEDIAN      |
+| Lookups    | 7     | VLOOKUP, XLOOKUP, INDEX/MATCH, HLOOKUP, CHOOSE    |
+| Text       | 19    | LEFT, UPPER, TRIM, CONCAT, TEXT, FIND, SUBSTITUTE |
+| Date       | 12    | TODAY, YEAR, EDATE, EOMONTH, DATEDIF, NETWORKDAYS |
+| Math       | 23    | ROUND, MOD, ABS, SQRT, LOG, SIN, PI, FLOOR        |
+| Info       | 10    | ISNUMBER, ISTEXT, ISERROR, ISBLANK, ISREF, TYPE   |
+| Financial  | 6     | PMT, PV, FV, NPV, IRR, RATE                       |
+
+Excel has ~500 functions. ~465 are streaming-compatible. We're adding more each release — see the [roadmap](docs/roadmap/README.md).
+
 
 ## Install
 
@@ -49,25 +69,6 @@ xlstream evaluate input.xlsx -o output.xlsx -w 8 --verbose
 let summary = xlstream_eval::evaluate(&input, &output, Some(8))?;
 ```
 
-## What it supports
-
-| Category | Count | Examples |
-|---|---|---|
-| Operators | 13 | `+`, `-`, `*`, `/`, `^`, `&`, `%`, comparisons |
-| Conditionals / logical | 11 | IF, IFS, SWITCH, IFERROR, AND, OR, NOT |
-| Aggregates | 15 | SUM, AVERAGE, SUMIF, COUNTIFS, MEDIAN |
-| Lookups | 7 | VLOOKUP, XLOOKUP, INDEX/MATCH, CHOOSE |
-| String | 19 | LEFT, UPPER, TRIM, CONCAT, TEXT, FIND |
-| Date | 12 | TODAY, YEAR, EDATE, NETWORKDAYS |
-| Math | 23 | ROUND, MOD, ABS, SQRT, LOG, SIN, PI |
-| Info | 10 | ISNUMBER, ISTEXT, ISERROR, ISBLANK, NA, TYPE |
-| Financial | 6 | PMT, PV, FV, NPV, IRR, RATE |
-| **Total** | **117** | [Full list](docs/functions.md) |
-
-## What it doesn't support
-
-OFFSET, INDIRECT, FILTER, UNIQUE, SORT, LAMBDA, LET -- these require random cell access which breaks streaming. Named ranges and table references are v0.2. See [limitations](docs/architecture/streaming-model.md).
-
 ## Error handling
 
 ```python
@@ -81,21 +82,6 @@ except OSError as e:
     print(e)  # file not found, corrupt xlsx
 ```
 
-## Development
-
-```bash
-make install    # one-time: venv + rust + python + git hooks
-make check      # fmt + clippy + tests + doctests
-make bench      # benchmarks (rust + python)
-make help       # all commands
-```
-
-## Documentation
-
-- [Architecture](docs/architecture/) -- streaming model, crate layout, parallelism
-- [Benchmarks](docs/benchmarks.md) -- measured performance across tiers
-- [Functions](docs/functions.md) -- canonical list with status
-- [Contributing](CONTRIBUTING.md) -- code standards, PR workflow
 
 ## License
 

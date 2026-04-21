@@ -1,228 +1,602 @@
-# Supported functions — canonical list
+# Supported Functions
 
-Authoritative catalogue of every formula function xlstream supports. Pure Excel only. No custom extensions.
+Every Excel function (~493), organized by category. Cross-referenced against xlstream support status, streaming compatibility, target version, and competitor engines.
 
+## Legend
 
-## Operators
+| Symbol | Meaning |
+|---|---|
+| x | Implemented and shipped |
+| . | Planned (streaming-compatible, not yet built) |
+| - | Permanently excluded (incompatible with streaming design model) |
 
-All v0.1. Non-negotiable.
+## Logical
 
-| Symbol | Kind | Name | Tier | Phase | Status |
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
 |---|---|---|---|---|---|
-| `+` | binary | add / unary plus | v0.1 | 5 | [x] |
-| `-` | binary / unary | subtract / negate | v0.1 | 5 | [x] |
-| `*` | binary | multiply | v0.1 | 5 | [x] |
-| `/` | binary | divide | v0.1 | 5 | [x] |
-| `^` | binary | exponent | v0.1 | 5 | [x] |
-| `&` | binary | text concatenation | v0.1 | 5 | [x] |
-| `%` | postfix unary | percent (divide by 100) | v0.1 | 5 | [x] |
-| `=` | binary | equality | v0.1 | 5 | [x] |
-| `<>` | binary | inequality | v0.1 | 5 | [x] |
-| `<` | binary | less-than | v0.1 | 5 | [x] |
-| `>` | binary | greater-than | v0.1 | 5 | [x] |
-| `<=` | binary | less-or-equal | v0.1 | 5 | [x] |
-| `>=` | binary | greater-or-equal | v0.1 | 5 | [x] |
+| TRUE | x | yes | v0.1 | x | x |
+| FALSE | x | yes | v0.1 | x | x |
+| IF | x | yes | v0.1 | x | x |
+| IFS | x | yes | v0.1 | x | |
+| SWITCH | x | yes | v0.1 | x | |
+| IFERROR | x | yes | v0.1 | x | x |
+| IFNA | x | yes | v0.1 | x | |
+| AND | x | yes | v0.1 | x | x |
+| OR | x | yes | v0.1 | x | x |
+| NOT | x | yes | v0.1 | x | x |
+| XOR | x | yes | v0.1 | x | |
+| LET | . | yes | v0.4 | x | |
+| LAMBDA | - | no | - | x | |
+| MAP | - | no | - | | |
+| REDUCE | - | no | - | | |
+| SCAN | - | no | - | | |
+| BYROW | - | no | - | | |
+| BYCOL | - | no | - | | |
+| MAKEARRAY | - | no | - | | |
 
-## Logical (Phase 6)
+## Math & Trigonometry
 
-All v0.1. Fundamental — nothing useful without these.
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| ABS | x | yes | v0.1 | x | x |
+| ACOS | x | yes | v0.1 | x | |
+| ACOSH | . | yes | v0.3 | x | |
+| ACOT | . | yes | v0.3 | | |
+| ACOTH | . | yes | v0.3 | | |
+| AGGREGATE | . | yes | v0.3 | | |
+| ARABIC | . | yes | v0.3 | | |
+| ASIN | x | yes | v0.1 | x | |
+| ASINH | . | yes | v0.3 | x | |
+| ATAN | x | yes | v0.1 | x | |
+| ATAN2 | x | yes | v0.1 | x | |
+| ATANH | . | yes | v0.3 | x | |
+| BASE | . | yes | v0.3 | | |
+| CEILING | x | yes | v0.1 | x | x |
+| CEILING.MATH | . | yes | v0.3 | | |
+| CEILING.PRECISE | . | yes | v0.3 | | |
+| COMBIN | . | yes | v0.3 | | |
+| COMBINA | . | yes | v0.3 | | |
+| COS | x | yes | v0.1 | x | |
+| COSH | . | yes | v0.3 | x | |
+| COT | . | yes | v0.3 | | |
+| COTH | . | yes | v0.3 | | |
+| CSC | . | yes | v0.3 | | |
+| CSCH | . | yes | v0.3 | | |
+| DECIMAL | . | yes | v0.3 | | |
+| DEGREES | . | yes | v0.3 | x | |
+| EVEN | . | yes | v0.3 | x | |
+| EXP | x | yes | v0.1 | x | |
+| FACT | . | yes | v0.3 | | |
+| FACTDOUBLE | . | yes | v0.3 | | |
+| FLOOR | x | yes | v0.1 | x | x |
+| FLOOR.MATH | . | yes | v0.3 | | |
+| FLOOR.PRECISE | . | yes | v0.3 | | |
+| GCD | . | yes | v0.3 | | |
+| INT | x | yes | v0.1 | x | x |
+| ISO.CEILING | . | yes | v0.3 | | |
+| LCM | . | yes | v0.3 | | |
+| LN | x | yes | v0.1 | x | x |
+| LOG | x | yes | v0.1 | x | x |
+| LOG10 | x | yes | v0.1 | x | |
+| MDETERM | . | yes | v0.3 | | |
+| MINVERSE | . | yes | v0.3 | | |
+| MMULT | . | yes | v0.3 | | |
+| MOD | x | yes | v0.1 | x | x |
+| MROUND | . | yes | v0.3 | | |
+| MULTINOMIAL | . | yes | v0.3 | | |
+| MUNIT | . | yes | v0.3 | | |
+| ODD | . | yes | v0.3 | x | |
+| PI | x | yes | v0.1 | x | x |
+| POWER | x | yes | v0.1 | x | x |
+| PRODUCT | x | yes | v0.1 | x | |
+| QUOTIENT | . | yes | v0.3 | | |
+| RADIANS | . | yes | v0.3 | x | |
+| RAND | - | no | - | x | x |
+| RANDARRAY | - | no | - | | |
+| RANDBETWEEN | - | no | - | x | x |
+| ROMAN | . | yes | v0.3 | | |
+| ROUND | x | yes | v0.1 | x | x |
+| ROUNDDOWN | x | yes | v0.1 | x | x |
+| ROUNDUP | x | yes | v0.1 | x | x |
+| SEC | . | yes | v0.3 | | |
+| SECH | . | yes | v0.3 | | |
+| SEQUENCE | - | no | - | | |
+| SERIESSUM | . | yes | v0.3 | | |
+| SIGN | x | yes | v0.1 | x | |
+| SIN | x | yes | v0.1 | x | |
+| SINH | . | yes | v0.3 | x | |
+| SQRT | x | yes | v0.1 | x | x |
+| SQRTPI | . | yes | v0.3 | | |
+| SUBTOTAL | . | yes | v0.3 | | |
+| SUM | x | yes | v0.1 | x | x |
+| SUMIF | x | yes | v0.1 | x | x |
+| SUMIFS | x | yes | v0.1 | x | |
+| SUMPRODUCT | . | yes | v0.2 | x | x |
+| SUMSQ | . | yes | v0.3 | | |
+| SUMX2MY2 | . | yes | v0.3 | | |
+| SUMX2PY2 | . | yes | v0.3 | | |
+| SUMXMY2 | . | yes | v0.3 | | |
+| TAN | x | yes | v0.1 | x | |
+| TANH | . | yes | v0.3 | x | |
+| TRUNC | . | yes | v0.3 | x | |
 
-| Function | Signature | Notes | Tier | Status |
+## Statistical
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| AVERAGE | x | yes | v0.1 | x | x |
+| AVERAGEA | . | yes | v0.3 | | |
+| AVERAGEIF | x | yes | v0.1 | x | |
+| AVERAGEIFS | x | yes | v0.1 | x | |
+| AVEDEV | . | yes | v0.3 | | |
+| BETA.DIST | . | yes | v0.3 | | |
+| BETA.INV | . | yes | v0.3 | | |
+| BINOM.DIST | . | yes | v0.3 | | |
+| BINOM.DIST.RANGE | . | yes | v0.3 | | |
+| BINOM.INV | . | yes | v0.3 | | |
+| CHISQ.DIST | . | yes | v0.3 | | |
+| CHISQ.DIST.RT | . | yes | v0.3 | | |
+| CHISQ.INV | . | yes | v0.3 | | |
+| CHISQ.INV.RT | . | yes | v0.3 | | |
+| CHISQ.TEST | . | yes | v0.3 | | |
+| CONFIDENCE.NORM | . | yes | v0.3 | | |
+| CONFIDENCE.T | . | yes | v0.3 | | |
+| CORREL | . | yes | v0.3 | | |
+| COUNT | x | yes | v0.1 | x | x |
+| COUNTA | x | yes | v0.1 | x | x |
+| COUNTBLANK | x | yes | v0.1 | x | |
+| COUNTIF | x | yes | v0.1 | x | x |
+| COUNTIFS | x | yes | v0.1 | x | |
+| COVARIANCE.P | . | yes | v0.3 | | |
+| COVARIANCE.S | . | yes | v0.3 | | |
+| DEVSQ | . | yes | v0.3 | | |
+| EXPON.DIST | . | yes | v0.3 | | |
+| F.DIST | . | yes | v0.3 | | |
+| F.DIST.RT | . | yes | v0.3 | | |
+| F.INV | . | yes | v0.3 | | |
+| F.INV.RT | . | yes | v0.3 | | |
+| F.TEST | . | yes | v0.3 | | |
+| FISHER | . | yes | v0.3 | | |
+| FISHERINV | . | yes | v0.3 | | |
+| FORECAST.LINEAR | . | yes | v0.3 | | |
+| FREQUENCY | . | yes | v0.3 | | |
+| GAMMA | . | yes | v0.3 | | |
+| GAMMA.DIST | . | yes | v0.3 | | |
+| GAMMA.INV | . | yes | v0.3 | | |
+| GAMMALN | . | yes | v0.3 | | |
+| GAMMALN.PRECISE | . | yes | v0.3 | | |
+| GAUSS | . | yes | v0.3 | | |
+| GEOMEAN | . | yes | v0.3 | | |
+| GROWTH | . | yes | v0.3 | | |
+| HARMEAN | . | yes | v0.3 | | |
+| HYPGEOM.DIST | . | yes | v0.3 | | |
+| INTERCEPT | . | yes | v0.3 | | |
+| KURT | . | yes | v0.3 | | |
+| LARGE | . | yes | v0.3 | | |
+| LINEST | . | yes | v0.3 | | |
+| LOGEST | . | yes | v0.3 | | |
+| LOGNORM.DIST | . | yes | v0.3 | | |
+| LOGNORM.INV | . | yes | v0.3 | | |
+| MAX | x | yes | v0.1 | x | x |
+| MAXA | . | yes | v0.3 | | |
+| MAXIFS | . | yes | v0.2 | | |
+| MEDIAN | x | yes | v0.1 | x | |
+| MIN | x | yes | v0.1 | x | x |
+| MINA | . | yes | v0.3 | | |
+| MINIFS | . | yes | v0.2 | | |
+| MODE.SNGL | . | yes | v0.3 | | |
+| MODE.MULT | . | yes | v0.3 | | |
+| NEGBINOM.DIST | . | yes | v0.3 | | |
+| NORM.DIST | . | yes | v0.3 | | |
+| NORM.INV | . | yes | v0.3 | | |
+| NORM.S.DIST | . | yes | v0.3 | | |
+| NORM.S.INV | . | yes | v0.3 | | |
+| PEARSON | . | yes | v0.3 | | |
+| PERCENTILE.EXC | . | yes | v0.3 | | |
+| PERCENTILE.INC | . | yes | v0.3 | | |
+| PERCENTRANK.EXC | . | yes | v0.3 | | |
+| PERCENTRANK.INC | . | yes | v0.3 | | |
+| PERMUT | . | yes | v0.3 | | |
+| PERMUTATIONA | . | yes | v0.3 | | |
+| PHI | . | yes | v0.3 | | |
+| POISSON.DIST | . | yes | v0.3 | | |
+| PROB | . | yes | v0.3 | | |
+| QUARTILE.EXC | . | yes | v0.3 | | |
+| QUARTILE.INC | . | yes | v0.3 | | |
+| RANK.AVG | . | yes | v0.3 | | |
+| RANK.EQ | . | yes | v0.3 | | |
+| RSQ | . | yes | v0.3 | | |
+| SKEW | . | yes | v0.3 | | |
+| SKEW.P | . | yes | v0.3 | | |
+| SLOPE | . | yes | v0.3 | | |
+| SMALL | . | yes | v0.3 | | |
+| STANDARDIZE | . | yes | v0.3 | | |
+| STDEV.P | . | yes | v0.3 | | |
+| STDEV.S | . | yes | v0.3 | | |
+| STDEVA | . | yes | v0.3 | | |
+| STDEVPA | . | yes | v0.3 | | |
+| STEYX | . | yes | v0.3 | | |
+| T.DIST | . | yes | v0.3 | | |
+| T.DIST.2T | . | yes | v0.3 | | |
+| T.DIST.RT | . | yes | v0.3 | | |
+| T.INV | . | yes | v0.3 | | |
+| T.INV.2T | . | yes | v0.3 | | |
+| T.TEST | . | yes | v0.3 | | |
+| TREND | . | yes | v0.3 | | |
+| TRIMMEAN | . | yes | v0.3 | | |
+| VAR.P | . | yes | v0.3 | | |
+| VAR.S | . | yes | v0.3 | | |
+| VARA | . | yes | v0.3 | | |
+| VARPA | . | yes | v0.3 | | |
+| WEIBULL.DIST | . | yes | v0.3 | | |
+| Z.TEST | . | yes | v0.3 | | |
+
+## Text
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| CHAR | . | yes | v0.3 | | |
+| CLEAN | x | yes | v0.1 | x | |
+| CODE | . | yes | v0.3 | | |
+| CONCAT | x | yes | v0.1 | x | x |
+| CONCATENATE | x | yes | v0.1 | x | x |
+| DOLLAR | . | yes | v0.3 | | |
+| EXACT | x | yes | v0.1 | x | |
+| FIND | x | yes | v0.1 | x | x |
+| FINDB | . | yes | v0.3 | | |
+| FIXED | . | yes | v0.3 | | |
+| LEFT | x | yes | v0.1 | x | x |
+| LEFTB | . | yes | v0.3 | | |
+| LEN | x | yes | v0.1 | x | x |
+| LENB | . | yes | v0.3 | | |
+| LOWER | x | yes | v0.1 | x | x |
+| MID | x | yes | v0.1 | x | x |
+| MIDB | . | yes | v0.3 | | |
+| NUMBERVALUE | . | yes | v0.3 | | |
+| PROPER | x | yes | v0.1 | x | |
+| REPLACE | x | yes | v0.1 | x | |
+| REPLACEB | . | yes | v0.3 | | |
+| REPT | . | yes | v0.3 | | |
+| RIGHT | x | yes | v0.1 | x | x |
+| RIGHTB | . | yes | v0.3 | | |
+| SEARCH | x | yes | v0.1 | x | |
+| SEARCHB | . | yes | v0.3 | | |
+| SUBSTITUTE | x | yes | v0.1 | x | |
+| T | . | yes | v0.3 | | |
+| TEXT | x | yes | v0.1 | x | |
+| TEXTAFTER | . | yes | v0.3 | | |
+| TEXTBEFORE | . | yes | v0.3 | | |
+| TEXTJOIN | x | yes | v0.1 | x | |
+| TEXTSPLIT | - | no | - | | |
+| TRIM | x | yes | v0.1 | x | x |
+| UNICHAR | . | yes | v0.3 | | |
+| UNICODE | . | yes | v0.3 | | |
+| UPPER | x | yes | v0.1 | x | x |
+| VALUE | x | yes | v0.1 | x | x |
+| VALUETOTEXT | . | yes | v0.3 | | |
+
+## Date & Time
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| DATE | x | yes | v0.1 | x | x |
+| DATEDIF | x | yes | v0.1 | x | |
+| DATEVALUE | . | yes | v0.3 | | |
+| DAY | x | yes | v0.1 | x | x |
+| DAYS | . | yes | v0.3 | | |
+| DAYS360 | . | yes | v0.3 | | |
+| EDATE | x | yes | v0.1 | x | x |
+| EOMONTH | x | yes | v0.1 | x | x |
+| HOUR | . | yes | v0.3 | | |
+| ISOWEEKNUM | . | yes | v0.3 | x | |
+| MINUTE | . | yes | v0.3 | | |
+| MONTH | x | yes | v0.1 | x | x |
+| NETWORKDAYS | x | yes | v0.1 | x | |
+| NETWORKDAYS.INTL | . | yes | v0.3 | | |
+| NOW | x | yes | v0.1 | x | x |
+| SECOND | . | yes | v0.3 | | |
+| TIME | . | yes | v0.3 | | |
+| TIMEVALUE | . | yes | v0.3 | | |
+| TODAY | x | yes | v0.1 | x | x |
+| WEEKDAY | x | yes | v0.1 | x | x |
+| WEEKNUM | . | yes | v0.3 | | |
+| WORKDAY | x | yes | v0.1 | x | |
+| WORKDAY.INTL | . | yes | v0.3 | | |
+| YEAR | x | yes | v0.1 | x | x |
+| YEARFRAC | . | yes | v0.3 | x | x |
+
+## Lookup & Reference
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| ADDRESS | . | yes | v0.3 | | |
+| CHOOSE | x | yes | v0.1 | x | |
+| COLUMN | . | yes | v0.2 | | |
+| COLUMNS | . | yes | v0.2 | | |
+| HLOOKUP | x | yes | v0.1 | x | |
+| INDEX | x | yes | v0.1 | x | x |
+| LOOKUP | . | yes | v0.3 | x | |
+| MATCH | x | yes | v0.1 | x | x |
+| ROW | . | yes | v0.3 | | |
+| ROWS | . | yes | v0.2 | | |
+| VLOOKUP | x | yes | v0.1 | x | x |
+| XLOOKUP | x | yes | v0.1 | x | |
+| XMATCH | x | yes | v0.1 | x | |
+| AREAS | - | no | - | | |
+| CHOOSECOLS | - | no | - | | |
+| CHOOSEROWS | - | no | - | | |
+| DROP | - | no | - | | |
+| EXPAND | - | no | - | | |
+| FILTER | - | no | - | x | |
+| FORMULATEXT | - | no | - | | |
+| HSTACK | - | no | - | | |
+| HYPERLINK | - | no | - | x | |
+| INDIRECT | - | no | - | x | |
+| OFFSET | - | no | - | x | |
+| SORT | - | no | - | x | |
+| SORTBY | - | no | - | | |
+| TAKE | - | no | - | | |
+| TOCOL | - | no | - | | |
+| TOROW | - | no | - | | |
+| TRANSPOSE | - | no | - | | |
+| UNIQUE | - | no | - | x | |
+| VSTACK | - | no | - | | |
+
+## Information
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| ISBLANK | x | yes | v0.1 | x | |
+| ISERROR | x | yes | v0.1 | x | |
+| ISLOGICAL | x | yes | v0.1 | x | |
+| ISNA | x | yes | v0.1 | x | |
+| ISNONTEXT | x | yes | v0.1 | x | |
+| ISNUMBER | x | yes | v0.1 | x | |
+| ISREF | x | yes | v0.1 | x | |
+| ISTEXT | x | yes | v0.1 | x | |
+| NA | x | yes | v0.1 | x | |
+| TYPE | x | yes | v0.1 | x | |
+| ERROR.TYPE | . | yes | v0.3 | | |
+| ISERR | . | yes | v0.3 | | |
+| ISEVEN | . | yes | v0.3 | | |
+| ISODD | . | yes | v0.3 | | |
+| N | . | yes | v0.3 | | |
+| CELL | - | no | - | | |
+| INFO | - | no | - | | |
+| ISFORMULA | - | no | - | | |
+| SHEET | - | no | - | | |
+| SHEETS | - | no | - | | |
+
+## Financial
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| FV | x | yes | v0.1 | x | |
+| IRR | x | yes | v0.1 | x | |
+| NPV | x | yes | v0.1 | x | |
+| PMT | x | yes | v0.1 | x | |
+| PV | x | yes | v0.1 | x | |
+| RATE | x | yes | v0.1 | x | |
+| ACCRINT | . | yes | v0.4 | | |
+| ACCRINTM | . | yes | v0.4 | | |
+| CUMIPMT | . | yes | v0.4 | | |
+| CUMPRINC | . | yes | v0.4 | | |
+| DB | . | yes | v0.4 | | |
+| DDB | . | yes | v0.4 | | |
+| DISC | . | yes | v0.4 | | |
+| DOLLARDE | . | yes | v0.4 | | |
+| DOLLARFR | . | yes | v0.4 | | |
+| DURATION | . | yes | v0.4 | | |
+| EFFECT | . | yes | v0.4 | | |
+| FVSCHEDULE | . | yes | v0.4 | | |
+| INTRATE | . | yes | v0.4 | | |
+| IPMT | . | yes | v0.4 | | |
+| ISPMT | . | yes | v0.4 | | |
+| MDURATION | . | yes | v0.4 | | |
+| MIRR | . | yes | v0.4 | | |
+| NOMINAL | . | yes | v0.4 | | |
+| NPER | . | yes | v0.4 | | |
+| PDURATION | . | yes | v0.4 | | |
+| PPMT | . | yes | v0.4 | | |
+| PRICE | . | yes | v0.4 | | |
+| PRICEDISC | . | yes | v0.4 | | |
+| PRICEMAT | . | yes | v0.4 | | |
+| RECEIVED | . | yes | v0.4 | | |
+| RRI | . | yes | v0.4 | | |
+| SLN | . | yes | v0.4 | | |
+| SYD | . | yes | v0.4 | | |
+| TBILLEQ | . | yes | v0.4 | | |
+| TBILLPRICE | . | yes | v0.4 | | |
+| TBILLYIELD | . | yes | v0.4 | | |
+| VDB | . | yes | v0.4 | | |
+| XIRR | . | yes | v0.4 | | |
+| XNPV | . | yes | v0.4 | | |
+| YIELD | . | yes | v0.4 | | |
+| YIELDDISC | . | yes | v0.4 | | |
+| YIELDMAT | . | yes | v0.4 | | |
+
+## Engineering
+
+All row-local (pure math). No streaming concerns.
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| BIN2DEC | . | yes | v0.3 | | x |
+| BIN2HEX | . | yes | v0.3 | | x |
+| BIN2OCT | . | yes | v0.3 | | x |
+| BITAND | . | yes | v0.3 | | |
+| BITLSHIFT | . | yes | v0.3 | | |
+| BITOR | . | yes | v0.3 | | |
+| BITRSHIFT | . | yes | v0.3 | | |
+| BITXOR | . | yes | v0.3 | | |
+| COMPLEX | . | yes | v0.3 | | |
+| CONVERT | . | yes | v0.3 | | |
+| DEC2BIN | . | yes | v0.3 | | x |
+| DEC2HEX | . | yes | v0.3 | | x |
+| DEC2OCT | . | yes | v0.3 | | x |
+| DELTA | . | yes | v0.3 | | |
+| ERF | . | yes | v0.3 | | |
+| ERF.PRECISE | . | yes | v0.3 | | |
+| ERFC | . | yes | v0.3 | | |
+| ERFC.PRECISE | . | yes | v0.3 | | |
+| GESTEP | . | yes | v0.3 | | |
+| HEX2BIN | . | yes | v0.3 | | x |
+| HEX2DEC | . | yes | v0.3 | | x |
+| HEX2OCT | . | yes | v0.3 | | x |
+| OCT2BIN | . | yes | v0.3 | | x |
+| OCT2DEC | . | yes | v0.3 | | x |
+| OCT2HEX | . | yes | v0.3 | | x |
+| BESSELI | . | yes | v0.3 | | |
+| BESSELJ | . | yes | v0.3 | | |
+| BESSELK | . | yes | v0.3 | | |
+| BESSELY | . | yes | v0.3 | | |
+| IMABS | . | yes | v0.3 | | |
+| IMAGINARY | . | yes | v0.3 | | |
+| IMARGUMENT | . | yes | v0.3 | | |
+| IMCONJUGATE | . | yes | v0.3 | | |
+| IMCOS | . | yes | v0.3 | | |
+| IMCOSH | . | yes | v0.3 | | |
+| IMCOT | . | yes | v0.3 | | |
+| IMCSC | . | yes | v0.3 | | |
+| IMCSCH | . | yes | v0.3 | | |
+| IMDIV | . | yes | v0.3 | | |
+| IMEXP | . | yes | v0.3 | | |
+| IMLN | . | yes | v0.3 | | |
+| IMLOG10 | . | yes | v0.3 | | |
+| IMLOG2 | . | yes | v0.3 | | |
+| IMPOWER | . | yes | v0.3 | | |
+| IMPRODUCT | . | yes | v0.3 | | |
+| IMREAL | . | yes | v0.3 | | |
+| IMSEC | . | yes | v0.3 | | |
+| IMSECH | . | yes | v0.3 | | |
+| IMSIN | . | yes | v0.3 | | |
+| IMSINH | . | yes | v0.3 | | |
+| IMSQRT | . | yes | v0.3 | | |
+| IMSUB | . | yes | v0.3 | | |
+| IMSUM | . | yes | v0.3 | | |
+| IMTAN | . | yes | v0.3 | | |
+
+## Database
+
+All implementable as prelude aggregates with structured criteria parsing.
+
+| Function | xlstream | Streamable | Version | formualizer | xlcalculator |
+|---|---|---|---|---|---|
+| DAVERAGE | . | yes | v0.5 | | |
+| DCOUNT | . | yes | v0.5 | | |
+| DCOUNTA | . | yes | v0.5 | | |
+| DGET | . | yes | v0.5 | | |
+| DMAX | . | yes | v0.5 | | |
+| DMIN | . | yes | v0.5 | | |
+| DPRODUCT | . | yes | v0.5 | | |
+| DSTDEV | . | yes | v0.5 | | |
+| DSTDEVP | . | yes | v0.5 | | |
+| DSUM | . | yes | v0.5 | | |
+| DVAR | . | yes | v0.5 | | |
+| DVARP | . | yes | v0.5 | | |
+
+## Compatibility
+
+Old function names. Thin wrappers over modern equivalents (implemented in v0.3/v0.4).
+
+| Function | xlstream | Version | Maps to |
+|---|---|---|---|
+| BETADIST | . | v0.5 | BETA.DIST |
+| BETAINV | . | v0.5 | BETA.INV |
+| BINOMDIST | . | v0.5 | BINOM.DIST |
+| CHIDIST | . | v0.5 | CHISQ.DIST.RT |
+| CHIINV | . | v0.5 | CHISQ.INV.RT |
+| CHITEST | . | v0.5 | CHISQ.TEST |
+| CONFIDENCE | . | v0.5 | CONFIDENCE.NORM |
+| COVAR | . | v0.5 | COVARIANCE.P |
+| CRITBINOM | . | v0.5 | BINOM.INV |
+| EXPONDIST | . | v0.5 | EXPON.DIST |
+| FDIST | . | v0.5 | F.DIST.RT |
+| FINV | . | v0.5 | F.INV.RT |
+| FORECAST | . | v0.5 | FORECAST.LINEAR |
+| FTEST | . | v0.5 | F.TEST |
+| GAMMADIST | . | v0.5 | GAMMA.DIST |
+| GAMMAINV | . | v0.5 | GAMMA.INV |
+| HYPGEOMDIST | . | v0.5 | HYPGEOM.DIST |
+| LOGINV | . | v0.5 | LOGNORM.INV |
+| LOGNORMDIST | . | v0.5 | LOGNORM.DIST |
+| MODE | . | v0.5 | MODE.SNGL |
+| NEGBINOMDIST | . | v0.5 | NEGBINOM.DIST |
+| NORMDIST | . | v0.5 | NORM.DIST |
+| NORMINV | . | v0.5 | NORM.INV |
+| NORMSDIST | . | v0.5 | NORM.S.DIST |
+| NORMSINV | . | v0.5 | NORM.S.INV |
+| PERCENTILE | . | v0.5 | PERCENTILE.INC |
+| PERCENTRANK | . | v0.5 | PERCENTRANK.INC |
+| POISSON | . | v0.5 | POISSON.DIST |
+| QUARTILE | . | v0.5 | QUARTILE.INC |
+| RANK | . | v0.5 | RANK.EQ |
+| STDEV | . | v0.5 | STDEV.S |
+| STDEVP | . | v0.5 | STDEV.P |
+| TDIST | . | v0.5 | T.DIST.2T |
+| TINV | . | v0.5 | T.INV.2T |
+| TTEST | . | v0.5 | T.TEST |
+| VAR | . | v0.5 | VAR.S |
+| VARP | . | v0.5 | VAR.P |
+| WEIBULL | . | v0.5 | WEIBULL.DIST |
+| ZTEST | . | v0.5 | Z.TEST |
+
+## Permanently excluded
+
+| Function | Category | Why |
+|---|---|---|
+| OFFSET | Lookup |
+| INDIRECT | Lookup |
+| FILTER | Lookup | Dynamic array spill |
+| SORT | Lookup | Dynamic array spill |
+| SORTBY | Lookup | Dynamic array spill |
+| UNIQUE | Lookup | Dynamic array spill |
+| SEQUENCE | Math | Dynamic array spill |
+| RAND | Math | Volatile, non-deterministic |
+| RANDARRAY | Math |
+| RANDBETWEEN | Math | Volatile, non-deterministic |
+| LAMBDA | Logical |
+| MAP | Logical |
+| REDUCE | Logical |
+| SCAN | Logical |
+| BYROW | Logical |
+| BYCOL | Logical |
+| MAKEARRAY | Logical |
+| TEXTSPLIT | Text |
+| TRANSPOSE | Lookup |
+| HSTACK / VSTACK | Lookup |
+| TOCOL / TOROW | Lookup |
+| CHOOSECOLS / CHOOSEROWS | Lookup |
+| DROP / TAKE / EXPAND | Lookup |
+| HYPERLINK | Lookup |
+| WEBSERVICE | Web | Network I/O |
+| ENCODEURL | Web | Network context |
+| FILTERXML | Web | Network context |
+| CUBE* (7) | Cube | OLAP connection |
+| CELL | Info |
+| INFO | Info |
+| ISFORMULA | Info |
+| SHEET / SHEETS | Info |
+| FORMULATEXT | Lookup |
+
+## Summary
+
+| Category | Excel total | xlstream now | Streamable | Excluded |
 |---|---|---|---|---|
-| `TRUE` | `()` | bool literal | v0.1 | [x] |
-| `FALSE` | `()` | bool literal | v0.1 | [x] |
-| `IF` | `(cond, then, else?)` | short-circuit | v0.1 | [x] |
-| `IFS` | `(cond1, val1, cond2, val2, ...)` | first match wins; no match → `#N/A` | v0.1 | [x] |
-| `SWITCH` | `(expr, val1, result1, ..., default?)` | expr evaluated once | v0.1 | [x] |
-| `IFERROR` | `(expr, fallback)` | catches any `CellError` | v0.1 | [x] |
-| `IFNA` | `(expr, fallback)` | catches only `#N/A` | v0.1 | [x] |
-| `AND` | `(a, b, ...)` | short-circuit on false | v0.1 | [x] |
-| `OR` | `(a, b, ...)` | short-circuit on true | v0.1 | [x] |
-| `NOT` | `(x)` | boolean invert | v0.1 | [x] |
-| `XOR` | `(a, b, ...)` | parity (odd-true) | v0.1 | [x] |
+| Logical | 19 | 11 | 12 | 7 |
+| Math & Trig | 82 | 30 | 78 | 4 |
+| Statistical | 109 | 15 | 109 | 0 |
+| Text | 49 | 19 | 48 | 1 |
+| Date & Time | 25 | 12 | 25 | 0 |
+| Lookup & Reference | 40 | 10 | 16 | 24 |
+| Information | 22 | 10 | 17 | 5 |
+| Financial | 55 | 6 | 55 | 0 |
+| Engineering | 54 | 0 | 54 | 0 |
+| Database | 12 | 0 | 12 | 0 |
+| Compatibility | 39 | 0 | 39 | 0 |
+| Cube/Web | 10 | 0 | 0 | 10 |
+| **Total** | **~516** | **113** | **~465** | **~51** |
 
-## Aggregates / Statistics (Phase 7)
-
-Pre-computed at prelude when the range is a whole column or bounded range in a non-streaming sheet.
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `SUM` | `(range, ...)` | numeric sum | v0.1 | [x] |
-| `SUMIF` | `(range, criteria, sum_range?)` | conditional sum | v0.1 | [x] |
-| `SUMIFS` | `(sum_range, (crit_range, crit)+)` | multi-criteria sum | v0.1 | [x] |
-| `SUMPRODUCT` | `(range1, range2, ...)` | sum of element-wise products | v0.2 | [ ] |
-| `PRODUCT` | `(range, ...)` | numeric product | v0.1 | [x] |
-| `COUNT` | `(range, ...)` | count of numerics | v0.1 | [x] |
-| `COUNTA` | `(range, ...)` | count of non-empty | v0.1 | [x] |
-| `COUNTBLANK` | `(range)` | count of empty | v0.1 | [x] |
-| `COUNTIF` | `(range, criteria)` | conditional count | v0.1 | [x] |
-| `COUNTIFS` | `((crit_range, crit)+)` | multi-criteria count | v0.1 | [x] |
-| `AVERAGE` | `(range, ...)` | mean; empty -> `#DIV/0!` | v0.1 | [x] |
-| `AVERAGEIF` | `(range, criteria, avg_range?)` | conditional mean | v0.1 | [x] |
-| `AVERAGEIFS` | `(avg_range, (crit_range, crit)+)` | multi-criteria mean | v0.1 | [x] |
-| `MIN` | `(range, ...)` | minimum | v0.1 | [x] |
-| `MAX` | `(range, ...)` | maximum | v0.1 | [x] |
-| `MINIFS` | `(min_range, (crit_range, crit)+)` | conditional min | v0.2 | [ ] |
-| `MAXIFS` | `(max_range, (crit_range, crit)+)` | conditional max | v0.2 | [ ] |
-| `MEDIAN` | `(range, ...)` | middle value of sorted numerics | v0.1 | [x] |
-
-## Lookup (Phase 8)
-
-All v0.1. Hash-indexed exact match, binary-search approx, wildcard fallback. Single-key; multi-key via pre-computed helper column in the lookup sheet.
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `VLOOKUP` | `(lookup, table, col_index, approx?)` | exact (`FALSE`) or approx (`TRUE`/default) | v0.1 | [x] |
-| `HLOOKUP` | `(lookup, table, row_index, approx?)` | row-oriented VLOOKUP | v0.1 | [x] |
-| `XLOOKUP` | `(lookup, lookup_arr, return_arr, not_found?, match_mode?, search_mode?)` | modern lookup | v0.1 | [x] |
-| `MATCH` | `(lookup, lookup_arr, match_type?)` | returns index | v0.1 | [x] |
-| `XMATCH` | `(lookup, lookup_arr, match_mode?, search_mode?)` | modern MATCH | v0.1 | [x] |
-| `INDEX` | `(array, row, col?)` | array access; no index build | v0.1 | [x] |
-| `CHOOSE` | `(index, val1, val2, ...)` | argument pick | v0.1 | [x] |
-
-## Text (Phase 9)
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `LEFT` | `(text, n?)` | n defaults to 1 | v0.1 | [x] |
-| `RIGHT` | `(text, n?)` | n defaults to 1 | v0.1 | [x] |
-| `MID` | `(text, start, n)` | start is 1-based | v0.1 | [x] |
-| `LEN` | `(text)` | character count | v0.1 | [x] |
-| `UPPER` | `(text)` | uppercase | v0.1 | [x] |
-| `LOWER` | `(text)` | lowercase | v0.1 | [x] |
-| `PROPER` | `(text)` | title case | v0.2 | [x] |
-| `TRIM` | `(text)` | strips leading/trailing + collapses runs of spaces | v0.1 | [x] |
-| `CLEAN` | `(text)` | strips non-printable | v0.2 | [x] |
-| `CONCAT` | `(a, b, ...)` | joins (modern) | v0.1 | [x] |
-| `CONCATENATE` | `(a, b, ...)` | joins (legacy alias) | v0.1 | [x] |
-| `TEXTJOIN` | `(delim, ignore_empty, a, b, ...)` | delimited join | v0.1 | [x] |
-| `FIND` | `(needle, haystack, start?)` | 1-based, case-sensitive | v0.1 | [x] |
-| `SEARCH` | `(needle, haystack, start?)` | case-insensitive, wildcard-enabled | v0.1 | [x] |
-| `SUBSTITUTE` | `(text, old, new, which?)` | replace by match | v0.1 | [x] |
-| `REPLACE` | `(text, start, n, new)` | replace by position | v0.1 | [x] |
-| `TEXT` | `(value, format)` | numeric/date to formatted string (subset of formats) | v0.1 | [x] |
-| `VALUE` | `(text)` | text to number | v0.1 | [x] |
-| `EXACT` | `(a, b)` | case-sensitive equality | v0.2 | [x] |
-
-## Math (Phase 9)
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `ROUND` | `(x, digits)` | round half away from zero | v0.1 | [x] |
-| `ROUNDUP` | `(x, digits)` | toward +∞ | v0.1 | [x] |
-| `ROUNDDOWN` | `(x, digits)` | toward 0 | v0.1 | [x] |
-| `INT` | `(x)` | floor toward -∞ | v0.1 | [x] |
-| `MOD` | `(x, y)` | sign of divisor | v0.1 | [x] |
-| `ABS` | `(x)` | absolute value | v0.1 | [x] |
-| `SIGN` | `(x)` | -1, 0, or 1 | v0.1 | [x] |
-| `SQRT` | `(x)` | square root; negative → `#NUM!` | v0.1 | [x] |
-| `POWER` | `(base, exp)` | same as `^` | v0.1 | [x] |
-| `CEILING` | `(x, significance)` | round up to multiple | v0.2 | [x] |
-| `FLOOR` | `(x, significance)` | round down to multiple | v0.2 | [x] |
-| `LN` | `(x)` | natural log | v0.2 | [x] |
-| `LOG` | `(x, base?)` | base defaults to 10 | v0.2 | [x] |
-| `LOG10` | `(x)` | base-10 log | v0.2 | [x] |
-| `EXP` | `(x)` | e^x | v0.2 | [x] |
-| `SIN` | `(x)` | radians | v0.2 | [x] |
-| `COS` | `(x)` | radians | v0.2 | [x] |
-| `TAN` | `(x)` | radians | v0.2 | [x] |
-| `ASIN` | `(x)` | returns radians | v0.2 | [x] |
-| `ACOS` | `(x)` | returns radians | v0.2 | [x] |
-| `ATAN` | `(x)` | returns radians | v0.2 | [x] |
-| `ATAN2` | `(y, x)` | note Excel arg order (y before x) | v0.2 | [x] |
-| `PI` | `()` | constant π | v0.1 | [x] |
-| `RAND` | `()` | **unsupported** — volatile; deterministic seeding deferred | v0.1 | [ ] |
-| `RANDBETWEEN` | `(low, high)` | **unsupported** — volatile; deterministic seeding deferred | v0.1 | [ ] |
-
-## Date / Time (Phase 9)
-
-Excel 1900-based serial dates. The 1900-02-29 leap bug is preserved for compatibility.
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `TODAY` | `()` | date; evaluated once per run | v0.1 | [x] |
-| `NOW` | `()` | date+time; evaluated once per run | v0.1 | [x] |
-| `DATE` | `(y, m, d)` | rolls over (`DATE(2026,13,1) = DATE(2027,1,1)`) | v0.1 | [x] |
-| `YEAR` | `(date)` | | v0.1 | [x] |
-| `MONTH` | `(date)` | | v0.1 | [x] |
-| `DAY` | `(date)` | | v0.1 | [x] |
-| `WEEKDAY` | `(date, type?)` | type = 1/2/3 (Excel variants) | v0.1 | [x] |
-| `EDATE` | `(date, months)` | same day, N months later | v0.1 | [x] |
-| `EOMONTH` | `(date, months)` | last day of the resulting month | v0.1 | [x] |
-| `DATEDIF` | `(start, end, unit)` | `"y"`, `"m"`, `"d"`, `"ym"`, `"yd"`, `"md"` | v0.1 | [x] |
-| `NETWORKDAYS` | `(start, end, holidays?)` | skips weekends | v0.2 | [x] |
-| `WORKDAY` | `(start, days, holidays?)` | start + N working days | v0.2 | [x] |
-
-## Info / type (Phase 9)
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `ISBLANK` | `(x)` | true iff `Empty` | v0.1 | [x] |
-| `ISNUMBER` | `(x)` | | v0.1 | [x] |
-| `ISTEXT` | `(x)` | | v0.1 | [x] |
-| `ISLOGICAL` | `(x)` | | v0.2 | [x] |
-| `ISNONTEXT` | `(x)` | inverse of ISTEXT | v0.2 | [x] |
-| `ISERROR` | `(x)` | any `CellError` | v0.1 | [x] |
-| `ISNA` | `(x)` | `#N/A` only | v0.1 | [x] |
-| `ISREF` | `(x)` | always `FALSE` in our model | v0.2 | [x] |
-| `NA` | `()` | returns `#N/A` | v0.1 | [x] |
-| `TYPE` | `(x)` | Excel-style type code | v0.2 | [x] |
-
-## Financial (Phase 9)
-
-| Function | Signature | Notes | Tier | Status |
-|---|---|---|---|---|
-| `PMT` | `(rate, nper, pv, fv?, type?)` | loan payment | v0.1 | [x] |
-| `PV` | `(rate, nper, pmt, fv?, type?)` | present value | v0.1 | [x] |
-| `FV` | `(rate, nper, pmt, pv?, type?)` | future value | v0.1 | [x] |
-| `NPV` | `(rate, v1, v2, ...)` | net present value | v0.1 | [x] |
-| `IRR` | `(values, guess?)` | internal rate of return; iterative | v0.2 | [x] |
-| `RATE` | `(nper, pmt, pv, fv?, type?, guess?)` | interest rate; iterative | v0.2 | [x] |
-
-## Explicitly NOT supported
-
-These functions are parsed but **refused at classification time** with a `ClassificationError` / `UnsupportedFormula`:
-
-- **`OFFSET`, `INDIRECT`** — resolve addresses at runtime; incompatible with streaming.
-- **`FILTER`, `UNIQUE`, `SORT`, `SORTBY`, `SEQUENCE`, `RANDARRAY`** — dynamic arrays; need spill semantics.
-- **`LAMBDA`, `LET`** — user-defined functions; deferred.
-- **`HYPERLINK`** (as a function returning a clickable URL), **`WEBSERVICE`**, **`ENCODEURL`** — network / side-effecting.
-- **`CUBE*`** family — OLAP functions.
-- **Engineering** (BESSEL, HEX2BIN, etc.) — deferred; add if users ask.
-- **Database** (DSUM, DGET, etc.) — deferred.
-
-See [`architecture/streaming-model.md`](architecture/streaming-model.md) for *why* each is refused.
-
-## Tallies
-
-### Implemented — 104 functions + 13 operators = 117 surfaces
-
-All v0.1 gate functions shipped (except RAND/RANDBETWEEN, marked unsupported). All v0.2 stretch functions also shipped early.
-
-| Category | Implemented |
-|---|---|
-| Operators | 13 |
-| Logical | 11 |
-| Aggregates | 15 |
-| Lookup | 7 |
-| Text | 19 |
-| Math | 23 |
-| Date/Time | 12 |
-| Info | 10 |
-| Financial | 6 |
-
-### Not yet implemented — 3 functions (deferred to v0.2)
-
-| Category | Deferred |
-|---|---|
-| Aggregates | SUMPRODUCT, MINIFS, MAXIFS |
-
-### Unsupported — 2 functions
-
-| Function | Reason |
-|---|---|
-| RAND | Volatile; deterministic seeding deferred |
-| RANDBETWEEN | Volatile; deterministic seeding deferred |
 
 ## How to add a new function
 
@@ -233,14 +607,6 @@ All v0.1 gate functions shipped (except RAND/RANDBETWEEN, marked unsupported). A
 5. Tick the box here in the same PR.
 6. Update `CHANGELOG.md`.
 
-## How to promote a v0.2 function to v0.1
-
-Open an issue with:
-- The function name.
-- Why it's needed for v0.1 release (real use case, not "would be nice").
-- Estimate of implementation + test effort.
-
-Decision rule: we promote only if leaving it out would break a common workbook shape the release is meant to handle.
 
 ## How to request a new function
 
