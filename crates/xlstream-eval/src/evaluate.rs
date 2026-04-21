@@ -8,8 +8,8 @@ use std::time::Instant;
 use xlstream_core::{col_row_to_a1, Value, XlStreamError};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
-    classify, collect_lookup_keys, extract_references, parse, rewrite, AggregateKey, Ast,
-    Classification, ClassificationContext, LookupKey, Reference,
+    classify, collect_lookup_keys, extract_references, parse, resolve_named_ranges, rewrite,
+    AggregateKey, Ast, Classification, ClassificationContext, LookupKey, Reference,
 };
 
 use crate::interp::Interpreter;
@@ -151,6 +151,8 @@ pub fn evaluate(
 fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let mut reader = Reader::open(input)?;
     let sheet_names = reader.sheet_names();
+    let named_ranges: HashMap<String, String> =
+        reader.defined_names().into_iter().map(|(k, v)| (k.to_ascii_lowercase(), v)).collect();
 
     // Find first sheet with formulas.
     let mut main_sheet: Option<String> = None;
@@ -166,7 +168,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
 
     // Parse + classify formula columns; build topo order.
     let (topo_order, col_asts, lookup_keys) = if let Some(ref main) = main_sheet {
-        build_eval_plan(main, &main_formulas, &sheet_names)?
+        build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges)?
     } else {
         (Vec::new(), HashMap::new(), Vec::new())
     };
@@ -494,6 +496,7 @@ fn build_eval_plan(
     main_sheet: &str,
     all_formulas: &[(u32, u32, String)],
     all_sheet_names: &[String],
+    named_ranges: &HashMap<String, String>,
 ) -> Result<(Vec<u32>, HashMap<u32, Ast>, Vec<LookupKey>), XlStreamError> {
     // First occurrence per column (0-based col -> (0-based row, formula text)).
     let mut col_formula: HashMap<u32, (u32, String)> = HashMap::new();
@@ -511,6 +514,7 @@ fn build_eval_plan(
         let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
         let formula_str = strip_xlfn_prefix(formula_str);
         let ast = parse(&formula_str)?;
+        let ast = resolve_named_ranges(ast, named_ranges);
 
         // Register all non-main sheets as lookup sheets so the classifier
         // accepts cross-sheet range refs in lookup functions.
