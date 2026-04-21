@@ -17,10 +17,10 @@ name = "xlstream"
 path = "src/main.rs"
 
 [dependencies]
-xlstream-core = { path = "../xlstream-core", version = "0.1.1" }
-xlstream-eval = { path = "../xlstream-eval", version = "0.1.1" }
-xlstream-parse = { path = "../xlstream-parse", version = "0.1.1" }
-xlstream-io = { path = "../xlstream-io", version = "0.1.1" }
+xlstream-core = { path = "../xlstream-core", version = "0.2.0" }
+xlstream-eval = { path = "../xlstream-eval", version = "0.2.0" }
+xlstream-parse = { path = "../xlstream-parse", version = "0.2.0" }
+xlstream-io = { path = "../xlstream-io", version = "0.2.0" }
 clap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

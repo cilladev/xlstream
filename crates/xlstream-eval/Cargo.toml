@@ -12,9 +12,9 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-xlstream-core = { path = "../xlstream-core", version = "0.1.1" }
-xlstream-parse = { path = "../xlstream-parse", version = "0.1.1" }
-xlstream-io = { path = "../xlstream-io", version = "0.1.1" }
+xlstream-core = { path = "../xlstream-core", version = "0.2.0" }
+xlstream-parse = { path = "../xlstream-parse", version = "0.2.0" }
+xlstream-io = { path = "../xlstream-io", version = "0.2.0" }
 rust_decimal.workspace = true
 ssfmt.workspace = true
 tracing.workspace = true
