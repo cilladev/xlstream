@@ -15,7 +15,7 @@ Evaluates xlsx formulas in a single streaming pass -- no dependency graph, no fu
 | Peak memory | **734 MB** | 3.3 GB |
 | Architecture | Streaming (2-pass) | Full dependency graph |
 
-**425x faster** on the same workbook. [Full benchmarks](docs/benchmarks.md)
+**425x faster** on the same workbook. [Full benchmarks](benchmarks/reports)
 
 ## Install
 
@@ -93,7 +93,7 @@ make help       # all commands
 ## Documentation
 
 - [Architecture](docs/architecture/) -- streaming model, crate layout, parallelism
-- [Benchmarks](docs/benchmarks.md) -- measured performance across tiers
+- [Benchmarks](benchmarks/reports/) -- measured performance across tiers
 - [Functions](docs/functions.md) -- canonical list with status
 - [Contributing](CONTRIBUTING.md) -- code standards, PR workflow
 

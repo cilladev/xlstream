@@ -126,7 +126,7 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 | 100k × 20 (10 formula cols) | < 150 MB | 206 MB | < 15 s | 16.0s |
 | 700k × 20 (10 formula cols) | < 250 MB | ~734 MB* | < 3 min | ~48s* |
 
-*Measured on a 50-col workbook (20 data + 30 formula). RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`docs/benchmarks.md`](docs/benchmarks.md).
+*Measured on a 50-col workbook (20 data + 30 formula). RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`benchmarks/reports/`](benchmarks/reports/).
 
 ## Current state
 

@@ -2,7 +2,7 @@
 
 Pre-build investigation: formualizer baseline, workload design, methodology decisions.
 
-For measured xlstream performance numbers, see [`docs/benchmarks.md`](../benchmarks.md).
+For measured xlstream performance numbers, see [`benchmarks/reports/`](../../benchmarks/reports/).
 
 ## The reference workload
 
