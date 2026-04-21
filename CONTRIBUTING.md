@@ -6,8 +6,7 @@ Thanks for the interest. xlstream is early — the fastest way to help is to rea
 
 1. Read [`CLAUDE.md`](CLAUDE.md) — the rules everyone follows.
 2. Read [`docs/brief.md`](docs/brief.md) — what we're building.
-3. Read [`docs/phases/README.md`](docs/phases/README.md) — find the current phase.
-4. Read the architecture doc for the area you're touching.
+3. Read the architecture doc for the area you're touching.
 
 ## One-time setup
 
