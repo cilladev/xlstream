@@ -76,7 +76,7 @@ If you're an agent implementing a phase, `functions.md` is what you tick boxes a
 
 Nobody publishes standardised "evaluate N-row xlsx" benchmarks. We produce one as part of v0.1:
 - Reference workload: `benchmark_large_formulas.xlsx` (700k × 20, 10 formula columns, 2 lookup sheets).
-- Published results in [`docs/benchmarks.md`](../benchmarks.md).
+- Published results in [`benchmarks/reports/`](../../benchmarks/reports/).
 - Plot over time on `gh-pages` via criterion + github-action-benchmark.
 
 ## References
