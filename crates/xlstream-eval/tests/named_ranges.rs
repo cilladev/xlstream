@@ -298,3 +298,35 @@ fn no_named_ranges_regression_guard() {
         assert_eq!(row[2], Value::Number(expected), "row {i}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Unknown named range -> #NAME? (not evaluation abort)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn unknown_named_range_produces_name_error() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet().set_name("Sheet1").unwrap();
+
+    ws.write_string(0, 0, "A").unwrap();
+    ws.write_string(0, 1, "B").unwrap();
+
+    ws.write_number(1, 0, 42.0).unwrap();
+    ws.write_formula(1, 1, Formula::new("=MissingName+1").set_result("#NAME?")).unwrap();
+
+    wb.save(&input).unwrap();
+
+    let summary = evaluate(&input, &output, None).unwrap();
+    assert_eq!(summary.formulas_evaluated, 1);
+
+    let mut reader = Reader::open(&output).unwrap();
+    let mut stream = reader.cells("Sheet1").unwrap();
+    let _ = stream.next_row().unwrap(); // skip header
+
+    let (_, row) = stream.next_row().unwrap().unwrap();
+    assert_eq!(row[1], Value::Text("#NAME?".into()), "unknown named range should produce #NAME?");
+}

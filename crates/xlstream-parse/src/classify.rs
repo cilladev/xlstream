@@ -75,7 +75,7 @@ impl std::fmt::Display for UnsupportedReason {
             Self::TableReference => {
                 write!(f, "structured table references are not supported in v0.1")
             }
-            Self::NamedRange => write!(f, "named ranges are not supported in v0.1"),
+            Self::NamedRange => write!(f, "named range not found in workbook"),
             Self::NestedUnsupported => write!(f, "contains an unsupported sub-expression"),
             Self::LookupSheetNotPrepared => {
                 write!(f, "lookup range points at a sheet the prelude has not indexed")
@@ -107,7 +107,7 @@ impl UnsupportedReason {
             Self::UnboundedRange => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-of-a-column",
             Self::NonStaticCriteria => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-pre-pass",
             Self::LookupSheetNotPrepared => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#lookup-index-pre-pass",
-            Self::TableReference | Self::NamedRange => "https://github.com/cilladev/xlstream/blob/main/docs/backlog/v0.2.md",
+            Self::TableReference | Self::NamedRange => "https://github.com/cilladev/xlstream/blob/main/docs/roadmap/v0.2/README.md",
             Self::NestedUnsupported => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md",
         }
     }
@@ -433,7 +433,7 @@ fn classify_reference(
             }
         }
 
-        Reference::Named(_) => Disposition::Unsupported(UnsupportedReason::NamedRange),
+        Reference::Named(_) => Disposition::RowLocal,
         Reference::External { .. } => {
             Disposition::Unsupported(UnsupportedReason::ExternalReference)
         }
@@ -830,9 +830,9 @@ mod tests {
     }
 
     #[test]
-    fn named_range_unknown_stays_unsupported() {
+    fn named_range_unknown_classifies_as_row_local() {
         let c = resolve_and_classify("SUM(MissingName)", &[], "Sheet1", 2, 5, &[]);
-        assert_eq!(c, Classification::Unsupported(UnsupportedReason::NamedRange));
+        assert_eq!(c, Classification::RowLocal);
     }
 
     #[test]
