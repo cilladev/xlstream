@@ -65,7 +65,7 @@ xlstream/
 | How do errors flow through the system? | [`docs/architecture/errors.md`](docs/architecture/errors.md) |
 | What are the code-style rules? | [`docs/standards/code-style.md`](docs/standards/code-style.md) |
 | What kinds of tests do we write? | [`docs/standards/testing.md`](docs/standards/testing.md) |
-| What's the current phase? | [`docs/phases/README.md`](docs/phases/README.md) |
+| What's on the roadmap? | [`docs/roadmap/README.md`](docs/roadmap/README.md) |
 | Why one repo, not three? | [`docs/operations/repo-structure.md`](docs/operations/repo-structure.md) |
 | How is CI wired? | [`docs/operations/ci.md`](docs/operations/ci.md) |
 | Why did we pick calamine / rust_xlsxwriter? | [`docs/research/`](docs/research/) |
@@ -75,7 +75,7 @@ xlstream/
 ### Before you touch code
 
 0. **Use `/rust-skills` before writing any Rust code.** Covers idiomatic patterns, error handling, type design, and common pitfalls. Use it alongside (not instead of) any other applicable skills.
-1. **Read the current phase doc.** Find it via [`docs/phases/README.md`](docs/phases/README.md). You are implementing a specific checkbox in a specific phase. Don't free-lance.
+1. **Read the current roadmap.** Find it via [`docs/roadmap/README.md`](docs/roadmap/README.md). You are implementing a specific checkbox in the current version's checklist. Don't free-lance.
 2. **Read the architecture doc that covers your area.** Unclear architecture → stop and ask. Do not invent.
 3. **Search for existing patterns.** If three other builtins handle errors a given way, yours does too. Consistency outranks cleverness.
 4. **Always use Context7 MCP for up-to-date docs before writing code.** This is non-negotiable. Any time you're about to use a library, framework, SDK, or crate — calamine, rust_xlsxwriter, pyo3, maturin, rayon, formualizer-parse, phf, thiserror, tokio, anything — call Context7 first to verify the API shape against the **current** documentation. Your training-data knowledge may be stale; library APIs drift between versions. Context7 costs nothing; a silently-wrong import costs hours. Prefer it over general web search for library docs.
@@ -95,7 +95,7 @@ xlstream/
 
 1. **Run `make check`.** That's `cargo fmt --check && clippy -D warnings && cargo test --all-features && cargo test --doc` in one go. Nothing ships unless this passes.
 2. **Let pre-commit do the heavy lifting.** If you ran `make install` on first clone, hooks fire automatically: `pre-commit` on commit, `pre-push` on push. Don't bypass them; fix the underlying issue.
-3. **Update the phase checklist.** Tick the box you completed. Do not tick boxes you didn't actually finish.
+3. **Update the roadmap checklist.** Tick the box you completed in the current version's `docs/roadmap/vX.Y/README.md`. Do not tick boxes you didn't actually finish.
 4. **Update any doc that's now stale.** If you changed a public API, the rustdoc and any mention in `docs/` must be updated in the same PR.
 5. **If you landed a builtin function, tick it in [`docs/functions.md`](docs/functions.md) too.** Same PR.
 6. **One PR per checkbox** unless the doc says otherwise.
@@ -130,7 +130,7 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 
 ## Current state
 
-Phases 0-12 complete. Phase 13 (docs polish) in progress. See [`docs/phases/README.md`](docs/phases/README.md).
+v0.1.0 + v0.1.1 shipped. Working on v0.2. See [`docs/roadmap/README.md`](docs/roadmap/README.md).
 
 ## Tone
 

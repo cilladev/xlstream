@@ -182,4 +182,3 @@ Before v0.1.0 ships:
 - `docs/` review for typos, broken links, outdated code.
 - mdBook site built and deployed (optional for v0.1; mandatory for v1.0).
 - Changelog finalised.
-- Migration guide from `formualizer` if applicable.

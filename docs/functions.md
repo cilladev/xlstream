@@ -2,17 +2,6 @@
 
 Authoritative catalogue of every formula function xlstream supports. Pure Excel only. No custom extensions.
 
-## Legend
-
-| Column | Meaning |
-|---|---|
-| **Tier** | `v0.1` = release-gate for the first stable release; `v0.2` = stretch, ships when time allows |
-| **Phase** | Which phase doc implements it (see [`phases/README.md`](phases/README.md)) |
-| **Status** | `[ ]` not implemented, `[x]` implemented, tested, shipped |
-
-When you land a function, tick the box **here** in the same PR that lands the implementation. This page is the single source of truth.
-
-**v0.1 ship gate:** every `v0.1` row ticked, `cargo test` green, benchmark budget met. `v0.2` rows may ship later.
 
 ## Operators
 

@@ -79,12 +79,12 @@ Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` —
 
 v0.1 ships when all of the following hold:
 
-1. Reference workload (700k × 20, 10 formula cols including 4 VLOOKUP into hash-indexed lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a typical laptop (8-core M-series or x86 equivalent). For context: formualizer on the same workload takes 5h 40m at 3.3 GB peak.
+1. Reference workload (700k × 20, 10 formula cols including 4 VLOOKUP into hash-indexed lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a desktop workstation (10-core Intel i9 or equivalent). For context: formualizer on the same workload takes 5h 40m at 3.3 GB peak.
 2. `pip install xlstream` on Linux, macOS, Windows across Python 3.9–3.14 works.
 3. Every public Rust API has rustdoc with a doctested example.
 4. All built-in functions have unit tests referencing Excel ground truth.
 5. `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`, and `pytest` pass in CI.
-6. Published to crates.io and PyPI with a changelog, an announcement, and a migration note from `formualizer`.
+6. Published to crates.io and PyPI with a changelog and an announcement.
 
 ## Target users
 

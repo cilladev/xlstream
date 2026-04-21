@@ -1,6 +1,6 @@
-# Phases — roadmap
+# v0.1 — Archived
 
-> **Current phase: 13 — Docs polish.** See [`phase-13-docs.md`](phase-13-docs.md).
+> **Shipped.** v0.1.0 (2026-04-20) + v0.1.1 (2026-04-20). 14 phases, 117 formula surfaces, Python bindings, streaming evaluation engine.
 
 ## How this works
 
@@ -68,14 +68,9 @@ Do NOT work multiple phases simultaneously. Do NOT skip checkboxes out of order 
 | 10 | Parallelism | [`phase-10-parallelism.md`](phase-10-parallelism.md) | ✓ complete |
 | 11 | Python binding | [`phase-11-python-binding.md`](phase-11-python-binding.md) | ✓ complete |
 | 12 | Benchmarks | [`phase-12-benchmarks.md`](phase-12-benchmarks.md) | ✓ complete |
-| 13 | Docs polish | [`phase-13-docs.md`](phase-13-docs.md) | in progress |
-| 14 | Release v0.1.0 | [`phase-14-release.md`](phase-14-release.md) | not started |
+| 13 | Docs polish | [`phase-13-docs.md`](phase-13-docs.md) | complete (mdBook, migration guide, per-crate READMEs deferred) |
+| 14 | Release v0.1.0 | [`phase-14-release.md`](phase-14-release.md) | complete (v0.1.0 + v0.1.1 shipped) |
 
-## Estimated effort
-
-Cumulative estimate for all phases: **6–10 weeks** of focused work by an AI agent + human review.
-
-Individual phase estimates are in each phase doc.
 
 ## Rules for agents
 

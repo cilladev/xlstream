@@ -5,9 +5,9 @@ Navigation for everything written about the project.
 ## Start here
 
 - [`brief.md`](brief.md) — what we're building, for whom, and why.
-- [`functions.md`](functions.md) — **canonical list of every supported function** with tick-box status.
+- [`functions.md`](functions.md) — canonical list of every supported function with tick-box status.
 - [`../CLAUDE.md`](../CLAUDE.md) — rules every AI agent follows.
-- [`phases/README.md`](phases/README.md) — the phased roadmap, current progress, checklists.
+- [`roadmap/README.md`](roadmap/README.md) — versioned roadmap and current progress.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ Navigation for everything written about the project.
 - [`operations/organisation.md`](operations/organisation.md) — GitHub org strategy.
 - [`operations/ci.md`](operations/ci.md) — GitHub Actions pipelines.
 - [`operations/release.md`](operations/release.md) — crates.io + PyPI release flow.
-- [`operations/github-setup.md`](operations/github-setup.md) — GitHub UI-only setup (trusted publishing, environments, branch protection).
+- [`operations/github-setup.md`](operations/github-setup.md) — GitHub UI-only setup.
 
 ## Research
 
@@ -48,22 +48,3 @@ Navigation for everything written about the project.
 - [`research/prior-art.md`](research/prior-art.md) — competitive landscape.
 - [`research/benchmarks.md`](research/benchmarks.md) — pre-build analysis and formualizer baseline.
 - [`benchmarks.md`](benchmarks.md) — measured xlstream performance numbers.
-
-## Phases
-
-- [`phases/README.md`](phases/README.md) — overview and current phase.
-- [`phases/phase-00-foundation.md`](phases/phase-00-foundation.md) — repo, CI, tooling.
-- [`phases/phase-01-scaffolding.md`](phases/phase-01-scaffolding.md) — workspace crates.
-- [`phases/phase-02-parser.md`](phases/phase-02-parser.md) — formualizer-parse integration + classification.
-- [`phases/phase-03-io.md`](phases/phase-03-io.md) — calamine + rust_xlsxwriter.
-- [`phases/phase-04-streaming-core.md`](phases/phase-04-streaming-core.md) — driver, row scope, topo order.
-- [`phases/phase-05-arithmetic.md`](phases/phase-05-arithmetic.md) — arithmetic, comparison, concat.
-- [`phases/phase-06-conditional.md`](phases/phase-06-conditional.md) — IF, IFS, AND, OR, IFERROR.
-- [`phases/phase-07-aggregates.md`](phases/phase-07-aggregates.md) — whole-column pre-pass.
-- [`phases/phase-08-lookups.md`](phases/phase-08-lookups.md) — VLOOKUP, HLOOKUP, XLOOKUP, MATCH, XMATCH, INDEX, CHOOSE.
-- [`phases/phase-09-strings-dates-math.md`](phases/phase-09-strings-dates-math.md) — builtin coverage.
-- [`phases/phase-10-parallelism.md`](phases/phase-10-parallelism.md) — row sharding.
-- [`phases/phase-11-python-binding.md`](phases/phase-11-python-binding.md) — PyO3 + maturin.
-- [`phases/phase-12-benchmarks.md`](phases/phase-12-benchmarks.md) — criterion + reference corpus.
-- [`phases/phase-13-docs.md`](phases/phase-13-docs.md) — rustdoc, mdBook, site.
-- [`phases/phase-14-release.md`](phases/phase-14-release.md) — v0.1.0 to crates.io + PyPI.
