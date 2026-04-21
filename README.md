@@ -66,7 +66,7 @@ let summary = xlstream_eval::evaluate(&input, &output, Some(8))?;
 
 ## What it doesn't support
 
-OFFSET, INDIRECT, FILTER, UNIQUE, SORT, LAMBDA, LET -- these require random cell access which breaks streaming. Named ranges and table references are v0.2. See [limitations](docs/architecture/streaming-model.md).
+OFFSET, INDIRECT, FILTER, UNIQUE, SORT, LAMBDA, LET -- these require random cell access which breaks streaming. Table references are planned for v0.2. See [limitations](docs/architecture/streaming-model.md).
 
 ## Error handling
 
