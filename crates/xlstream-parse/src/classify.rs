@@ -107,7 +107,7 @@ impl UnsupportedReason {
             Self::UnboundedRange => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-of-a-column",
             Self::NonStaticCriteria => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-pre-pass",
             Self::LookupSheetNotPrepared => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#lookup-index-pre-pass",
-            Self::TableReference | Self::NamedRange => "https://github.com/cilladev/xlstream/blob/main/docs/backlog/v0.2.md",
+            Self::TableReference | Self::NamedRange => "https://github.com/cilladev/xlstream/blob/main/docs/roadmap/v0.2/README.md",
             Self::NestedUnsupported => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md",
         }
     }
