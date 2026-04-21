@@ -111,8 +111,8 @@ fn table_reference_is_refused() {
 }
 
 #[test]
-fn named_range_is_refused() {
+fn named_range_unknown_passes_classification_as_row_local() {
     let ast = parse("MyRange+1").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::Unsupported(UnsupportedReason::NamedRange));
+    assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
 }
