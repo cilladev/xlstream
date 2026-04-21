@@ -87,6 +87,27 @@ impl Reader {
         self.workbook.sheet_names().clone()
     }
 
+    /// Return all workbook-level defined names as `(name, value)` pairs.
+    ///
+    /// Values are raw strings from the xlsx `<definedNames>` element,
+    /// e.g. `"Sheet1!$A$1:$A$100"` or `"0.15"`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::Path;
+    /// use xlstream_io::Reader;
+    ///
+    /// let reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
+    /// for (name, value) in reader.defined_names() {
+    ///     println!("{name} = {value}");
+    /// }
+    /// ```
+    #[must_use]
+    pub fn defined_names(&self) -> Vec<(String, String)> {
+        self.workbook.defined_names().to_vec()
+    }
+
     /// Open a streaming cell reader for the named sheet. Cells are yielded
     /// row-by-row via [`CellStream::next_row`]. Each call opens a fresh
     /// read from the start of the sheet.
@@ -192,5 +213,15 @@ mod tests {
     fn open_nonexistent_file_returns_xlsx_error() {
         let err = Reader::open(Path::new("doesnt-exist.xlsx")).unwrap_err();
         assert!(matches!(err, XlStreamError::Xlsx(_)), "expected Xlsx error, got {err:?}",);
+    }
+
+    #[test]
+    fn defined_names_returns_empty_for_plain_workbook() {
+        let tmp = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+        let mut wb = rust_xlsxwriter::Workbook::new();
+        wb.save(tmp.path()).unwrap();
+
+        let reader = Reader::open(tmp.path()).unwrap();
+        assert!(reader.defined_names().is_empty());
     }
 }
