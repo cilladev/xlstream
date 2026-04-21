@@ -762,4 +762,115 @@ mod tests {
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
         assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
+
+    // -- Named range classification (v0.2) --
+
+    fn resolve_and_classify(
+        formula: &str,
+        name_pairs: &[(&str, &str)],
+        sheet: &str,
+        row: u32,
+        col: u32,
+        lookup_sheets: &[&str],
+    ) -> Classification {
+        let ast = crate::parse(formula).unwrap();
+        let names: std::collections::HashMap<String, String> =
+            name_pairs.iter().map(|(k, v)| (k.to_ascii_lowercase(), (*v).to_string())).collect();
+        let resolved = crate::resolve::resolve_named_ranges(ast, &names);
+        let mut ctx = ClassificationContext::for_cell(sheet, row, col);
+        for ls in lookup_sheets {
+            ctx = ctx.with_lookup_sheet(ls);
+        }
+        classify(&resolved, &ctx)
+    }
+
+    #[test]
+    fn named_range_sum_whole_column_is_aggregate() {
+        let c = resolve_and_classify(
+            "SUM(SalesData)",
+            &[("SalesData", "Sheet1!$A:$A")],
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn named_range_constant_times_cell_is_row_local() {
+        let c = resolve_and_classify("TaxRate*B2", &[("TaxRate", "0.15")], "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::RowLocal);
+    }
+
+    #[test]
+    fn named_range_vlookup_table_array_is_lookup() {
+        let c = resolve_and_classify(
+            "VLOOKUP(A2, Rates, 2, FALSE)",
+            &[("Rates", "Lookup!$A:$D")],
+            "Main",
+            2,
+            3,
+            &["Lookup"],
+        );
+        assert_eq!(c, Classification::LookupOnly);
+    }
+
+    #[test]
+    fn named_range_cross_sheet_aggregate_is_aggregate() {
+        let c = resolve_and_classify(
+            "SUM(RegionData)",
+            &[("RegionData", "Lookup!$B:$B")],
+            "Main",
+            2,
+            3,
+            &["Lookup"],
+        );
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn named_range_unknown_stays_unsupported() {
+        let c = resolve_and_classify("SUM(MissingName)", &[], "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::Unsupported(UnsupportedReason::NamedRange));
+    }
+
+    #[test]
+    fn named_range_case_insensitive_resolves() {
+        let c = resolve_and_classify(
+            "SUM(salesdata)",
+            &[("SalesData", "Sheet1!$A:$A")],
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn named_range_sumif_both_ranges_resolve() {
+        let c = resolve_and_classify(
+            "SUMIF(RegionCol, \"EMEA\", AmountCol)",
+            &[("RegionCol", "Sheet1!$A:$A"), ("AmountCol", "Sheet1!$B:$B")],
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn named_range_sumif_with_row_local_criteria_is_mixed() {
+        let c = resolve_and_classify(
+            "SUMIF(RegionCol, A2, AmountCol)",
+            &[("RegionCol", "Sheet1!$A:$A"), ("AmountCol", "Sheet1!$B:$B")],
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::Mixed);
+    }
 }
