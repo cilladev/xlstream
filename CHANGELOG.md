@@ -5,6 +5,9 @@ Semver.
 
 ## [Unreleased]
 
+### Added
+- Named range resolution: formulas using workbook-level defined names (`SalesData`, `TaxRate`, etc.) now resolve at classification time via calamine's `defined_names()` API
+
 ## [0.1.1] - 2026-04-20
 
 ### Added

@@ -71,7 +71,7 @@ For each formula found in the main sheet, walk the AST. Record every `CellRef`, 
 | Self-reference (`A2` in cell `A2`) | **Unsupported** (circular) |
 | Function in the `VOLATILE_STREAMING_OK` set (`TODAY`, `NOW`) | **Supported** with single-evaluation-per-run semantics |
 | Function in the `UNSUPPORTED` set (`OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`) | **Unsupported** |
-| Named range (`MyRange`) | **Unsupported** (v0.2 candidate; requires name-resolution layer) |
+| Named range (`MyRange`) | **Supported** (resolved at classification time via `defined_names()`) |
 | Table reference (`Table1[Column]`) | **Unsupported** (v0.2 candidate; requires table-definition loading) |
 | External reference (`[Book2.xlsx]Sheet1!A1`) | **Unsupported** (permanent; violates single-file model) |
 
