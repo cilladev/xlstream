@@ -2,7 +2,7 @@
 
 Measured on iMac 2020 (3.6 GHz 10-core Intel i9, 128 GB DDR4). Criterion for micro-benchmarks; wall-clock via `std::time::Instant`.
 
-**Version:** v0.1.1 (2026-04-20)
+**Version:** v0.2.0 (2026-04-21)
 
 ## Tier results (50-column workbook: 20 data + 30 formula)
 

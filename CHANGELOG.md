@@ -5,8 +5,12 @@ Semver.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-21
+
 ### Added
 - Named range resolution: formulas using workbook-level defined names (`SalesData`, `TaxRate`, etc.) now resolve at classification time via calamine's `defined_names()` API
+- Unknown named ranges return `#NAME?` cell error instead of aborting evaluation (matches Excel behavior)
+- End-to-end test module consolidation (`tests/end_to_end/` per-feature structure)
 
 ## [0.1.1] - 2026-04-20
 
@@ -68,7 +72,7 @@ Semver.
 - No OFFSET, INDIRECT, FILTER, UNIQUE, SORT, LAMBDA, LET (breaks streaming)
 - No RAND/RANDBETWEEN (volatile functions, deterministic seeding deferred)
 - No SUMPRODUCT, MINIFS, MAXIFS (v0.2)
-- No named ranges or table references
+- No table references (named ranges supported since v0.2.0)
 - No external workbook references
 - No cell formatting preservation
 - xlsx only (no xls, xlsb, ods)
