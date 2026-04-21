@@ -24,6 +24,7 @@ mod ast;
 mod classify;
 mod parser;
 mod references;
+mod resolve;
 pub mod rewrite;
 pub mod sets;
 mod view;
@@ -32,6 +33,7 @@ pub use ast::Ast;
 pub use classify::{classify, Classification, ClassificationContext, UnsupportedReason};
 pub use parser::parse;
 pub use references::{extract_references, Reference, References};
+pub use resolve::resolve_named_ranges;
 pub use rewrite::{
     collect_lookup_keys, rewrite, AggKind, AggregateKey, LookupKey, LookupKind, PreludeKey,
 };
