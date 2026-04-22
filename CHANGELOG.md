@@ -5,6 +5,9 @@ Semver.
 
 ## [Unreleased]
 
+### Fixed
+- Formulas on sheets not referenced by the main sheet are now evaluated instead of producing None (#42)
+
 ## [0.2.0] - 2026-04-21
 
 ### Added
