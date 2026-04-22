@@ -28,3 +28,5 @@ mod named_ranges;
 mod pipeline;
 #[path = "end_to_end/product_literals.rs"]
 mod product_literals;
+#[path = "end_to_end/secondary_sheet_formulas.rs"]
+mod secondary_sheet_formulas;

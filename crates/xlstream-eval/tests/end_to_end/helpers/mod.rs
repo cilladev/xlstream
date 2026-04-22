@@ -298,3 +298,38 @@ pub fn generate_aggregate_fixture() -> NamedTempFile {
     wb.save(tmp.path()).unwrap();
     tmp
 }
+
+/// Fixture with two independent formula-bearing sheets.
+///
+/// Sheet1: A=data, B=formula `=A{row}*2`
+/// Sheet2: A=data, B=formula `=A{row}*2`
+/// Sheet1 does NOT reference Sheet2.
+///
+/// Sheet2 row 3 has `=Sheet1!A2*2` (cross-sheet ref from secondary to main).
+#[allow(dead_code)]
+pub fn generate_multi_sheet_formula_fixture() -> NamedTempFile {
+    let tmp = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut wb = Workbook::new();
+
+    let ws1 = wb.add_worksheet().set_name("Sheet1").unwrap();
+    ws1.write_string(0, 0, "Price").unwrap();
+    ws1.write_string(0, 1, "Double").unwrap();
+    ws1.write_number(1, 0, 5000.0).unwrap();
+    ws1.write_formula(1, 1, Formula::new("=A2*2").set_result("10000")).unwrap();
+    ws1.write_number(2, 0, 100.0).unwrap();
+    ws1.write_formula(2, 1, Formula::new("=A3*2").set_result("200")).unwrap();
+
+    let ws2 = wb.add_worksheet().set_name("Sheet2").unwrap();
+    ws2.write_string(0, 0, "Rate").unwrap();
+    ws2.write_string(0, 1, "Double").unwrap();
+    ws2.write_number(1, 0, 0.08).unwrap();
+    // Cached results set to "0" so passthrough is distinguishable from eval.
+    ws2.write_formula(1, 1, Formula::new("=A2*2")).unwrap();
+    ws2.write_number(2, 0, 50.0).unwrap();
+    ws2.write_formula(2, 1, Formula::new("=A3*2")).unwrap();
+    ws2.write_number(3, 0, 999.0).unwrap();
+    ws2.write_formula(3, 1, Formula::new("=Sheet1!A2*2")).unwrap();
+
+    wb.save(tmp.path()).unwrap();
+    tmp
+}
