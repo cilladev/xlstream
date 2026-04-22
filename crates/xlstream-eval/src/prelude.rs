@@ -295,6 +295,29 @@ impl Prelude {
         self
     }
 
+    /// Merge another prelude into this one.
+    ///
+    /// Extends all inner maps. Duplicate keys are overwritten by `other`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::Prelude;
+    /// let mut a = Prelude::empty();
+    /// let b = Prelude::empty();
+    /// a.merge(b);
+    /// ```
+    pub fn merge(&mut self, other: Self) {
+        self.aggregates.extend(other.aggregates);
+        self.conditional_aggregates.extend(other.conditional_aggregates);
+        self.multi_conditional_aggregates.extend(other.multi_conditional_aggregates);
+        self.lookup_sheets.extend(other.lookup_sheets);
+        if other.volatile.is_some() {
+            self.volatile = other.volatile;
+        }
+        self.cached_ranges.extend(other.cached_ranges);
+    }
+
     /// Look up a pre-loaded sheet by name (case-insensitive).
     ///
     /// # Examples
