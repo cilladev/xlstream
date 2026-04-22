@@ -45,7 +45,7 @@ struct EvalPlan {
     prelude: Prelude,
     col_asts: HashMap<u32, Ast>,
     topo_order: Vec<u32>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // used in next commit (streaming changes)
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
@@ -55,9 +55,9 @@ struct EvalPlan {
 }
 
 /// Per-sheet formula evaluation data for secondary (non-main) sheets.
-#[allow(dead_code)]
 struct SheetEvalPlan {
     col_asts: HashMap<u32, Ast>,
+    #[allow(dead_code)] // used in next commit (streaming changes)
     topo_order: Vec<u32>,
 }
 
@@ -163,17 +163,17 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let named_ranges: HashMap<String, String> =
         reader.defined_names().into_iter().map(|(k, v)| (k.to_ascii_lowercase(), v)).collect();
 
-    // Find first sheet with formulas.
-    let mut main_sheet: Option<String> = None;
-    let mut main_formulas: Vec<(u32, u32, String)> = Vec::new();
+    // Collect formulas from all sheets; first with formulas becomes main.
+    let mut sheets_with_formulas = Vec::<(String, Vec<(u32, u32, String)>)>::new();
     for name in &sheet_names {
         let formulas = reader.formulas(name)?;
         if !formulas.is_empty() {
-            main_sheet = Some(name.clone());
-            main_formulas = formulas;
-            break;
+            sheets_with_formulas.push((name.clone(), formulas));
         }
     }
+    let main_sheet = sheets_with_formulas.first().map(|(n, _)| n.clone());
+    let main_formulas: Vec<(u32, u32, String)> =
+        sheets_with_formulas.first().map(|(_, f)| f.clone()).unwrap_or_default();
 
     // Parse + classify formula columns; build topo order.
     let (topo_order, col_asts, lookup_keys) = if let Some(ref main) = main_sheet {
@@ -182,29 +182,36 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         (Vec::new(), HashMap::new(), Vec::new())
     };
 
-    // Collect aggregate keys from all rewritten ASTs and run prelude.
-    let all_agg_keys: Vec<AggregateKey> = {
-        let mut seen = std::collections::HashSet::new();
+    // Build eval plans for secondary formula-bearing sheets.
+    let mut secondary_plans: HashMap<String, SheetEvalPlan> = HashMap::new();
+    let mut secondary_lookup_keys: Vec<LookupKey> = Vec::new();
+    for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
+        let (sec_topo, sec_asts, lk) =
+            build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges)?;
+        secondary_lookup_keys.extend(lk);
+        secondary_plans
+            .insert(sheet_name.clone(), SheetEvalPlan { col_asts: sec_asts, topo_order: sec_topo });
+    }
+
+    // Collect main sheet aggregate keys and run prelude.
+    let main_agg_keys: Vec<AggregateKey> = {
+        let mut seen = HashSet::new();
         col_asts
             .values()
             .flat_map(crate::prelude_plan::collect_aggregate_keys)
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
-
-    // Collect multi-conditional keys (SUMIFS/COUNTIFS/AVERAGEIFS).
-    let all_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
-        let mut seen = std::collections::HashSet::new();
+    let main_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
+        let mut seen = HashSet::new();
         col_asts
             .values()
             .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
-
-    // Collect bounded range keys for range-expanding functions.
-    let all_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
-        let mut seen = std::collections::HashSet::new();
+    let main_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
+        let mut seen = HashSet::new();
         col_asts
             .values()
             .flat_map(crate::prelude_plan::collect_bounded_range_keys)
@@ -212,10 +219,10 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             .collect()
     };
 
-    let has_aggregates =
-        !all_agg_keys.is_empty() || !all_multi_keys.is_empty() || !all_range_keys.is_empty();
+    let has_main_aggregates =
+        !main_agg_keys.is_empty() || !main_multi_keys.is_empty() || !main_range_keys.is_empty();
 
-    let (agg_prelude, total_data_rows) = if !has_aggregates {
+    let (mut merged_prelude, total_data_rows) = if !has_main_aggregates {
         let count =
             if let Some(ref main) = main_sheet { count_data_rows(&mut reader, main)? } else { 0 };
         (Prelude::empty(), count)
@@ -223,19 +230,57 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         crate::prelude_plan::execute_prelude(
             &mut reader,
             main,
-            &all_agg_keys,
-            &all_multi_keys,
-            &all_range_keys,
+            &main_agg_keys,
+            &main_multi_keys,
+            &main_range_keys,
         )?
     } else {
         (Prelude::empty(), 0)
     };
 
+    // Run prelude for each secondary sheet that has aggregates, merge results.
+    for (sheet_name, sp) in &secondary_plans {
+        let sec_agg: Vec<AggregateKey> = {
+            let mut seen = HashSet::new();
+            sp.col_asts
+                .values()
+                .flat_map(crate::prelude_plan::collect_aggregate_keys)
+                .filter(|k| seen.insert(k.clone()))
+                .collect()
+        };
+        let sec_multi: Vec<crate::prelude::MultiConditionalAggKey> = {
+            let mut seen = HashSet::new();
+            sp.col_asts
+                .values()
+                .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
+                .filter(|k| seen.insert(k.clone()))
+                .collect()
+        };
+        let sec_range: Vec<crate::prelude::BoundedRangeKey> = {
+            let mut seen = HashSet::new();
+            sp.col_asts
+                .values()
+                .flat_map(crate::prelude_plan::collect_bounded_range_keys)
+                .filter(|k| seen.insert(k.clone()))
+                .collect()
+        };
+        if !sec_agg.is_empty() || !sec_multi.is_empty() || !sec_range.is_empty() {
+            let (sec_prelude, _) = crate::prelude_plan::execute_prelude(
+                &mut reader,
+                sheet_name,
+                &sec_agg,
+                &sec_multi,
+                &sec_range,
+            )?;
+            merged_prelude.merge(sec_prelude);
+        }
+    }
+
     // Cross-sheet bounded ranges in range-expanding functions (e.g.
     // NETWORKDAYS holidays) need the referenced sheet loaded as a lookup
     // sheet so expand_range can resolve them.
     let mut extended_lookup_keys = lookup_keys;
-    for rk in &all_range_keys {
+    for rk in &main_range_keys {
         if let Some(ref sheet_name) = rk.sheet {
             let already_present =
                 extended_lookup_keys.iter().any(|lk| lk.sheet.eq_ignore_ascii_case(sheet_name));
@@ -249,18 +294,49 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             }
         }
     }
+    // Include lookup keys from secondary sheets.
+    for lk in &secondary_lookup_keys {
+        let already_present =
+            extended_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(&lk.sheet));
+        if !already_present {
+            extended_lookup_keys.push(lk.clone());
+        }
+    }
+    // Include cross-sheet bounded range keys from secondary sheets.
+    for sp in secondary_plans.values() {
+        let sec_range: Vec<crate::prelude::BoundedRangeKey> = sp
+            .col_asts
+            .values()
+            .flat_map(crate::prelude_plan::collect_bounded_range_keys)
+            .collect();
+        for rk in &sec_range {
+            if let Some(ref sheet_name) = rk.sheet {
+                let already_present =
+                    extended_lookup_keys.iter().any(|lk| lk.sheet.eq_ignore_ascii_case(sheet_name));
+                if !already_present {
+                    extended_lookup_keys.push(xlstream_parse::LookupKey {
+                        kind: xlstream_parse::LookupKind::VLookup,
+                        sheet: sheet_name.clone(),
+                        key_index: 1,
+                        value_index: 1,
+                    });
+                }
+            }
+        }
+    }
+
     let lookup_sheets = crate::lookup::load_lookup_sheets(&extended_lookup_keys, &mut reader)?;
     let prelude = if lookup_sheets.is_empty() {
-        agg_prelude
+        merged_prelude
     } else {
-        agg_prelude.with_lookup_sheets(lookup_sheets)
+        merged_prelude.with_lookup_sheets(lookup_sheets)
     };
 
     let plan = EvalPlan {
         prelude,
         col_asts,
         topo_order,
-        secondary_plans: HashMap::new(),
+        secondary_plans,
         main_sheet,
         sheet_names,
         total_data_rows,
