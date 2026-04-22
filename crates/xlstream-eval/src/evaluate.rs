@@ -45,11 +45,20 @@ struct EvalPlan {
     prelude: Prelude,
     col_asts: HashMap<u32, Ast>,
     topo_order: Vec<u32>,
+    #[allow(dead_code)]
+    secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
     /// Data rows counted during prelude (or fallback count). Used by the
     /// parallel streamer to decide chunk sizes and dispatch logic.
     total_data_rows: u32,
+}
+
+/// Per-sheet formula evaluation data for secondary (non-main) sheets.
+#[allow(dead_code)]
+struct SheetEvalPlan {
+    col_asts: HashMap<u32, Ast>,
+    topo_order: Vec<u32>,
 }
 
 /// Evaluate every formula in `input`, write results to `output`, and return
@@ -247,7 +256,15 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         agg_prelude.with_lookup_sheets(lookup_sheets)
     };
 
-    let plan = EvalPlan { prelude, col_asts, topo_order, main_sheet, sheet_names, total_data_rows };
+    let plan = EvalPlan {
+        prelude,
+        col_asts,
+        topo_order,
+        secondary_plans: HashMap::new(),
+        main_sheet,
+        sheet_names,
+        total_data_rows,
+    };
     Ok((plan, reader))
 }
 
