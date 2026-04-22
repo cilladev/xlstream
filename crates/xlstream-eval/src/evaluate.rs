@@ -45,7 +45,6 @@ struct EvalPlan {
     prelude: Prelude,
     col_asts: HashMap<u32, Ast>,
     topo_order: Vec<u32>,
-    #[allow(dead_code)] // used in next commit (streaming changes)
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
@@ -57,7 +56,6 @@ struct EvalPlan {
 /// Per-sheet formula evaluation data for secondary (non-main) sheets.
 struct SheetEvalPlan {
     col_asts: HashMap<u32, Ast>,
-    #[allow(dead_code)] // used in next commit (streaming changes)
     topo_order: Vec<u32>,
 }
 
@@ -188,6 +186,25 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
         let (sec_topo, sec_asts, lk) =
             build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges)?;
+        // Detect cross-sheet cell references and add as lookup keys.
+        for ast in sec_asts.values() {
+            let refs = extract_references(ast);
+            for r in &refs.cells {
+                if let Reference::Cell { sheet: Some(ref s), .. } = r {
+                    let already =
+                        secondary_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s))
+                            || lk.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
+                    if !already {
+                        secondary_lookup_keys.push(LookupKey {
+                            kind: xlstream_parse::LookupKind::VLookup,
+                            sheet: s.clone(),
+                            key_index: 1,
+                            value_index: 1,
+                        });
+                    }
+                }
+            }
+        }
         secondary_lookup_keys.extend(lk);
         secondary_plans
             .insert(sheet_name.clone(), SheetEvalPlan { col_asts: sec_asts, topo_order: sec_topo });
@@ -377,29 +394,39 @@ fn stream_single_threaded(
     for name in &plan.sheet_names {
         let mut sh = writer.add_sheet(name)?;
         let mut stream = reader.cells(name)?;
+
         let is_main = plan.main_sheet.as_deref() == Some(name.as_str());
-        let mut header_pending = is_main;
+        let sheet_plan: Option<(&HashMap<u32, Ast>, &[u32])> = if is_main {
+            if plan.col_asts.is_empty() {
+                None
+            } else {
+                Some((&plan.col_asts, &plan.topo_order))
+            }
+        } else {
+            plan.secondary_plans
+                .get(name.as_str())
+                .map(|sp| (&sp.col_asts, sp.topo_order.as_slice()))
+        };
+
+        let mut header_pending = sheet_plan.is_some();
 
         while let Some((row_idx, mut row_values)) = stream.next_row()? {
             if header_pending {
-                // First row of the main sheet is headers -- write verbatim.
                 sh.write_row(row_idx, &row_values)?;
                 header_pending = false;
                 rows_processed += 1;
                 continue;
             }
 
-            if is_main {
-                for &fcol in &plan.topo_order {
-                    let Some(ast) = plan.col_asts.get(&fcol) else {
+            if let Some((col_asts, topo_order)) = &sheet_plan {
+                for &fcol in *topo_order {
+                    let Some(ast) = col_asts.get(&fcol) else {
                         continue;
                     };
                     let fcol_idx = fcol as usize;
                     if fcol_idx >= row_values.len() {
                         row_values.resize(fcol_idx + 1, Value::Empty);
                     }
-                    // Inner block ensures the immutable borrow of row_values
-                    // through RowScope is released before the mutation below.
                     let result = {
                         let scope = RowScope::new(&row_values, row_idx);
                         interp.eval(ast.root(), &scope)
