@@ -118,14 +118,41 @@ pub fn evaluate(
             "parallel evaluation: spawning workers"
         );
 
-        // Write non-main sheets first (passthrough).
+        // Write non-main sheets — evaluate formulas on secondary formula sheets.
         for name in &plan.sheet_names {
             if Some(name.as_str()) != plan.main_sheet.as_deref() {
                 let mut sh = writer.add_sheet(name)?;
                 let mut stream = reader.cells(name)?;
-                while let Some((row_idx, row_values)) = stream.next_row()? {
-                    sh.write_row(row_idx, &row_values)?;
+
+                if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
+                    let sec_interp = Interpreter::new(&plan.prelude);
+                    let mut header_pending = true;
+                    while let Some((row_idx, mut row_values)) = stream.next_row()? {
+                        if header_pending {
+                            sh.write_row(row_idx, &row_values)?;
+                            header_pending = false;
+                            continue;
+                        }
+                        for &fcol in &sp.topo_order {
+                            let Some(ast) = sp.col_asts.get(&fcol) else { continue };
+                            let fcol_idx = fcol as usize;
+                            if fcol_idx >= row_values.len() {
+                                row_values.resize(fcol_idx + 1, Value::Empty);
+                            }
+                            let result = {
+                                let scope = RowScope::new(&row_values, row_idx);
+                                sec_interp.eval(ast.root(), &scope)
+                            };
+                            row_values[fcol_idx] = result;
+                        }
+                        sh.write_row(row_idx, &row_values)?;
+                    }
+                } else {
+                    while let Some((row_idx, row_values)) = stream.next_row()? {
+                        sh.write_row(row_idx, &row_values)?;
+                    }
                 }
+
                 drop(sh);
             }
         }
