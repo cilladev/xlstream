@@ -10,6 +10,10 @@ use xlstream_parse::NodeRef;
 use crate::interp::Interpreter;
 use crate::scope::RowScope;
 
+/// Maximum Newton-Raphson iterations for IRR and RATE. Matches Excel's
+/// documented 100-iteration limit.
+const MAX_NEWTON_ITERATIONS: usize = 100;
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -307,7 +311,7 @@ pub fn irr_from_cashflows(cashflows: &[f64]) -> Value {
 
     let mut rate: f64 = 0.1; // default guess
 
-    for _ in 0..100 {
+    for _ in 0..MAX_NEWTON_ITERATIONS {
         let mut npv: f64 = 0.0;
         let mut d_npv: f64 = 0.0;
         for (t, &cf) in cashflows.iter().enumerate() {
@@ -425,7 +429,7 @@ pub fn builtin_rate(args: &[Value]) -> Value {
 
     let mut rate = guess;
 
-    for _ in 0..100 {
+    for _ in 0..MAX_NEWTON_ITERATIONS {
         if rate == 0.0 {
             // Special case: avoid division by zero in derivative
             // f(0) = pmt * nper + pv + fv
