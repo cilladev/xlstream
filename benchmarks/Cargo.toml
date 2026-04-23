@@ -30,6 +30,10 @@ harness = false
 name = "aggregate"
 harness = false
 
+[[bench]]
+name = "string"
+harness = false
+
 [dependencies]
 xlstream-core = { path = "../crates/xlstream-core", version = "0.2.0" }
 xlstream-eval = { path = "../crates/xlstream-eval", version = "0.2.0" }
