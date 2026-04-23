@@ -17,12 +17,14 @@ jobs:
   # Skips comparison if no baseline exists yet (first run).
   bench-gate:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run micro-benchmarks
-        run: cargo bench --bench parse --bench arithmetic --bench lookup -p xlstream-benchmarks -- --output-format bencher | tee output.txt
+        run: cargo bench --bench parse --bench arithmetic --bench lookup --bench string --bench math --bench conditional --bench info --bench date --bench financial -p xlstream-benchmarks -- --output-format bencher | tee output.txt
       - name: Check if baseline exists
         id: check-baseline
         run: |
@@ -57,7 +59,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run micro-benchmarks
-        run: cargo bench --bench parse --bench arithmetic --bench lookup -p xlstream-benchmarks -- --output-format bencher | tee output.txt
+        run: cargo bench --bench parse --bench arithmetic --bench lookup --bench string --bench math --bench conditional --bench info --bench date --bench financial -p xlstream-benchmarks -- --output-format bencher | tee output.txt
       - name: Update baseline
         uses: benchmark-action/github-action-benchmark@v1
         with:
