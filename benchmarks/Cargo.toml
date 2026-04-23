@@ -38,6 +38,10 @@ harness = false
 name = "math"
 harness = false
 
+[[bench]]
+name = "conditional"
+harness = false
+
 [dependencies]
 xlstream-core = { path = "../crates/xlstream-core", version = "0.2.0" }
 xlstream-eval = { path = "../crates/xlstream-eval", version = "0.2.0" }
