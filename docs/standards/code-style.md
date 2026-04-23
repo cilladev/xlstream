@@ -218,6 +218,15 @@ We are pre-1.0. Breaking changes are allowed between minor versions (0.1 → 0.2
 - Give deprecation warnings where possible.
 - Make the change worth it.
 
+## Magic numbers
+
+No numeric literals with non-obvious meaning in library code. Extract to a named `const`.
+
+- Engine-wide thresholds (row limits, parallel cutoffs) go in `xlstream-core` next to `EXCEL_MAX_ROWS`.
+- Domain-specific constants (iteration limits, convergence tolerances) stay local to the module that uses them.
+- Standard mathematical constants (`PI`, `E`) use `std::f64::consts`.
+- Literal `0`, `1`, `-1` in arithmetic are fine. So are array/vec indices and lengths.
+
 ## Forbidden in library code
 
 - `println!`, `eprintln!`, `dbg!` — use `tracing`.

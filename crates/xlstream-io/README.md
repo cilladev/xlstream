@@ -1,29 +1,27 @@
 # xlstream-io
 
-xlsx I/O. Calamine-backed reader, rust_xlsxwriter-backed writer (constant-memory mode), and a row-oriented cell stream abstraction.
+[![Crates.io](https://img.shields.io/crates/v/xlstream-io.svg)](https://crates.io/crates/xlstream-io)
+[![docs.rs](https://docs.rs/xlstream-io/badge.svg)](https://docs.rs/xlstream-io)
 
-## Public API
+xlsx read/write layer for the [xlstream](https://github.com/cilladev/xlstream) streaming Excel evaluator. Calamine-backed reader, rust_xlsxwriter-backed writer (constant-memory mode), and a row-oriented cell stream abstraction.
 
-- **`Reader`** -- open xlsx for streaming. Methods: `open(path)`, `sheet_names()`, `defined_names()`, `cells(sheet) -> CellStream`, `formulas(sheet)`, `sheet_dimensions(sheet)`
-- **`Writer`** -- create xlsx in constant-memory mode. Methods: `create(path)`, `add_sheet(name) -> SheetHandle`, `finish()`
-- **`SheetHandle`** -- write rows to a single sheet. Enforces strictly-increasing row order. Methods: `write_row(row_idx, values)`, `write_formula(row, col, formula, cached)`
-- **`CellStream`** -- row-oriented iterator. `next_row() -> Option<(row_idx, Vec<Value>)>`, `seek_to_row(row)`
+This is an internal crate. Most users should depend on [`xlstream-eval`](https://crates.io/crates/xlstream-eval), which calls xlstream-io internally.
 
-## Type conversions
+## What it provides
 
-- `calamine::DataRef` -> `Value` (read path)
-- `Value` -> `rust_xlsxwriter` write calls (write path)
+- **`Reader`** -- open xlsx for streaming. `open(path)`, `sheet_names()`, `defined_names()`, `cells(sheet) -> CellStream`, `formulas(sheet)`
+- **`Writer`** -- create xlsx in constant-memory mode. `create(path)`, `add_sheet(name) -> SheetHandle`, `finish()`
+- **`SheetHandle`** -- write rows to a single sheet. Enforces strictly-increasing row order.
+- **`CellStream`** -- row-oriented iterator. `next_row() -> Option<(row_idx, Vec<Value>)>`
 
-## What it does NOT own
+## When to use directly
 
-- Formula parsing or evaluation. Those live in `xlstream-parse` and `xlstream-eval`.
+Only if you need raw xlsx streaming I/O without formula evaluation — e.g., building a custom pipeline that reads cell values and writes transformed output. For formula evaluation, use `xlstream-eval`.
 
 ## Dependencies
 
 `calamine`, `rust_xlsxwriter` (features: `constant_memory`, `zlib`, `ryu`), `xlstream-core`.
 
-## Why separate
+## License
 
-The evaluator works against `Reader` and `Writer` -- tests can construct fake row iterators and assert evaluated values without hitting disk.
-
-See [`docs/architecture/io.md`](../../docs/architecture/io.md).
+Dual-licensed under Apache-2.0 or MIT, at your option.

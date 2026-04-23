@@ -49,7 +49,7 @@ install: check-prereqs $(VENV)/.stamp install-rust install-python install-precom
 	@echo "Next steps:"
 	@echo "  source $(VENV)/bin/activate    # activate the Python venv"
 	@echo "  make check                     # validate your setup (fmt + clippy + tests)"
-	@echo "  cat docs/phases/README.md      # find the current phase"
+	@echo "  cat docs/roadmap/README.md      # see the current version roadmap"
 	@echo ""
 
 .PHONY: check-prereqs

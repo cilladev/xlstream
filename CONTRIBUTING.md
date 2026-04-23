@@ -91,7 +91,8 @@ At minimum:
 6. If the function needs prelude data (aggregates, lookups), use the lazy dispatch path instead.
 7. Add rustdoc with `# Examples` block.
 8. Tick the box in `docs/functions.md` in the same PR.
-9. Run `make check`.
+9. If the function introduces a novel code path (not just dispatch to existing machinery), add a criterion bench in `benchmarks/benches/<category>.rs`. See [`docs/standards/testing.md`](docs/standards/testing.md) for the code path → benchmark mapping.
+10. Run `make check`.
 
 ## Code style
 

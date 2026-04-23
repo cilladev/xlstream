@@ -3,8 +3,8 @@
 //! Formula parser adapter. Wraps [`formualizer-parse`] and adds a
 //! classification layer that labels each AST with a streaming verdict.
 //!
-//! This crate exposes stub types in Phase 1; real parse + classify logic
-//! lands in Phase 2. See `docs/phases/phase-02-parser.md`.
+//! Wraps the upstream parser, adds reference extraction, named range
+//! resolution, classification, and AST rewriting for prelude refs.
 //!
 //! [`formualizer-parse`]: https://docs.rs/formualizer-parse
 

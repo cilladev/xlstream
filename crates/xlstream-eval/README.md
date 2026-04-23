@@ -1,35 +1,51 @@
 # xlstream-eval
 
-Streaming Excel formula evaluator. Two-pass architecture: prelude (aggregates + lookups), then row-by-row streaming with optional parallelism.
+[![Crates.io](https://img.shields.io/crates/v/xlstream-eval.svg)](https://crates.io/crates/xlstream-eval)
+[![docs.rs](https://docs.rs/xlstream-eval/badge.svg)](https://docs.rs/xlstream-eval)
 
-## Public API
+Streaming Excel formula evaluator for the [xlstream](https://github.com/cilladev/xlstream) engine. Two-pass architecture: prelude (aggregates + lookups), then row-by-row streaming with automatic parallelism.
 
-- **`evaluate(input, output, workers) -> Result<EvaluateSummary>`** -- main entry point. Reads xlsx, evaluates all formulas, writes results. `workers=None` auto-detects cores; `Some(n)` uses n threads if >= 10k rows.
+This is the main Rust entry point. For Python, use `pip install xlstream`.
+
+## Usage
+
+```rust
+use std::path::Path;
+use xlstream_eval::evaluate;
+
+let summary = evaluate(
+    Path::new("input.xlsx"),
+    Path::new("output.xlsx"),
+    None, // auto-detect worker count
+)?;
+println!("Evaluated {} formulas in {:?}", summary.formulas_evaluated, summary.duration);
+```
+
+## What it provides
+
+- **`evaluate(input, output, workers) -> Result<EvaluateSummary>`** -- reads xlsx, evaluates all formulas on all sheets, writes results
 - **`EvaluateSummary`** -- `rows_processed`, `formulas_evaluated`, `duration`
-- **`Interpreter`** -- AST walker. `eval(node, scope) -> Value`
-- **`Prelude`** -- pre-computed aggregates, lookup indexes, cached ranges, volatile data
-- **`RowScope`** -- current row's cell values for evaluation context
+- **`Interpreter`** -- AST walker for custom evaluation pipelines
+- **`Prelude`** -- pre-computed aggregates, lookup indexes, cached ranges
 
-## Builtins (70+)
+## 103 Excel-compatible functions
 
-Conditional (IF, IFS, SWITCH, IFERROR), aggregate (SUM, COUNT, AVERAGE, MIN, MAX), conditional aggregate (SUMIF, SUMIFS, COUNTIF, COUNTIFS, AVERAGEIF, AVERAGEIFS), lookup (VLOOKUP, XLOOKUP, HLOOKUP, INDEX, MATCH), string (LEFT, RIGHT, MID, CONCAT, TEXTJOIN, SUBSTITUTE, TEXT), date (DATE, YEAR, MONTH, NETWORKDAYS, WORKDAY, EDATE), math (ROUND, ABS, SQRT, MOD, POWER), financial (PMT, FV, PV, RATE), info (ISBLANK, ISNUMBER, ISTEXT, TYPE).
+Logical (IF, IFS, SWITCH, IFERROR), aggregate (SUM, COUNT, AVERAGE, MIN, MAX, MEDIAN), conditional aggregate (SUMIF, SUMIFS, COUNTIF, COUNTIFS, AVERAGEIF, AVERAGEIFS), lookup (VLOOKUP, XLOOKUP, HLOOKUP, INDEX, MATCH), string (LEFT, RIGHT, MID, CONCAT, TEXTJOIN, SUBSTITUTE, TEXT), date (DATE, YEAR, MONTH, NETWORKDAYS, EDATE), math (ROUND, ABS, SQRT, MOD, POWER), financial (PMT, FV, PV, IRR, RATE), info (ISBLANK, ISNUMBER, ISTEXT, TYPE).
 
-Full list: [`docs/functions.md`](../../docs/functions.md)
+Full list: [functions.md](https://github.com/cilladev/xlstream/blob/main/docs/functions.md)
 
-## What it does NOT own
+## Architecture
 
-- xlsx I/O (that's `xlstream-io`).
-- Value types (that's `xlstream-core`).
-- Formula parsing (that's `xlstream-parse`).
+**Pass 1 (prelude):** single-threaded scan. Parse formulas, classify, compute whole-column aggregates, load lookup sheets, build hash indexes. Runs once per formula-bearing sheet.
+
+**Pass 2 (row stream):** multi-threaded if >= 10k rows. Each worker reads its row range, evaluates formulas in topological order, sends results through a bounded channel. Main thread drains in row order to the writer.
+
+See [streaming-model.md](https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md).
 
 ## Dependencies
 
 `xlstream-core`, `xlstream-parse`, `xlstream-io`, `rayon`, `crossbeam-channel`, `num_cpus`, `phf`, `tracing`.
 
-## Architecture
+## License
 
-Pass 1 (prelude): single-threaded scan. Parse formulas, classify, compute whole-column aggregates, load lookup sheets, build hash indexes.
-
-Pass 2 (row stream): multi-threaded if >= 10k rows. Each worker reads its row range, evaluates formulas in topological order, sends results through a bounded channel. Main thread drains in row order to the writer.
-
-See [`docs/architecture/streaming-model.md`](../../docs/architecture/streaming-model.md).
+Dual-licensed under Apache-2.0 or MIT, at your option.
