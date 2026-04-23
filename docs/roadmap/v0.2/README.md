@@ -23,7 +23,7 @@
 ### Performance
 
 - [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 700k-row workbook (currently 734 MB).
-- [ ] **Benchmark automation** — fix `scripts/bench-report.sh` comparison parsing. Add `--skip-large` flag. ~1 hour.
+
 
 ### Documentation
 
