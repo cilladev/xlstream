@@ -38,3 +38,7 @@ pub use value::Value;
 pub const EXCEL_MAX_ROWS: u64 = 1_048_576;
 /// Maximum column count in an Excel xlsx worksheet (2^14).
 pub const EXCEL_MAX_COLS: u16 = 16_384;
+
+/// Minimum data rows on the main sheet before the evaluator spawns parallel
+/// workers. Below this threshold single-threaded evaluation is faster.
+pub const PARALLEL_ROW_THRESHOLD: u32 = 10_000;

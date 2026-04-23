@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use xlstream_core::{col_row_to_a1, Value, XlStreamError};
+use xlstream_core::{col_row_to_a1, Value, XlStreamError, PARALLEL_ROW_THRESHOLD};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
     classify, collect_lookup_keys, extract_references, parse, resolve_named_ranges, rewrite,
@@ -103,7 +103,7 @@ pub fn evaluate(
     let use_parallel = num_workers > 1
         && plan.main_sheet.is_some()
         && !plan.col_asts.is_empty()
-        && plan.total_data_rows >= 10_000;
+        && plan.total_data_rows >= PARALLEL_ROW_THRESHOLD;
 
     let (rows_processed, formulas_evaluated) = if use_parallel {
         let main_sheet_name = plan
