@@ -1,5 +1,5 @@
 # xlstream workspace root.
-# Crates are added in Phase 1 — see docs/phases/phase-01-scaffolding.md.
+# xlstream workspace root.
 
 [workspace]
 resolver = "2"

@@ -1,9 +1,7 @@
 //! # xlstream-io
 //!
 //! xlsx I/O. Calamine-backed [`Reader`], `rust_xlsxwriter`-backed [`Writer`],
-//! and a row-oriented [`CellStream`] abstraction. All three are stubs in
-//! Phase 1; real implementations land in Phase 3. See
-//! `docs/phases/phase-03-io.md`.
+//! and a row-oriented [`CellStream`] abstraction.
 
 #![warn(missing_docs, rust_2018_idioms, clippy::pedantic, clippy::cargo)]
 #![deny(

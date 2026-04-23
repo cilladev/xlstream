@@ -20,7 +20,7 @@ We are not building a general-purpose spreadsheet engine. We are building the *f
 
 ## Supported functions
 
-113 functions + 13 operators across 9 categories. [Full list with cross-reference](docs/functions.md).
+103 functions + 13 operators across 9 categories. [Full list with cross-reference](docs/functions.md).
 
 | Category   | Count | Examples                                          |
 | ---------- | ----- | ------------------------------------------------- |
@@ -55,12 +55,6 @@ result = xlstream.evaluate("input.xlsx", "output.xlsx")
 
 # Parallel (row-sharded across cores)
 result = xlstream.evaluate("input.xlsx", "output.xlsx", workers=8)
-```
-
-### CLI
-
-```bash
-xlstream evaluate input.xlsx -o output.xlsx -w 8 --verbose
 ```
 
 ### Rust

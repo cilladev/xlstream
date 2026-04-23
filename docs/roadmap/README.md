@@ -23,7 +23,7 @@ Each version gets its own folder with a checklist. When a version ships, its fol
 
 ### Where we are
 
-Excel has ~516 functions. xlstream implements 113 — but covers all 15 functions that appear in 76% of real business spreadsheets (Enron Corpus, Hermans et al., IEEE ICSE 2015). See [FUNCTIONS.md](../../FUNCTIONS.md) for the full cross-reference.
+Excel has ~516 functions. xlstream implements 103 functions — covering all 15 functions that appear in 76% of real business spreadsheets (Enron Corpus, Hermans et al., IEEE ICSE 2015). See [functions.md](../functions.md) for the full cross-reference.
 
 ### Where we're going
 
@@ -90,7 +90,7 @@ These are architecturally incompatible with streaming. Users get a clear `Classi
 | **OLAP** | CUBE* family (7 functions) | Requires external OLAP connection |
 | **External refs** | `[Book.xlsx]Sheet1!A1` | Violates single-file model |
 
-**~51 functions permanently excluded.** ~465 are streaming-compatible. See [FUNCTIONS.md](../../FUNCTIONS.md) for the complete breakdown.
+**~51 functions permanently excluded.** ~465 are streaming-compatible. See [functions.md](../functions.md) for the complete breakdown.
 
 ### Function count trajectory
 

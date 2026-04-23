@@ -1,13 +1,11 @@
 # Testing
 
-Five tiers. Every feature lands with the right ones.
+Four tiers. Every feature lands with the right ones.
 
 1. **Unit tests** — in-module, `#[cfg(test)] mod tests`. Test one function, one behaviour.
 2. **Integration tests** — in `tests/` of each crate. Test cross-module behaviour within a crate.
-3. **Workspace integration tests** — in `tests/` at repo root. Test cross-crate end-to-end.
-4. **Property tests** — `proptest` for functions with algebraic properties.
-5. **Fuzz tests** — `cargo-fuzz` for the parser and I/O layer.
-6. **Benchmarks** — `criterion` for perf-sensitive code.
+3. **End-to-end tests** — full pipeline through `evaluate()`: read xlsx, parse, classify, prelude, stream, write, verify output.
+4. **Benchmarks** — `criterion` for perf-sensitive code.
 
 Separately: **Python tests** in `bindings/python/tests/` via `pytest`.
 
@@ -52,23 +50,30 @@ Each crate's `tests/` directory holds integration tests. One file per feature ar
 
 ```
 crates/xlstream-eval/tests/
-├── arithmetic.rs
-├── conditional.rs
-├── lookups.rs
-├── aggregates.rs
-└── end_to_end.rs
+├── end_to_end.rs                        ← test binary root (imports submodules)
+├── end_to_end/
+│   ├── helpers/mod.rs                   ← shared fixture generators
+│   ├── pipeline.rs                      ← core pipeline (cell refs, chained formulas, errors)
+│   ├── lookups.rs                       ← VLOOKUP, XLOOKUP, INDEX/MATCH
+│   ├── cross_sheet_aggregates.rs        ← cross-sheet SUMIF/COUNTIF/AVERAGEIF
+│   ├── grouped_sumif.rs                 ← SUMIF with row-local criteria
+│   ├── product_literals.rs              ← PRODUCT(2,3,4) inline eval
+│   ├── named_ranges.rs                  ← named range resolution
+│   └── secondary_sheet_formulas.rs      ← multi-sheet formula evaluation
+├── fixtures/
+│   └── regression.xlsx                  ← Excel-verified golden file
+├── regression_base.rs                   ← golden-file comparison (all surfaces)
+└── *.rs                                 ← per-category unit-level tests
 ```
-
-Fixtures (small .xlsx files) live in `fixtures/canonical/`. Committed to the repo, each < 50 KB. Large fixtures go in `fixtures/generated/` and are reproduced by a build script.
 
 ### The two layers of integration testing
 
 Every builtin lands with both:
 
 1. **Evaluator-level integration** — drive the builtin via `xlstream_eval::Interpreter::eval` with a real AST node. Proves the builtin is reachable through dispatch, argument coercion, and error propagation. Lives in `crates/xlstream-eval/tests/<family>.rs`.
-2. **End-to-end integration** (at least once per feature area) — drive the builtin via `xlstream_eval::evaluate(input, output, None)` on a tiny committed xlsx fixture. Proves the builtin works through the full pipeline: read → classify → prelude → stream → write. Lives in `tests/end_to_end.rs` at the repo root.
+2. **End-to-end integration** (at least once per feature area) — drive the builtin via `xlstream_eval::evaluate(input, output, None)` on a programmatic fixture. Proves the builtin works through the full pipeline: read, classify, prelude, stream, write. Lives in `crates/xlstream-eval/tests/end_to_end/<feature>.rs`.
 
-Evaluator-level integration is per-builtin. End-to-end is per-feature-area (one `IF` fixture covers all logical builtins conceptually; one `VLOOKUP` fixture covers the lookup family).
+Evaluator-level integration is per-builtin. End-to-end is per-feature-area.
 
 ### Minimum bar per builtin PR
 
@@ -83,24 +88,6 @@ A PR that lands a new **feature area** (arithmetic, aggregates, lookups, etc.) a
 - **≥ 1 end-to-end test** that evaluates a fixture xlsx containing formulas from that area and asserts the output matches an Excel-computed golden.
 
 No exceptions without a design note in the PR explaining why.
-
-## Workspace integration tests
-
-`tests/` at the repo root. Test the whole pipeline: input xlsx → evaluate → output xlsx → read → compare.
-
-```rust
-#[test]
-fn reference_workload_small() {
-    let input = fixtures::dir().join("canonical/benchmark_small.xlsx");
-    let output = tempfile::NamedTempFile::new().unwrap();
-    xlstream_eval::evaluate(&input, output.path(), None).unwrap();
-
-    let df_actual = read_output(output.path());
-    let df_expected = read_golden(fixtures::dir().join("canonical/benchmark_small_golden.xlsx"));
-
-    assert_frames_equal(&df_actual, &df_expected);
-}
-```
 
 ## Regression testing
 
@@ -118,89 +105,17 @@ The test evaluates the fixture through xlstream and compares every formula cell 
 
 **When to regenerate:** after adding new formula columns to the `FORMULAS` spec in `regression_base.rs`.
 
-### Base regression tests (`regression_base.rs`)
+### Per-bug regression tests
 
-Per-bug regression tests. Each test builds a minimal fixture programmatically and asserts exact output. No Excel needed.
+Added as end-to-end tests in `crates/xlstream-eval/tests/end_to_end/`. Each test builds a minimal fixture programmatically and asserts exact output. No Excel needed.
 
 - Tests land BEFORE the fix (`#[ignore = "blocked: ..."]`).
 - Fix un-ignores the test.
 - Test + fix commit together.
 
-Naming: `test_<short_description>`.
-
 ## Excel parity
 
-Every builtin function has at least one test asserting its output against values produced by real Excel. The golden-file regression suite (`regression_base.rs`) is the primary mechanism — it covers all 117 surfaces in a single workbook verified by Excel.
-
-## The 1900 leap year test
-
-Write it early. It's the most commonly-missed Excel compatibility trap.
-
-```rust
-#[test]
-fn excel_treats_1900_02_29_as_valid() {
-    // Excel serial 60 = Feb 29 1900 (not a real date; legacy Lotus bug).
-    let v = ExcelDate::from_serial(60.0);
-    assert_eq!(v.year_month_day(), (1900, 2, 29));
-}
-
-#[test]
-fn dates_after_march_1900_match_excel() {
-    let v = ExcelDate::from_serial(61.0);
-    assert_eq!(v.year_month_day(), (1900, 3, 1));
-}
-```
-
-## Accuracy test list (do early)
-
-From the research:
-- Text comparison case-insensitivity: `"a"="A"` → TRUE (except `EXACT`).
-- Boolean coercion in arithmetic: `TRUE + 1` → 2.
-- Empty cell vs 0 vs "": `ISBLANK(empty)` → TRUE, `ISBLANK(0)` → FALSE.
-- Error propagation through arithmetic.
-- Error interception by `IFERROR` / `IFNA`.
-- Whole-column ranges don't allocate 1M cells.
-- `VLOOKUP` approximate match on unsorted data returns Excel-compatible garbage (not our place to fix).
-- Operator precedence: unary minus before `^` (Excel: `-2^2 = 4`, not `-4`).
-- 1900 leap year (above).
-- 1904 date system — workbook flag respected.
-
-Each becomes a named test in `tests/accuracy_parity.rs`.
-
-## Property tests
-
-`proptest` for functions with algebraic properties.
-
-```rust
-proptest! {
-    #[test]
-    fn sum_is_commutative(a: f64, b: f64) {
-        prop_assert_eq!(
-            sum(&[Value::Number(a), Value::Number(b)]),
-            sum(&[Value::Number(b), Value::Number(a)]),
-        );
-    }
-
-    #[test]
-    fn parsed_formula_round_trips(ast in ast_strategy()) {
-        let s = ast.to_string();
-        let parsed = parse(&s).unwrap();
-        prop_assert_eq!(parsed, ast);
-    }
-}
-```
-
-Especially useful for: parser round-trip, arithmetic associativity, coercion idempotence.
-
-## Fuzz tests
-
-`cargo-fuzz` targets live in `fuzz/` at the workspace root.
-
-- `fuzz_parser` — feeds arbitrary bytes to the parser. Must not panic.
-- `fuzz_xlsx_reader` — feeds malformed xlsx files to the reader. Must return `Err`, not crash.
-- `fuzz_classifier` — random ASTs into classification. Must return a valid `Classification` or `Unsupported`.
-
-Run in CI weekly (scheduled workflow). Shorter run in per-PR CI (1 minute each target) to catch obvious regressions.
+Every builtin function has at least one test asserting its output against values produced by real Excel. The golden-file regression suite (`regression_base.rs`) is the primary mechanism — it covers all 117 surfaces in a single workbook verified by Excel. Edge cases (1900 leap year, boolean coercion, case-insensitive comparison, error propagation, operator precedence) are covered by the golden file and per-category integration tests.
 
 ## Benchmarks
 
@@ -215,11 +130,29 @@ fn bench_vlookup_10k(c: &mut Criterion) {
 }
 ```
 
+### Benchmark coverage by code path
+
+Every formula maps to one of these code paths. Each path has a criterion benchmark.
+
+| Code path | Benchmark file | Formulas using it |
+|---|---|---|
+| Parser | `parse.rs` | all formulas |
+| Binary/unary ops | `arithmetic.rs` | +, -, *, /, ^, %, &, comparisons |
+| String ops | `string.rs` | LEFT, RIGHT, MID, UPPER, CONCAT, TEXT, etc. |
+| Date serial conversion | `date.rs` | YEAR, MONTH, EDATE, NETWORKDAYS, etc. |
+| Pure math | `math.rs` | ROUND, MOD, SQRT, ABS, INT, POWER, etc. |
+| Iterative solvers | `financial.rs` | IRR, RATE, PMT, NPV, FV |
+| Short-circuit eval | `conditional.rs` | IF, IFS, SWITCH, IFERROR, AND, OR |
+| Type checking | `info.rs` | ISBLANK, ISNUMBER, TYPE, ISERROR |
+| Hash index probe | `lookup.rs` | VLOOKUP, XLOOKUP, INDEX/MATCH |
+| Streaming fold | `aggregate.rs` | SUM, COUNT, AVERAGE, SUMIF, COUNTIF |
+| Full pipeline | `end_to_end.rs` | read+parse+classify+prelude+eval+write at 10k rows |
+
+**Rule: when you add a formula with a novel code path** (not just dispatch to existing machinery), add a criterion bench for it in the matching `benches/<category>.rs` file. If no category fits, create a new file and add a `[[bench]]` entry to `benchmarks/Cargo.toml`.
+
 ### Reference workload
 
-`benchmarks/fixtures/reference_400k.xlsx` is the ground truth. Every perf claim in the docs comes from this workload.
-
-CI runs the `quick` bench (5k rows) on every PR. Full tier benchmarks run locally via `make bench`.
+CI runs criterion micro-benchmarks on every PR via `bench-gate` (fails on >15% regression). Full tier benchmarks (100k+) run locally via `scripts/bench-report.sh`. Reports are stored in `benchmarks/reports/`.
 
 ## Memory profiling
 
@@ -267,17 +200,14 @@ cargo bench
 ## CI gates
 
 A PR merges only when:
-- `cargo test --all-features` passes.
-- `cargo test --doc` passes.
+- `cargo test --all-features` passes (unit + integration + doctests).
 - `cargo clippy --all-targets --all-features -- -D warnings` is clean.
 - `cargo fmt --check` is clean.
 - `pytest` passes (for PRs touching the Python binding).
-- Code coverage didn't drop (target: 85%+ line coverage on library crates).
+- Criterion bench-gate passes (no >15% regression on micro-benchmarks).
 
 ## Test data
 
-- Small (< 50 KB) xlsx fixtures → committed in `fixtures/canonical/`.
-- Large xlsx fixtures → generated by a script, gitignored, reproduced on CI.
-- Expected outputs → committed as JSON next to the input, one fixture per test.
-
-Scripts to (re)generate fixtures live in `fixtures/scripts/`. Each is a small Rust binary or a Python openpyxl script, invoked by `cargo xtask regenerate-fixtures` (or a `Makefile` target).
+- Golden-file fixture (`tests/fixtures/regression.xlsx`) — committed, Excel-verified.
+- Programmatic fixtures — generated in test code via `rust_xlsxwriter`, no committed xlsx needed.
+- Large fixtures for benchmarks — generated by `benchmarks/src/bin/generate_fixtures.rs`, gitignored.

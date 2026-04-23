@@ -1,24 +1,29 @@
 # xlstream-core
 
-Foundation types for the xlstream streaming Excel evaluator. Every other crate in the workspace depends on this one.
+[![Crates.io](https://img.shields.io/crates/v/xlstream-core.svg)](https://crates.io/crates/xlstream-core)
+[![docs.rs](https://docs.rs/xlstream-core/badge.svg)](https://docs.rs/xlstream-core)
 
-## What it owns
+Core value and error types shared across the [xlstream](https://github.com/cilladev/xlstream) streaming Excel evaluator.
+
+This is an internal crate. Depend on [`xlstream-eval`](https://crates.io/crates/xlstream-eval) for the evaluation API, or `pip install xlstream` for Python.
+
+## What it provides
 
 - **`Value`** -- cell-value enum: `Number(f64)`, `Integer(i64)`, `Text(Box<str>)`, `Bool(bool)`, `Date(ExcelDate)`, `Error(CellError)`, `Empty`
 - **`CellError`** -- Excel in-cell errors: `Div0`, `Value`, `Ref`, `Name`, `Na`, `Num`, `Null`
 - **`ExcelDate`** -- wraps Excel serial date (days since 1900 epoch, leap-year bug preserved)
-- **`XlStreamError`** -- library-level errors that stop evaluation: `Io`, `Xlsx`, `XlsxWrite`, `Unsupported`, `FormulaParse`, `Classification`, `CircularReference`, `Internal`
+- **`XlStreamError`** -- typed error enum for the full pipeline: `Io`, `Xlsx`, `XlsxWrite`, `Unsupported`, `FormulaParse`, `Classification`, `CircularReference`, `Internal`
 - **`col_row_to_a1`** -- convert 1-based (col, row) to A1 notation
 - **Constants** -- `EXCEL_MAX_ROWS` (1,048,576), `EXCEL_MAX_COLS` (16,384)
 
-## What it does NOT own
+## When to use directly
 
-- Parsing, I/O, evaluation, or builtin functions. Those live in sibling crates.
+Only if you're building a custom component that handles xlstream value types without pulling in the full evaluator. Most users should depend on `xlstream-eval` instead.
 
 ## Dependencies
 
 `thiserror`. Nothing else.
 
-## Why separate
+## License
 
-Breaking core types into their own crate avoids circular-dep pain, reduces recompile scope, and gives a small stable ABI surface for the public Rust API.
+Dual-licensed under Apache-2.0 or MIT, at your option.

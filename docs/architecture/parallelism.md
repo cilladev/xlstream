@@ -134,7 +134,7 @@ From formualizer-comparable numbers in the brief:
 - Single-threaded streaming eval (pure per-row, no parallelism): ~8–12 minutes on 700k × 20 (conservative).
 - 8-worker streaming: ~1.5–2 minutes (near-linear scaling for pure row-local; diluted by prelude + writer serialisation).
 
-Benchmark harness is in `benchmarks/` — see [phase-12](../phases/phase-12-benchmarks.md).
+Benchmark harness is in `benchmarks/` — see [benchmarks reports](../../benchmarks/reports/).
 
 ## Thread pool ownership
 
