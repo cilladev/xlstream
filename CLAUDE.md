@@ -75,11 +75,12 @@ xlstream/
 ### Before you touch code
 
 0. **Use `/rust-skills` before writing any Rust code.** Covers idiomatic patterns, error handling, type design, and common pitfalls. Use it alongside (not instead of) any other applicable skills.
-1. **Read the current version roadmap.** Find it via [`docs/roadmap/README.md`](docs/roadmap/README.md). You are implementing a specific checkbox in the current version. Don't free-lance.
-2. **Read the architecture doc that covers your area.** Unclear architecture → stop and ask. Do not invent.
-3. **Search for existing patterns.** If three other builtins handle errors a given way, yours does too. Consistency outranks cleverness.
-4. **Always use Context7 MCP for up-to-date docs before writing code.** This is non-negotiable. Any time you're about to use a library, framework, SDK, or crate — calamine, rust_xlsxwriter, pyo3, maturin, rayon, formualizer-parse, phf, thiserror, tokio, anything — call Context7 first to verify the API shape against the **current** documentation. Your training-data knowledge may be stale; library APIs drift between versions. Context7 costs nothing; a silently-wrong import costs hours. Prefer it over general web search for library docs.
-5. **When Context7 has gaps, read the upstream source at `refs/<library>/`.** Present on every dev machine (gitignored, cloned from upstream). Covers `formualizer`, `calamine`, `rust_xlsxwriter`, `pyo3`, `maturin`. Grep-able. Authoritative. Never fabricate an API shape you can't verify — either Context7 confirms or `refs/` confirms, otherwise stop and ask. If a library isn't in `refs/` yet, clone it there: `git clone --depth 1 <upstream-url> refs/<libname>`.
+1. **Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/standards/`](docs/standards/).** These are mandatory, not optional. `CONTRIBUTING.md` covers setup, workflow, and the minimum bar for PRs. The standards docs cover code style, testing, commits, and documentation requirements.
+2. **Read the current version roadmap.** Find it via [`docs/roadmap/README.md`](docs/roadmap/README.md). You are implementing a specific checkbox in the current version. Don't free-lance.
+3. **Read the architecture doc that covers your area.** Unclear architecture → stop and ask. Do not invent.
+4. **Search for existing patterns.** If three other builtins handle errors a given way, yours does too. Consistency outranks cleverness.
+5. **Always use Context7 MCP for up-to-date docs before writing code.** This is non-negotiable. Any time you're about to use a library, framework, SDK, or crate — calamine, rust_xlsxwriter, pyo3, maturin, rayon, formualizer-parse, phf, thiserror, tokio, anything — call Context7 first to verify the API shape against the **current** documentation. Your training-data knowledge may be stale; library APIs drift between versions. Context7 costs nothing; a silently-wrong import costs hours. Prefer it over general web search for library docs.
+6. **When Context7 has gaps, read the upstream source at `refs/<library>/`.** Present on every dev machine (gitignored, cloned from upstream). Covers `formualizer`, `calamine`, `rust_xlsxwriter`, `pyo3`, `maturin`. Grep-able. Authoritative. Never fabricate an API shape you can't verify — either Context7 confirms or `refs/` confirms, otherwise stop and ask. If a library isn't in `refs/` yet, clone it there: `git clone --depth 1 <upstream-url> refs/<libname>`.
 
 ### When you write code
 

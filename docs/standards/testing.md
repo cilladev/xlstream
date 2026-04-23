@@ -105,14 +105,6 @@ The test evaluates the fixture through xlstream and compares every formula cell 
 
 **When to regenerate:** after adding new formula columns to the `FORMULAS` spec in `regression_base.rs`.
 
-### Per-bug regression tests
-
-Added as end-to-end tests in `crates/xlstream-eval/tests/end_to_end/`. Each test builds a minimal fixture programmatically and asserts exact output. No Excel needed.
-
-- Tests land BEFORE the fix (`#[ignore = "blocked: ..."]`).
-- Fix un-ignores the test.
-- Test + fix commit together.
-
 ## Excel parity
 
 Every builtin function has at least one test asserting its output against values produced by real Excel. The golden-file regression suite (`regression_base.rs`) is the primary mechanism — it covers all 117 surfaces in a single workbook verified by Excel. Edge cases (1900 leap year, boolean coercion, case-insensitive comparison, error propagation, operator precedence) are covered by the golden file and per-category integration tests.
