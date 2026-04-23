@@ -50,6 +50,10 @@ harness = false
 name = "date"
 harness = false
 
+[[bench]]
+name = "financial"
+harness = false
+
 [dependencies]
 xlstream-core = { path = "../crates/xlstream-core", version = "0.2.0" }
 xlstream-eval = { path = "../crates/xlstream-eval", version = "0.2.0" }
