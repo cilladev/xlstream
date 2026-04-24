@@ -17,7 +17,7 @@
 ### Output fidelity
 
 - [ ] **Keep formulas by default** — write `<f>formula</f><v>cached</v>` instead of just `<v>`. Add `--values-only` flag for static output. ~4 hours.
-- [ ] **PyPI description** — fix empty project page. ~30 min.
+- [x] **PyPI description** — fix empty project page. ~30 min.
 - [ ] **MID empty string workaround** — `rust_xlsxwriter` drops empty string writes. Either patch upstream or work around. ~1 hour.
 
 ### Performance
@@ -27,7 +27,7 @@
 
 ### Documentation
 
-- [ ] **Per-crate READMEs** — one-sentence purpose + example for each crate.
+- [x] **Per-crate READMEs** — one-sentence purpose + example for each crate.
 - [ ] **mdBook site** — optional.
 
 ## Out of scope (permanent)
