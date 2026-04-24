@@ -9,7 +9,8 @@ use xlstream_core::{col_row_to_a1, Value, XlStreamError, PARALLEL_ROW_THRESHOLD}
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
     classify, collect_lookup_keys, extract_references, parse, resolve_named_ranges, rewrite,
-    AggregateKey, Ast, Classification, ClassificationContext, LookupKey, Reference,
+    AggregateKey, Ast, Classification, ClassificationContext, LookupKey, NodeRef, NodeView,
+    Reference,
 };
 
 use crate::interp::Interpreter;
@@ -723,6 +724,113 @@ fn strip_xlfn_prefix(formula: &str) -> String {
     formula.replace("_xlfn._xlws.", "").replace("_xlfn.", "")
 }
 
+/// Two ASTs are streaming-equivalent if every row would produce the same
+/// result.  Same-sheet cell-ref rows are ignored because the evaluator
+/// resolves them from the current row (`scope.get(col)`).  Everything
+/// else must match exactly.
+#[allow(dead_code)]
+fn ast_streaming_eq(a: NodeRef<'_>, b: NodeRef<'_>) -> bool {
+    match (a.view(), b.view()) {
+        (NodeView::Number(x), NodeView::Number(y)) => (x - y).abs() < f64::EPSILON,
+        (NodeView::Bool(x), NodeView::Bool(y)) => x == y,
+        (NodeView::Text(x), NodeView::Text(y)) => x == y,
+        (NodeView::Error(x), NodeView::Error(y)) => x == y,
+
+        // Same-sheet cell ref: row is ignored by the evaluator.
+        (
+            NodeView::CellRef { sheet: None, col: col_a, .. },
+            NodeView::CellRef { sheet: None, col: col_b, .. },
+        ) => col_a == col_b,
+
+        // Cross-sheet cell ref: row matters (absolute lookup).
+        (
+            NodeView::CellRef { sheet: Some(sheet_a), row: row_a, col: col_a },
+            NodeView::CellRef { sheet: Some(sheet_b), row: row_b, col: col_b },
+        ) => sheet_a.eq_ignore_ascii_case(sheet_b) && row_a == row_b && col_a == col_b,
+
+        // RangeRef: rows compared exactly (unlike CellRef). Range refs
+        // denote fixed regions (e.g., SUM(A1:A10)), not "current row."
+        (
+            NodeView::RangeRef {
+                sheet: sheet_a,
+                start_row: start_row_a,
+                end_row: end_row_a,
+                start_col: start_col_a,
+                end_col: end_col_a,
+            },
+            NodeView::RangeRef {
+                sheet: sheet_b,
+                start_row: start_row_b,
+                end_row: end_row_b,
+                start_col: start_col_b,
+                end_col: end_col_b,
+            },
+        ) => {
+            match (sheet_a, sheet_b) {
+                (None, None) | (Some(_), Some(_)) => {}
+                _ => return false,
+            }
+            if let (Some(sa), Some(sb)) = (sheet_a, sheet_b) {
+                if !sa.eq_ignore_ascii_case(sb) {
+                    return false;
+                }
+            }
+            start_row_a == start_row_b
+                && end_row_a == end_row_b
+                && start_col_a == start_col_b
+                && end_col_a == end_col_b
+        }
+
+        (NodeView::NamedRef(na), NodeView::NamedRef(nb)) => na.eq_ignore_ascii_case(nb),
+
+        (NodeView::ExternalRef { raw: raw_a, .. }, NodeView::ExternalRef { raw: raw_b, .. }) => {
+            raw_a == raw_b
+        }
+
+        (
+            NodeView::TableRef { name: name_a, specifier: spec_a },
+            NodeView::TableRef { name: name_b, specifier: spec_b },
+        ) => name_a.eq_ignore_ascii_case(name_b) && spec_a == spec_b,
+
+        (NodeView::BinaryOp { op: op_a }, NodeView::BinaryOp { op: op_b }) => {
+            op_a == op_b
+                && a.left().zip(b.left()).is_some_and(|(l1, l2)| ast_streaming_eq(l1, l2))
+                && a.right().zip(b.right()).is_some_and(|(r1, r2)| ast_streaming_eq(r1, r2))
+        }
+
+        (NodeView::UnaryOp { op: op_a }, NodeView::UnaryOp { op: op_b }) => {
+            op_a == op_b
+                && a.operand().zip(b.operand()).is_some_and(|(o1, o2)| ast_streaming_eq(o1, o2))
+        }
+
+        (NodeView::Function { name: name_a }, NodeView::Function { name: name_b }) => {
+            name_a.eq_ignore_ascii_case(name_b) && {
+                let args_a = a.args();
+                let args_b = b.args();
+                args_a.len() == args_b.len()
+                    && args_a.iter().zip(args_b.iter()).all(|(x, y)| ast_streaming_eq(*x, *y))
+            }
+        }
+
+        (
+            NodeView::Array { rows: rows_a, cols: cols_a },
+            NodeView::Array { rows: rows_b, cols: cols_b },
+        ) => {
+            rows_a == rows_b && cols_a == cols_b && {
+                let cells_a = a.array_cells();
+                let cells_b = b.array_cells();
+                cells_a.iter().zip(cells_b.iter()).all(|(row_a, row_b)| {
+                    row_a.iter().zip(row_b.iter()).all(|(x, y)| ast_streaming_eq(*x, *y))
+                })
+            }
+        }
+
+        (NodeView::PreludeRef(key_a), NodeView::PreludeRef(key_b)) => key_a == key_b,
+
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -748,5 +856,40 @@ mod tests {
     fn ast_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<xlstream_parse::Ast>();
+    }
+
+    #[test]
+    fn ast_streaming_eq_same_row_local_formulas() {
+        let a = parse("A2*2").unwrap();
+        let b = parse("A3*2").unwrap();
+        assert!(super::ast_streaming_eq(a.root(), b.root()));
+    }
+
+    #[test]
+    fn ast_streaming_eq_different_structure() {
+        let a = parse("A2*2").unwrap();
+        let b = parse("A2+2").unwrap();
+        assert!(!super::ast_streaming_eq(a.root(), b.root()));
+    }
+
+    #[test]
+    fn ast_streaming_eq_cross_sheet_vs_local() {
+        let a = parse("A2*2").unwrap();
+        let b = parse("Sheet1!A2*2").unwrap();
+        assert!(!super::ast_streaming_eq(a.root(), b.root()));
+    }
+
+    #[test]
+    fn ast_streaming_eq_identical_cross_sheet() {
+        let a = parse("Sheet1!A2*2").unwrap();
+        let b = parse("Sheet1!A2*2").unwrap();
+        assert!(super::ast_streaming_eq(a.root(), b.root()));
+    }
+
+    #[test]
+    fn ast_streaming_eq_different_cross_sheet_rows() {
+        let a = parse("Sheet1!A2*2").unwrap();
+        let b = parse("Sheet1!A3*2").unwrap();
+        assert!(!super::ast_streaming_eq(a.root(), b.root()));
     }
 }
