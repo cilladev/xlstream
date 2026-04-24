@@ -1,0 +1,4 @@
+//! Engineering builtin functions (v0.3).
+//!
+//! CONVERT, HEX2DEC, DEC2HEX, BIN2DEC, DEC2BIN, OCT2DEC, DEC2OCT,
+//! COMPLEX, IMREAL, IMAGINARY, DELTA, GESTEP, ERF, ERFC, etc.

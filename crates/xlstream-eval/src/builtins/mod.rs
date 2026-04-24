@@ -5,13 +5,17 @@
 //! known, `None` otherwise (caller falls back to `#VALUE!`).
 
 pub mod aggregate;
+mod compatibility;
 mod conditional;
+mod database;
 pub(crate) mod date;
+mod engineering;
 pub mod financial;
 pub mod info;
 mod lookup;
 pub(crate) mod math;
 mod multi_conditional;
+mod statistical;
 pub(crate) mod string;
 
 use xlstream_core::{CellError, Value};
