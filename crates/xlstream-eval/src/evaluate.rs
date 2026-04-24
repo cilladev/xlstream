@@ -759,17 +759,6 @@ fn build_eval_plan(
                 continue;
             }
 
-            // Calamine's shared-formula expansion can corrupt function
-            // names (e.g., LOG10 → LOG11) by treating embedded digits as
-            // row offsets.  We can only trust subsequent formula text when
-            // it introduces or removes a cross-sheet reference (`!`),
-            // which shared-formula expansion never does.
-            let first_has_cross_sheet = first_text.contains('!');
-            let this_has_cross_sheet = text.contains('!');
-            if !first_has_cross_sheet && !this_has_cross_sheet {
-                continue;
-            }
-
             let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
             let formula_str = strip_xlfn_prefix(formula_str);
             let ast = parse(&formula_str)?;

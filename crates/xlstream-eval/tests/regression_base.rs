@@ -412,6 +412,15 @@ fn is_volatile(col_idx: usize) -> bool {
     FORMULAS.get(spec_idx).is_some_and(|s| s.volatile)
 }
 
+// TODO: remove when calamine merges https://github.com/tafia/calamine/pull/645
+fn is_calamine_corrupted(col_idx: usize) -> bool {
+    if col_idx < DATA_COLS as usize {
+        return false;
+    }
+    let spec_idx = col_idx - DATA_COLS as usize;
+    FORMULAS.get(spec_idx).is_some_and(|s| s.header == "m_log10")
+}
+
 fn error_to_string(e: &calamine::CellErrorType) -> &'static str {
     use calamine::CellErrorType;
     match e {
@@ -534,7 +543,7 @@ fn golden_file_regression() {
 
         let col_count = exp_row.len().min(act_row.len());
         for col_idx in 0..col_count {
-            if is_volatile(col_idx) {
+            if is_volatile(col_idx) || is_calamine_corrupted(col_idx) {
                 continue;
             }
             if !values_match(&exp_row[col_idx], &act_row[col_idx]) {
