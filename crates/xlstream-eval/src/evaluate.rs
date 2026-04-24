@@ -45,6 +45,7 @@ pub struct EvaluateSummary {
 struct EvalPlan {
     prelude: Prelude,
     col_asts: HashMap<u32, Ast>,
+    row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
@@ -57,6 +58,7 @@ struct EvalPlan {
 /// Per-sheet formula evaluation data for secondary (non-main) sheets.
 struct SheetEvalPlan {
     col_asts: HashMap<u32, Ast>,
+    row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
 }
 
@@ -135,7 +137,12 @@ pub fn evaluate(
                             continue;
                         }
                         for &fcol in &sp.topo_order {
-                            let Some(ast) = sp.col_asts.get(&fcol) else { continue };
+                            let ast = sp
+                                .row_overrides
+                                .get(&fcol)
+                                .and_then(|overrides| overrides.get(&row_idx))
+                                .or_else(|| sp.col_asts.get(&fcol));
+                            let Some(ast) = ast else { continue };
                             let fcol_idx = fcol as usize;
                             if fcol_idx >= row_values.len() {
                                 row_values.resize(fcol_idx + 1, Value::Empty);
@@ -160,12 +167,14 @@ pub fn evaluate(
 
         let prelude = Arc::new(plan.prelude);
         let col_asts = Arc::new(plan.col_asts);
+        let row_overrides_arc = Arc::new(plan.row_overrides);
 
         stream_parallel(
             input,
             &mut writer,
             &prelude,
             &col_asts,
+            &row_overrides_arc,
             &plan.topo_order,
             &main_sheet_name,
             plan.total_data_rows,
@@ -202,17 +211,17 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         sheets_with_formulas.first().map(|(_, f)| f.clone()).unwrap_or_default();
 
     // Parse + classify formula columns; build topo order.
-    let (topo_order, col_asts, lookup_keys) = if let Some(ref main) = main_sheet {
+    let (topo_order, col_asts, row_overrides, lookup_keys) = if let Some(ref main) = main_sheet {
         build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges)?
     } else {
-        (Vec::new(), HashMap::new(), Vec::new())
+        (Vec::new(), HashMap::new(), HashMap::new(), Vec::new())
     };
 
     // Build eval plans for secondary formula-bearing sheets.
     let mut secondary_plans: HashMap<String, SheetEvalPlan> = HashMap::new();
     let mut secondary_lookup_keys: Vec<LookupKey> = Vec::new();
     for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
-        let (sec_topo, sec_asts, lk) =
+        let (sec_topo, sec_asts, sec_overrides, lk) =
             build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges)?;
         // Detect cross-sheet cell references and add as lookup keys.
         for ast in sec_asts.values() {
@@ -233,32 +242,64 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 }
             }
         }
+        for per_row in sec_overrides.values() {
+            for ast in per_row.values() {
+                let refs = extract_references(ast);
+                for r in &refs.cells {
+                    if let Reference::Cell { sheet: Some(ref s), .. } = r {
+                        let already =
+                            secondary_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s))
+                                || lk.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
+                        if !already {
+                            secondary_lookup_keys.push(LookupKey {
+                                kind: xlstream_parse::LookupKind::VLookup,
+                                sheet: s.clone(),
+                                key_index: 1,
+                                value_index: 1,
+                            });
+                        }
+                    }
+                }
+            }
+        }
         secondary_lookup_keys.extend(lk);
-        secondary_plans
-            .insert(sheet_name.clone(), SheetEvalPlan { col_asts: sec_asts, topo_order: sec_topo });
+        secondary_plans.insert(
+            sheet_name.clone(),
+            SheetEvalPlan {
+                col_asts: sec_asts,
+                row_overrides: sec_overrides,
+                topo_order: sec_topo,
+            },
+        );
     }
 
     // Collect main sheet aggregate keys and run prelude.
     let main_agg_keys: Vec<AggregateKey> = {
         let mut seen = HashSet::new();
-        col_asts
-            .values()
+        let primary = col_asts.values();
+        let overrides = row_overrides.values().flat_map(HashMap::values);
+        primary
+            .chain(overrides)
             .flat_map(crate::prelude_plan::collect_aggregate_keys)
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
     let main_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
         let mut seen = HashSet::new();
-        col_asts
-            .values()
+        let primary = col_asts.values();
+        let overrides = row_overrides.values().flat_map(HashMap::values);
+        primary
+            .chain(overrides)
             .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
     let main_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
         let mut seen = HashSet::new();
-        col_asts
-            .values()
+        let primary = col_asts.values();
+        let overrides = row_overrides.values().flat_map(HashMap::values);
+        primary
+            .chain(overrides)
             .flat_map(crate::prelude_plan::collect_bounded_range_keys)
             .filter(|k| seen.insert(k.clone()))
             .collect()
@@ -287,24 +328,30 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     for (sheet_name, sp) in &secondary_plans {
         let sec_agg: Vec<AggregateKey> = {
             let mut seen = HashSet::new();
-            sp.col_asts
-                .values()
+            let primary = sp.col_asts.values();
+            let overrides = sp.row_overrides.values().flat_map(HashMap::values);
+            primary
+                .chain(overrides)
                 .flat_map(crate::prelude_plan::collect_aggregate_keys)
                 .filter(|k| seen.insert(k.clone()))
                 .collect()
         };
         let sec_multi: Vec<crate::prelude::MultiConditionalAggKey> = {
             let mut seen = HashSet::new();
-            sp.col_asts
-                .values()
+            let primary = sp.col_asts.values();
+            let overrides = sp.row_overrides.values().flat_map(HashMap::values);
+            primary
+                .chain(overrides)
                 .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
                 .filter(|k| seen.insert(k.clone()))
                 .collect()
         };
         let sec_range: Vec<crate::prelude::BoundedRangeKey> = {
             let mut seen = HashSet::new();
-            sp.col_asts
-                .values()
+            let primary = sp.col_asts.values();
+            let overrides = sp.row_overrides.values().flat_map(HashMap::values);
+            primary
+                .chain(overrides)
                 .flat_map(crate::prelude_plan::collect_bounded_range_keys)
                 .filter(|k| seen.insert(k.clone()))
                 .collect()
@@ -349,9 +396,10 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     }
     // Include cross-sheet bounded range keys from secondary sheets.
     for sp in secondary_plans.values() {
-        let sec_range: Vec<crate::prelude::BoundedRangeKey> = sp
-            .col_asts
-            .values()
+        let primary = sp.col_asts.values();
+        let overrides = sp.row_overrides.values().flat_map(HashMap::values);
+        let sec_range: Vec<crate::prelude::BoundedRangeKey> = primary
+            .chain(overrides)
             .flat_map(crate::prelude_plan::collect_bounded_range_keys)
             .collect();
         for rk in &sec_range {
@@ -380,6 +428,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let plan = EvalPlan {
         prelude,
         col_asts,
+        row_overrides,
         topo_order,
         secondary_plans,
         main_sheet,
@@ -424,16 +473,21 @@ fn stream_single_threaded(
         let mut stream = reader.cells(name)?;
 
         let is_main = plan.main_sheet.as_deref() == Some(name.as_str());
-        let sheet_plan: Option<(&HashMap<u32, Ast>, &[u32])> = if is_main {
+        #[allow(clippy::type_complexity)]
+        let sheet_plan: Option<(
+            &HashMap<u32, Ast>,
+            &HashMap<u32, HashMap<u32, Ast>>,
+            &[u32],
+        )> = if is_main {
             if plan.col_asts.is_empty() {
                 None
             } else {
-                Some((&plan.col_asts, &plan.topo_order))
+                Some((&plan.col_asts, &plan.row_overrides, &plan.topo_order))
             }
         } else {
             plan.secondary_plans
                 .get(name.as_str())
-                .map(|sp| (&sp.col_asts, sp.topo_order.as_slice()))
+                .map(|sp| (&sp.col_asts, &sp.row_overrides, sp.topo_order.as_slice()))
         };
 
         let mut header_pending = sheet_plan.is_some();
@@ -446,9 +500,13 @@ fn stream_single_threaded(
                 continue;
             }
 
-            if let Some((col_asts, topo_order)) = &sheet_plan {
+            if let Some((col_asts, row_overrides, topo_order)) = &sheet_plan {
                 for &fcol in *topo_order {
-                    let Some(ast) = col_asts.get(&fcol) else {
+                    let ast = row_overrides
+                        .get(&fcol)
+                        .and_then(|overrides| overrides.get(&row_idx))
+                        .or_else(|| col_asts.get(&fcol));
+                    let Some(ast) = ast else {
                         continue;
                     };
                     let fcol_idx = fcol as usize;
@@ -479,11 +537,13 @@ fn stream_single_threaded(
 /// bounded channel; the caller drains them in row order.
 ///
 /// Non-main sheets must be written by the caller before calling this.
+#[allow(clippy::too_many_arguments)]
 fn stream_parallel(
     input: &Path,
     output: &mut Writer,
     prelude: &Arc<Prelude>,
     col_asts: &Arc<HashMap<u32, Ast>>,
+    row_overrides: &Arc<HashMap<u32, HashMap<u32, Ast>>>,
     topo_order: &[u32],
     main_sheet: &str,
     total_data_rows: u32,
@@ -517,6 +577,7 @@ fn stream_parallel(
         let tx = tx.clone();
         let prelude = Arc::clone(prelude);
         let col_asts = Arc::clone(col_asts);
+        let row_overrides = Arc::clone(row_overrides);
         let topo_order = topo_order.to_owned();
         let input_path = input_path.clone();
         let main_name = main_name.clone();
@@ -532,6 +593,7 @@ fn stream_parallel(
                 &main_name,
                 &prelude,
                 &col_asts,
+                &row_overrides,
                 &topo_order,
                 start_row,
                 end_row,
@@ -589,11 +651,13 @@ fn stream_parallel(
 
 /// Worker: open reader, seek to `start_row`, evaluate
 /// [`start_row`, `end_row`), send each row through the channel.
+#[allow(clippy::too_many_arguments)]
 fn run_worker(
     input: &Path,
     main_sheet: &str,
     prelude: &Prelude,
     col_asts: &HashMap<u32, Ast>,
+    row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
     topo_order: &[u32],
     start_row: u32,
     end_row: u32,
@@ -614,7 +678,11 @@ fn run_worker(
 
         let mut formulas_in_row: u64 = 0;
         for &fcol in topo_order {
-            let Some(ast) = col_asts.get(&fcol) else {
+            let ast = row_overrides
+                .get(&fcol)
+                .and_then(|overrides| overrides.get(&row_idx))
+                .or_else(|| col_asts.get(&fcol));
+            let Some(ast) = ast else {
                 continue;
             };
             let fcol_idx = fcol as usize;
@@ -645,73 +713,119 @@ fn build_eval_plan(
     all_formulas: &[(u32, u32, String)],
     all_sheet_names: &[String],
     named_ranges: &HashMap<String, String>,
-) -> Result<(Vec<u32>, HashMap<u32, Ast>, Vec<LookupKey>), XlStreamError> {
-    // First occurrence per column (0-based col -> (0-based row, formula text)).
-    let mut col_formula: HashMap<u32, (u32, String)> = HashMap::new();
+) -> Result<
+    (Vec<u32>, HashMap<u32, Ast>, HashMap<u32, HashMap<u32, Ast>>, Vec<LookupKey>),
+    XlStreamError,
+> {
+    let mut col_formulas: HashMap<u32, Vec<(u32, String)>> = HashMap::new();
     for (row, col, text) in all_formulas {
-        col_formula.entry(*col).or_insert_with(|| (*row, text.clone()));
+        col_formulas.entry(*col).or_default().push((*row, text.clone()));
     }
 
     let mut col_asts: HashMap<u32, Ast> = HashMap::new();
+    let mut row_overrides: HashMap<u32, HashMap<u32, Ast>> = HashMap::new();
     let mut all_lookup_keys: Vec<LookupKey> = Vec::new();
-    for (&col, (row, text)) in &col_formula {
-        // calamine strips the leading '='; strip defensively to handle either.
-        // rust_xlsxwriter prepends `_xlfn.` to "future" Excel functions
-        // (CONCAT, TEXTJOIN, etc.); strip that prefix so the parser sees
-        // the canonical function name.
-        let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
-        let formula_str = strip_xlfn_prefix(formula_str);
-        let ast = parse(&formula_str)?;
-        let ast = resolve_named_ranges(ast, named_ranges);
 
-        // Register all non-main sheets as lookup sheets so the classifier
-        // accepts cross-sheet range refs in lookup functions.
-        let mut ctx = ClassificationContext::for_cell(main_sheet, row + 1, col + 1);
+    for (&col, formulas) in &col_formulas {
+        let (first_row, first_text) = &formulas[0];
+
+        let formula_str = first_text.strip_prefix('=').unwrap_or(first_text.as_str());
+        let formula_str = strip_xlfn_prefix(formula_str);
+        let first_ast = parse(&formula_str)?;
+        let first_ast = resolve_named_ranges(first_ast, named_ranges);
+
+        let mut ctx = ClassificationContext::for_cell(main_sheet, first_row + 1, col + 1);
         for name in all_sheet_names {
             if !name.eq_ignore_ascii_case(main_sheet) {
                 ctx = ctx.with_lookup_sheet(name);
             }
         }
-        let verdict = classify(&ast, &ctx);
+        let verdict = classify(&first_ast, &ctx);
         if let Classification::Unsupported(ref reason) = verdict {
             return Err(XlStreamError::Unsupported {
-                address: format!("{}!{}", main_sheet, col_row_to_a1(col + 1, row + 1)),
-                formula: text.clone(),
+                address: format!("{}!{}", main_sheet, col_row_to_a1(col + 1, first_row + 1)),
+                formula: first_text.clone(),
                 reason: reason.to_string(),
                 doc_link: reason.doc_link(),
             });
         }
 
-        // Rewrite aggregate sub-expressions to PreludeRef nodes.
-        // Lookups stay as Function nodes (rewrite_lookup returns None).
-        let rewritten = rewrite(ast, &ctx, &verdict);
+        let rewritten = rewrite(first_ast.clone(), &ctx, &verdict);
         all_lookup_keys.extend(collect_lookup_keys(&rewritten));
         col_asts.insert(col, rewritten);
+
+        for (row, text) in &formulas[1..] {
+            if text == first_text {
+                continue;
+            }
+
+            // Calamine's shared-formula expansion can corrupt function
+            // names (e.g., LOG10 → LOG11) by treating embedded digits as
+            // row offsets.  We can only trust subsequent formula text when
+            // it introduces or removes a cross-sheet reference (`!`),
+            // which shared-formula expansion never does.
+            let first_has_cross_sheet = first_text.contains('!');
+            let this_has_cross_sheet = text.contains('!');
+            if !first_has_cross_sheet && !this_has_cross_sheet {
+                continue;
+            }
+
+            let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
+            let formula_str = strip_xlfn_prefix(formula_str);
+            let ast = parse(&formula_str)?;
+            let ast = resolve_named_ranges(ast, named_ranges);
+
+            if ast_streaming_eq(first_ast.root(), ast.root()) {
+                continue;
+            }
+
+            let mut row_ctx = ClassificationContext::for_cell(main_sheet, row + 1, col + 1);
+            for name in all_sheet_names {
+                if !name.eq_ignore_ascii_case(main_sheet) {
+                    row_ctx = row_ctx.with_lookup_sheet(name);
+                }
+            }
+            let row_verdict = classify(&ast, &row_ctx);
+            if let Classification::Unsupported(ref reason) = row_verdict {
+                return Err(XlStreamError::Unsupported {
+                    address: format!("{}!{}", main_sheet, col_row_to_a1(col + 1, row + 1)),
+                    formula: text.clone(),
+                    reason: reason.to_string(),
+                    doc_link: reason.doc_link(),
+                });
+            }
+
+            let rewritten = rewrite(ast, &row_ctx, &row_verdict);
+            all_lookup_keys.extend(collect_lookup_keys(&rewritten));
+            row_overrides.entry(col).or_default().insert(*row, rewritten);
+        }
     }
 
-    // Build intra-row dependency graph; extract formula-column-to-formula-column edges.
     let formula_cols: HashSet<u32> = col_asts.keys().copied().collect();
     let deps: Vec<(u32, Vec<u32>)> = col_asts
         .iter()
         .map(|(&col, ast)| {
-            let refs = extract_references(ast);
-            let dep_cols: Vec<u32> = refs
-                .cells
-                .iter()
-                .filter_map(|r| match r {
-                    Reference::Cell { col: ref_col, .. } => {
-                        // Convert 1-based reference to 0-based column index.
-                        Some(ref_col.saturating_sub(1))
+            let mut dep_cols: HashSet<u32> = HashSet::new();
+            for r in &extract_references(ast).cells {
+                if let Reference::Cell { col: ref_col, .. } = r {
+                    dep_cols.insert(ref_col.saturating_sub(1));
+                }
+            }
+            if let Some(overrides) = row_overrides.get(&col) {
+                for override_ast in overrides.values() {
+                    for r in &extract_references(override_ast).cells {
+                        if let Reference::Cell { col: ref_col, .. } = r {
+                            dep_cols.insert(ref_col.saturating_sub(1));
+                        }
                     }
-                    _ => None,
-                })
-                .collect();
-            (col, dep_cols)
+                }
+            }
+            (col, dep_cols.into_iter().collect())
         })
         .collect();
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
-    Ok((topo_order, col_asts, all_lookup_keys))
+    Ok((topo_order, col_asts, row_overrides, all_lookup_keys))
 }
 
 /// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes that `rust_xlsxwriter`
@@ -728,7 +842,6 @@ fn strip_xlfn_prefix(formula: &str) -> String {
 /// result.  Same-sheet cell-ref rows are ignored because the evaluator
 /// resolves them from the current row (`scope.get(col)`).  Everything
 /// else must match exactly.
-#[allow(dead_code)]
 fn ast_streaming_eq(a: NodeRef<'_>, b: NodeRef<'_>) -> bool {
     match (a.view(), b.view()) {
         (NodeView::Number(x), NodeView::Number(y)) => (x - y).abs() < f64::EPSILON,
