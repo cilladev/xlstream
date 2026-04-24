@@ -537,7 +537,7 @@ fn stream_single_threaded(
 /// bounded channel; the caller drains them in row order.
 ///
 /// Non-main sheets must be written by the caller before calling this.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)] // worker contract: all args logically required
 fn stream_parallel(
     input: &Path,
     output: &mut Writer,
@@ -651,7 +651,7 @@ fn stream_parallel(
 
 /// Worker: open reader, seek to `start_row`, evaluate
 /// [`start_row`, `end_row`), send each row through the channel.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)] // worker contract: all args logically required
 fn run_worker(
     input: &Path,
     main_sheet: &str,
