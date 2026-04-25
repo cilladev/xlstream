@@ -234,6 +234,9 @@ const FORMULAS: &[Spec] = &[
     f("fin_fv",    "=FV(0.06/12,240,-200)"),
     f("fin_npv",   "=NPV(0.1,A{r},B{r},C{r})"),
     f("fin_rate",  "=RATE(120,-500,50000)"),
+
+    // ---- Range-expanding (1; requires bounded range args) ----
+    f("re_sumprod", "=SUMPRODUCT(A2:A6,B2:B6)"),
 ];
 
 // ---------------------------------------------------------------------------

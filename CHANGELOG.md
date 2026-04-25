@@ -7,6 +7,7 @@ Semver.
 
 ### Added
 - MINIFS and MAXIFS conditional aggregate functions
+- SUMPRODUCT: sum of element-wise products of bounded ranges; single-array degenerate case sums the array; booleans coerce to 1/0
 
 ### Fixed
 - Formulas on sheets not referenced by the main sheet are now evaluated instead of producing None (#42)
