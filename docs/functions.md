@@ -111,7 +111,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SUM | x | yes | v0.1 | x | x | |
 | SUMIF | x | yes | v0.1 | x | x | |
 | SUMIFS | x | yes | v0.1 | x | | |
-| SUMPRODUCT | . | yes | v0.2 | x | x | |
+| SUMPRODUCT | x | yes | v0.2 | x | x | |
 | SUMSQ | . | yes | v0.3 | | | |
 | SUMX2MY2 | . | yes | v0.3 | | | |
 | SUMX2PY2 | . | yes | v0.3 | | | |
