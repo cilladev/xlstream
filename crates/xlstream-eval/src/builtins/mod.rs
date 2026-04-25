@@ -110,6 +110,8 @@ pub(crate) fn dispatch(
         "SUMIF" => Some(multi_conditional::builtin_sumif(args, interp, scope)),
         "COUNTIF" => Some(multi_conditional::builtin_countif(args, interp, scope)),
         "AVERAGEIF" => Some(multi_conditional::builtin_averageif(args, interp, scope)),
+        "MINIFS" => Some(multi_conditional::builtin_minifs(args, interp, scope)),
+        "MAXIFS" => Some(multi_conditional::builtin_maxifs(args, interp, scope)),
         "PRODUCT" => {
             Some(aggregate::product(&eval_args(args, interp, scope)).unwrap_or_else(Value::Error))
         }

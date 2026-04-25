@@ -304,6 +304,16 @@ fn collect_multi_keys_recursive(
                         keys.push(key);
                     }
                 }
+                "MINIFS" => {
+                    if let Some(key) = extract_minifs_key(node) {
+                        keys.push(key);
+                    }
+                }
+                "MAXIFS" => {
+                    if let Some(key) = extract_maxifs_key(node) {
+                        keys.push(key);
+                    }
+                }
                 _ => {}
             }
             // Also recurse into args in case of nested function calls.
@@ -482,6 +492,54 @@ fn extract_averageif_key(
         kind: AggKind::Average,
         sum_col,
         criteria_cols: vec![criteria_col],
+        sheet,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from a MINIFS function node.
+/// `MINIFS(min_range, crit_range1, crit1, crit_range2, crit2, ...)`
+fn extract_minifs_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+        return None;
+    }
+    let (sum_col, sheet) = extract_range_col_and_sheet(args[0])?;
+    let num_pairs = (args.len() - 1) / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    for i in 0..num_pairs {
+        let (col, _) = extract_range_col_and_sheet(args[1 + i * 2])?;
+        criteria_cols.push(col);
+    }
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Min,
+        sum_col,
+        criteria_cols,
+        sheet,
+    })
+}
+
+/// Extract a `MultiConditionalAggKey` from a MAXIFS function node.
+/// `MAXIFS(max_range, crit_range1, crit1, crit_range2, crit2, ...)`
+fn extract_maxifs_key(
+    node: xlstream_parse::NodeRef<'_>,
+) -> Option<crate::prelude::MultiConditionalAggKey> {
+    let args = node.args();
+    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+        return None;
+    }
+    let (sum_col, sheet) = extract_range_col_and_sheet(args[0])?;
+    let num_pairs = (args.len() - 1) / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    for i in 0..num_pairs {
+        let (col, _) = extract_range_col_and_sheet(args[1 + i * 2])?;
+        criteria_cols.push(col);
+    }
+    Some(crate::prelude::MultiConditionalAggKey {
+        kind: AggKind::Max,
+        sum_col,
+        criteria_cols,
         sheet,
     })
 }
@@ -1132,5 +1190,54 @@ mod tests {
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
         assert_eq!(keys[0].sum_col, 2);
         assert_eq!(keys[0].criteria_cols, vec![1]);
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_minifs() {
+        let ast = xlstream_parse::parse("MINIFS(B:B,A:A,A2)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].kind, AggKind::Min);
+        assert_eq!(keys[0].sum_col, 2);
+        assert_eq!(keys[0].criteria_cols, vec![1]);
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_maxifs() {
+        let ast = xlstream_parse::parse("MAXIFS(B:B,A:A,A2)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].kind, AggKind::Max);
+        assert_eq!(keys[0].sum_col, 2);
+        assert_eq!(keys[0].criteria_cols, vec![1]);
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_minifs_two_criteria() {
+        let ast = xlstream_parse::parse("MINIFS(C:C,A:A,A2,B:B,B2)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].criteria_cols, vec![1, 2]);
+    }
+
+    #[test]
+    fn collect_multi_keys_extracts_cross_sheet_minifs() {
+        let ast = xlstream_parse::parse("MINIFS(RefData!B:B,RefData!A:A,A2)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Main", 2, 5)
+            .with_lookup_sheet("RefData");
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        let keys = collect_multi_conditional_keys(&rewritten);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
     }
 }
