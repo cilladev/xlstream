@@ -137,7 +137,7 @@ pub fn is_volatile_unsupported(name: &str) -> bool {
 /// multi-column ranges are still refused.
 pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "IRR", "NPV", "CONCAT", "CONCATENATE", "TEXTJOIN",
-    "NETWORKDAYS", "WORKDAY", "AND", "OR",
+    "NETWORKDAYS", "WORKDAY", "AND", "OR", "SUMPRODUCT",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
@@ -219,6 +219,8 @@ mod tests {
         assert!(is_range_expanding("AND"));
         assert!(is_range_expanding("OR"));
         assert!(is_range_expanding("NPV"));
+        assert!(is_range_expanding("SUMPRODUCT"));
+        assert!(is_range_expanding("sumproduct"));
         assert!(!is_range_expanding("SUM"));
     }
 

@@ -873,4 +873,61 @@ mod tests {
         );
         assert_eq!(c, Classification::Mixed);
     }
+
+    // -- SUMPRODUCT classification --
+
+    #[test]
+    fn sumproduct_two_bounded_ranges_classifies_as_streamable() {
+        let ast = crate::parse("SUMPRODUCT(A1:A3, B1:B3)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(
+            !matches!(result, Classification::Unsupported(_)),
+            "expected streamable, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn sumproduct_single_bounded_range_classifies_as_streamable() {
+        let ast = crate::parse("SUMPRODUCT(A1:A5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(
+            !matches!(result, Classification::Unsupported(_)),
+            "expected streamable, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn sumproduct_three_bounded_ranges_classifies_as_streamable() {
+        let ast = crate::parse("SUMPRODUCT(A1:A3, B1:B3, C1:C3)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(
+            !matches!(result, Classification::Unsupported(_)),
+            "expected streamable, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn sumproduct_case_insensitive() {
+        let ast = crate::parse("sumproduct(A1:A5, B1:B5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(
+            !matches!(result, Classification::Unsupported(_)),
+            "expected streamable, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn sumproduct_nested_inside_if() {
+        let ast = crate::parse("IF(D2, SUMPRODUCT(A1:A3, B1:B3), 0)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        let result = classify(&ast, &ctx);
+        assert!(
+            !matches!(result, Classification::Unsupported(_)),
+            "expected streamable, got {result:?}"
+        );
+    }
 }
