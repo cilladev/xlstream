@@ -144,6 +144,8 @@ const FORMULAS: &[Spec] = &[
     f("agg_min",      "=MIN(C:C)"),
     f("agg_max",      "=MAX(C:C)"),
     f("agg_median",   "=MEDIAN(C:C)"),
+    f("agg_minifs",   "=MINIFS(AggSource!B:B,AggSource!A:A,\"EMEA\",AggSource!C:C,\"Sales\")"),
+    f("agg_maxifs",   "=MAXIFS(AggSource!B:B,AggSource!A:A,\"EMEA\",AggSource!C:C,\"Sales\")"),
 
     // ---- Lookup (7) ----
     f("lk_vlookup",   "=VLOOKUP(E{r},Lookup1!A:C,2,FALSE)"),

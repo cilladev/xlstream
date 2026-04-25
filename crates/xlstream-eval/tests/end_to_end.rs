@@ -22,6 +22,8 @@ mod cross_sheet_aggregates;
 mod grouped_sumif;
 #[path = "end_to_end/lookups.rs"]
 mod lookups;
+#[path = "end_to_end/minifs_maxifs.rs"]
+mod minifs_maxifs;
 #[path = "end_to_end/named_ranges.rs"]
 mod named_ranges;
 #[path = "end_to_end/pipeline.rs"]

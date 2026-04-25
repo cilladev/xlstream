@@ -1,5 +1,5 @@
 //! Multi-criteria conditional aggregate builtins (SUMIFS, COUNTIFS,
-//! AVERAGEIFS).
+//! AVERAGEIFS, MINIFS, MAXIFS).
 //!
 //! These functions look up pre-computed results from the prelude's
 //! multi-conditional aggregate tables. Each criteria argument is
@@ -158,6 +158,86 @@ pub(crate) fn builtin_averageifs(
     }
 
     let key = MultiConditionalAggKey { kind: AggKind::Average, sum_col, criteria_cols, sheet };
+
+    let composite = build_composite_key(&criteria_values);
+    interp.prelude().get_multi_conditional(&key, &composite)
+}
+
+/// `MINIFS(min_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
+///
+/// Looks up the pre-computed multi-conditional min from the prelude.
+/// Returns `#VALUE!` if arguments are malformed.
+pub(crate) fn builtin_minifs(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+        return Value::Error(CellError::Value);
+    }
+
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+        return Value::Error(CellError::Value);
+    };
+
+    let num_pairs = (args.len() - 1) / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    let mut criteria_values = Vec::with_capacity(num_pairs);
+
+    for i in 0..num_pairs {
+        let range_idx = 1 + i * 2;
+        let crit_idx = 2 + i * 2;
+
+        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+            return Value::Error(CellError::Value);
+        };
+        criteria_cols.push(col);
+
+        let val = extract_static_criteria(args[crit_idx], interp, scope);
+        criteria_values.push(val);
+    }
+
+    let key = MultiConditionalAggKey { kind: AggKind::Min, sum_col, criteria_cols, sheet };
+
+    let composite = build_composite_key(&criteria_values);
+    interp.prelude().get_multi_conditional(&key, &composite)
+}
+
+/// `MAXIFS(max_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
+///
+/// Looks up the pre-computed multi-conditional max from the prelude.
+/// Returns `#VALUE!` if arguments are malformed.
+pub(crate) fn builtin_maxifs(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+        return Value::Error(CellError::Value);
+    }
+
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+        return Value::Error(CellError::Value);
+    };
+
+    let num_pairs = (args.len() - 1) / 2;
+    let mut criteria_cols = Vec::with_capacity(num_pairs);
+    let mut criteria_values = Vec::with_capacity(num_pairs);
+
+    for i in 0..num_pairs {
+        let range_idx = 1 + i * 2;
+        let crit_idx = 2 + i * 2;
+
+        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+            return Value::Error(CellError::Value);
+        };
+        criteria_cols.push(col);
+
+        let val = extract_static_criteria(args[crit_idx], interp, scope);
+        criteria_values.push(val);
+    }
+
+    let key = MultiConditionalAggKey { kind: AggKind::Max, sum_col, criteria_cols, sheet };
 
     let composite = build_composite_key(&criteria_values);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -565,5 +645,159 @@ mod tests {
             sheet: None,
         };
         assert_eq!(prelude.get_multi_conditional(&key, "a\0b"), Value::Error(CellError::Div0));
+    }
+
+    // ===== MINIFS =====
+
+    #[test]
+    fn minifs_basic_one_criteria() {
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Min,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+        };
+        let prelude = prelude_with_multi(key, vec![("east", Value::Number(10.0))]);
+        let result = prelude.get_multi_conditional(
+            &MultiConditionalAggKey {
+                kind: AggKind::Min,
+                sum_col: 2,
+                criteria_cols: vec![1],
+                sheet: None,
+            },
+            "east",
+        );
+        assert_eq!(result, Value::Number(10.0));
+    }
+
+    #[test]
+    fn minifs_missing_returns_zero() {
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Min,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+        };
+        let prelude = prelude_with_multi(key, vec![("east", Value::Number(10.0))]);
+        let result = prelude.get_multi_conditional(
+            &MultiConditionalAggKey {
+                kind: AggKind::Min,
+                sum_col: 2,
+                criteria_cols: vec![1],
+                sheet: None,
+            },
+            "west",
+        );
+        assert_eq!(result, Value::Number(0.0));
+    }
+
+    #[test]
+    fn minifs_two_criteria() {
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Min,
+            sum_col: 3,
+            criteria_cols: vec![1, 2],
+            sheet: None,
+        };
+        let prelude = prelude_with_multi(key, vec![("east\x00q1", Value::Number(5.0))]);
+        let result = prelude.get_multi_conditional(
+            &MultiConditionalAggKey {
+                kind: AggKind::Min,
+                sum_col: 3,
+                criteria_cols: vec![1, 2],
+                sheet: None,
+            },
+            "east\x00q1",
+        );
+        assert_eq!(result, Value::Number(5.0));
+    }
+
+    #[test]
+    fn minifs_empty_prelude_returns_zero() {
+        let prelude = Prelude::empty();
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Min,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+        };
+        assert_eq!(prelude.get_multi_conditional(&key, "x"), Value::Number(0.0));
+    }
+
+    // ===== MAXIFS =====
+
+    #[test]
+    fn maxifs_basic_one_criteria() {
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Max,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+        };
+        let prelude = prelude_with_multi(key, vec![("east", Value::Number(99.0))]);
+        let result = prelude.get_multi_conditional(
+            &MultiConditionalAggKey {
+                kind: AggKind::Max,
+                sum_col: 2,
+                criteria_cols: vec![1],
+                sheet: None,
+            },
+            "east",
+        );
+        assert_eq!(result, Value::Number(99.0));
+    }
+
+    #[test]
+    fn maxifs_missing_returns_zero() {
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Max,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+        };
+        let prelude = prelude_with_multi(key, vec![("east", Value::Number(99.0))]);
+        let result = prelude.get_multi_conditional(
+            &MultiConditionalAggKey {
+                kind: AggKind::Max,
+                sum_col: 2,
+                criteria_cols: vec![1],
+                sheet: None,
+            },
+            "west",
+        );
+        assert_eq!(result, Value::Number(0.0));
+    }
+
+    #[test]
+    fn maxifs_two_criteria() {
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Max,
+            sum_col: 3,
+            criteria_cols: vec![1, 2],
+            sheet: None,
+        };
+        let prelude = prelude_with_multi(key, vec![("east\x00q1", Value::Number(200.0))]);
+        let result = prelude.get_multi_conditional(
+            &MultiConditionalAggKey {
+                kind: AggKind::Max,
+                sum_col: 3,
+                criteria_cols: vec![1, 2],
+                sheet: None,
+            },
+            "east\x00q1",
+        );
+        assert_eq!(result, Value::Number(200.0));
+    }
+
+    #[test]
+    fn maxifs_empty_prelude_returns_zero() {
+        let prelude = Prelude::empty();
+        let key = MultiConditionalAggKey {
+            kind: AggKind::Max,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+        };
+        assert_eq!(prelude.get_multi_conditional(&key, "x"), Value::Number(0.0));
     }
 }

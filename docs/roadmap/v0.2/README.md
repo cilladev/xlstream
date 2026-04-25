@@ -11,7 +11,7 @@
 - [x] **Named ranges** — resolve `MyRange` via `defined_names()` at classification time. ~1 day.
 - [ ] **Table references** — `Table[Column]`, `Table[@Column]`. Parse `tables/table*.xml`, resolve to ranges. ~2 days.
 - [ ] **SUMPRODUCT** — sum of element-wise products. Requires bounded-range evaluation. ~1 day.
-- [ ] **MINIFS / MAXIFS** — conditional min/max. Same pattern as SUMIFS/COUNTIFS. ~0.5 day.
+- [x] **MINIFS / MAXIFS** — conditional min/max. Same pattern as SUMIFS/COUNTIFS. ~0.5 day.
 - [ ] **ROWS / COLUMNS** — return row/column count. Uses `EXCEL_MAX_ROWS`/`EXCEL_MAX_COLS` constants (already in xlstream-core). ~0.5 day.
 
 ### Output fidelity

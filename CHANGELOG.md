@@ -5,6 +5,9 @@ Semver.
 
 ## [Unreleased]
 
+### Added
+- MINIFS and MAXIFS conditional aggregate functions
+
 ### Fixed
 - Formulas on sheets not referenced by the main sheet are now evaluated instead of producing None (#42)
 - Mixed-column formulas: columns where later rows have structurally different formulas (e.g., cross-sheet ref vs same-sheet ref) now store per-row AST overrides instead of silently using the first formula's AST for all rows

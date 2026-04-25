@@ -179,11 +179,11 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | LOGNORM.INV | . | yes | v0.3 | | | |
 | MAX | x | yes | v0.1 | x | x | |
 | MAXA | . | yes | v0.3 | | | |
-| MAXIFS | . | yes | v0.2 | | | |
+| MAXIFS | x | yes | v0.2 | x | x | |
 | MEDIAN | x | yes | v0.1 | x | | |
 | MIN | x | yes | v0.1 | x | x | |
 | MINA | . | yes | v0.3 | | | |
-| MINIFS | . | yes | v0.2 | | | |
+| MINIFS | x | yes | v0.2 | x | x | |
 | MODE.SNGL | . | yes | v0.3 | | | |
 | MODE.MULT | . | yes | v0.3 | | | |
 | NEGBINOM.DIST | . | yes | v0.3 | | | |
