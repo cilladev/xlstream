@@ -204,6 +204,26 @@ pub(crate) fn dispatch(
         "NPV" => Some(financial::builtin_npv(args, interp, scope)),
         "IRR" => Some(financial::builtin_irr(args, interp, scope)),
         "RATE" => Some(financial::builtin_rate(&eval_args(args, interp, scope))),
+        // -- range-expanding aggregate --
+        "SUMPRODUCT" => Some(builtin_sumproduct(args, interp, scope)),
         _ => None,
     }
+}
+
+/// `SUMPRODUCT(array1, array2, ...)` — sum of element-wise products.
+///
+/// Expands each arg via [`expand_range`] to collect arrays, then
+/// delegates to [`aggregate::sumproduct`].
+fn builtin_sumproduct(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+
+    let arrays: Vec<Vec<Value>> = args.iter().map(|&a| expand_range(a, interp, scope)).collect();
+    let slices: Vec<&[Value]> = arrays.iter().map(Vec::as_slice).collect();
+    aggregate::sumproduct(&slices).unwrap_or_else(Value::Error)
 }
