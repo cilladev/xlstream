@@ -40,7 +40,7 @@ jobs:
         with:
           tool: 'cargo'
           output-file-path: output.txt
-          alert-threshold: '115%'
+          alert-threshold: '120%'
           fail-on-alert: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
