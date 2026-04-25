@@ -331,6 +331,52 @@ pub fn median(values: &[Value]) -> Result<Value, CellError> {
     }
 }
 
+/// `SUMPRODUCT` — sum of element-wise products of arrays.
+///
+/// With a single array, sums the array. All arrays must have the same
+/// length. Values are coerced via [`xlstream_core::coerce::to_number`]:
+/// booleans become 1/0, empty becomes 0, errors propagate, text that
+/// cannot parse as a number returns `#VALUE!`.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Value)` if no arrays are provided or if
+/// arrays have different lengths. Returns `Err(CellError)` if any
+/// value is an error or non-numeric text.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::aggregate::sumproduct;
+/// let a = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// let b = [Value::Number(4.0), Value::Number(5.0), Value::Number(6.0)];
+/// assert_eq!(sumproduct(&[&a[..], &b[..]]), Ok(Value::Number(32.0)));
+/// ```
+pub fn sumproduct(arrays: &[&[Value]]) -> Result<Value, CellError> {
+    if arrays.is_empty() {
+        return Err(CellError::Value);
+    }
+
+    let len = arrays[0].len();
+    for arr in &arrays[1..] {
+        if arr.len() != len {
+            return Err(CellError::Value);
+        }
+    }
+
+    let mut total = 0.0_f64;
+    for i in 0..len {
+        let mut product = 1.0_f64;
+        for arr in arrays {
+            product *= xlstream_core::coerce::to_number(&arr[i])?;
+        }
+        total += product;
+    }
+
+    Ok(Value::Number(total))
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -654,5 +700,68 @@ mod tests {
     fn max_with_integer() {
         let vals = [Value::Number(5.0), Value::Integer(10)];
         assert_eq!(max(&vals).unwrap(), Value::Number(10.0));
+    }
+
+    // ===== SUMPRODUCT =====
+
+    #[test]
+    fn sumproduct_two_equal_ranges() {
+        let a = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let b = [Value::Number(4.0), Value::Number(5.0), Value::Number(6.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap(), Value::Number(32.0));
+    }
+
+    #[test]
+    fn sumproduct_single_range_sums() {
+        let a = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(sumproduct(&[&a[..]]).unwrap(), Value::Number(6.0));
+    }
+
+    #[test]
+    fn sumproduct_three_ranges() {
+        let a = [Value::Number(1.0), Value::Number(2.0)];
+        let b = [Value::Number(3.0), Value::Number(4.0)];
+        let c = [Value::Number(5.0), Value::Number(6.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..], &c[..]]).unwrap(), Value::Number(63.0));
+    }
+
+    #[test]
+    fn sumproduct_mismatched_lengths_returns_value_error() {
+        let a = [Value::Number(1.0), Value::Number(2.0)];
+        let b = [Value::Number(3.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap_err(), CellError::Value);
+    }
+
+    #[test]
+    fn sumproduct_empty_args_returns_value_error() {
+        assert_eq!(sumproduct(&[]).unwrap_err(), CellError::Value);
+    }
+
+    #[test]
+    fn sumproduct_bool_coerces_to_numeric() {
+        let a = [Value::Bool(true), Value::Bool(false), Value::Bool(true)];
+        let b = [Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap(), Value::Number(40.0));
+    }
+
+    #[test]
+    fn sumproduct_empty_cells_treated_as_zero() {
+        let a = [Value::Number(5.0), Value::Empty, Value::Number(3.0)];
+        let b = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap(), Value::Number(28.0));
+    }
+
+    #[test]
+    fn sumproduct_error_propagates() {
+        let a = [Value::Number(1.0), Value::Error(CellError::Na)];
+        let b = [Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn sumproduct_text_returns_value_error() {
+        let a = [Value::Number(1.0), Value::Text("x".into())];
+        let b = [Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap_err(), CellError::Value);
     }
 }
