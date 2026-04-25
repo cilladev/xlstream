@@ -268,3 +268,158 @@ fn irr_with_cell_refs_still_works() {
     let result = read_cell(&output, "Main", 1, 5);
     assert_approx(&result, 0.1532, 0.01);
 }
+
+// ---------------------------------------------------------------------------
+// SUMPRODUCT
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sumproduct_two_ranges_produces_correct_result() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet().set_name("Main").unwrap();
+
+    ws.write_string(0, 0, "A").unwrap();
+    ws.write_string(0, 1, "B").unwrap();
+    ws.write_string(0, 2, "Result").unwrap();
+
+    ws.write_number(1, 0, 1.0).unwrap();
+    ws.write_number(2, 0, 2.0).unwrap();
+    ws.write_number(3, 0, 3.0).unwrap();
+    ws.write_number(1, 1, 4.0).unwrap();
+    ws.write_number(2, 1, 5.0).unwrap();
+    ws.write_number(3, 1, 6.0).unwrap();
+
+    // C2 = SUMPRODUCT(A2:A4, B2:B4) -> 1*4 + 2*5 + 3*6 = 32
+    ws.write_formula(1, 2, Formula::new("SUMPRODUCT(A2:A4, B2:B4)")).unwrap();
+
+    wb.save(&input).unwrap();
+    let summary = evaluate(&input, &output, None).unwrap();
+    assert_eq!(summary.formulas_evaluated, 3);
+
+    let result = read_cell(&output, "Main", 1, 2);
+    assert_eq!(result, Value::Number(32.0));
+}
+
+#[test]
+fn sumproduct_single_range_sums_values() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet().set_name("Main").unwrap();
+
+    ws.write_string(0, 0, "Value").unwrap();
+    ws.write_string(0, 1, "Result").unwrap();
+
+    ws.write_number(1, 0, 10.0).unwrap();
+    ws.write_number(2, 0, 20.0).unwrap();
+    ws.write_number(3, 0, 30.0).unwrap();
+
+    // B2 = SUMPRODUCT(A2:A4) -> 10 + 20 + 30 = 60
+    ws.write_formula(1, 1, Formula::new("SUMPRODUCT(A2:A4)")).unwrap();
+
+    wb.save(&input).unwrap();
+    evaluate(&input, &output, None).unwrap();
+
+    let result = read_cell(&output, "Main", 1, 1);
+    assert_eq!(result, Value::Number(60.0));
+}
+
+#[test]
+fn sumproduct_three_ranges_triple_product() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet().set_name("Main").unwrap();
+
+    ws.write_string(0, 0, "A").unwrap();
+    ws.write_string(0, 1, "B").unwrap();
+    ws.write_string(0, 2, "C").unwrap();
+    ws.write_string(0, 3, "Result").unwrap();
+
+    ws.write_number(1, 0, 1.0).unwrap();
+    ws.write_number(2, 0, 2.0).unwrap();
+    ws.write_number(1, 1, 3.0).unwrap();
+    ws.write_number(2, 1, 4.0).unwrap();
+    ws.write_number(1, 2, 5.0).unwrap();
+    ws.write_number(2, 2, 6.0).unwrap();
+
+    // D2 = SUMPRODUCT(A2:A3, B2:B3, C2:C3) -> 1*3*5 + 2*4*6 = 15 + 48 = 63
+    ws.write_formula(1, 3, Formula::new("SUMPRODUCT(A2:A3, B2:B3, C2:C3)")).unwrap();
+
+    wb.save(&input).unwrap();
+    evaluate(&input, &output, None).unwrap();
+
+    let result = read_cell(&output, "Main", 1, 3);
+    assert_eq!(result, Value::Number(63.0));
+}
+
+#[test]
+fn sumproduct_with_boolean_conditional_idiom() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet().set_name("Main").unwrap();
+
+    ws.write_string(0, 0, "Value").unwrap();
+    ws.write_string(0, 1, "Flag").unwrap();
+    ws.write_string(0, 2, "Result").unwrap();
+
+    ws.write_number(1, 0, 10.0).unwrap();
+    ws.write_number(2, 0, 20.0).unwrap();
+    ws.write_number(3, 0, 30.0).unwrap();
+    ws.write_boolean(1, 1, true).unwrap();
+    ws.write_boolean(2, 1, false).unwrap();
+    ws.write_boolean(3, 1, true).unwrap();
+
+    // C2 = SUMPRODUCT(A2:A4, B2:B4) -> 10*1 + 20*0 + 30*1 = 40
+    ws.write_formula(1, 2, Formula::new("SUMPRODUCT(A2:A4, B2:B4)")).unwrap();
+
+    wb.save(&input).unwrap();
+    evaluate(&input, &output, None).unwrap();
+
+    let result = read_cell(&output, "Main", 1, 2);
+    assert_eq!(result, Value::Number(40.0));
+}
+
+#[test]
+fn sumproduct_cross_sheet_bounded_range() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.xlsx");
+    let output = dir.path().join("output.xlsx");
+
+    let mut wb = Workbook::new();
+
+    // Lookup sheet with weights
+    let ws_weights = wb.add_worksheet().set_name("Weights").unwrap();
+    ws_weights.write_number(0, 0, 2.0).unwrap();
+    ws_weights.write_number(1, 0, 3.0).unwrap();
+    ws_weights.write_number(2, 0, 4.0).unwrap();
+
+    // Main sheet
+    let ws = wb.add_worksheet().set_name("Main").unwrap();
+    ws.write_string(0, 0, "Value").unwrap();
+    ws.write_string(0, 1, "Result").unwrap();
+
+    ws.write_number(1, 0, 10.0).unwrap();
+    ws.write_number(2, 0, 20.0).unwrap();
+    ws.write_number(3, 0, 30.0).unwrap();
+
+    // B2 = SUMPRODUCT(A2:A4, Weights!A1:A3) -> 10*2 + 20*3 + 30*4 = 200
+    ws.write_formula(1, 1, Formula::new("SUMPRODUCT(A2:A4, Weights!A1:A3)")).unwrap();
+
+    wb.save(&input).unwrap();
+    evaluate(&input, &output, None).unwrap();
+
+    let result = read_cell(&output, "Main", 1, 1);
+    assert_eq!(result, Value::Number(200.0));
+}
