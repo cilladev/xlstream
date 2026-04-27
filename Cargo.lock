@@ -529,12 +529,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "formualizer-parse"
-version = "1.1.2"
+name = "formualizer-common"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "263bc7dfe928ddc7fd9f5f590a39822705d7f3f03bdeee42df0947cb9e293e94"
+checksum = "2efd0a60e70b483da2650bac6715b9d1aae0c6d9443454d59a88cefb83f5133a"
 dependencies = [
- "formualizer-common",
+ "chrono",
+]
+
+[[package]]
+name = "formualizer-parse"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c8b67fa2c3bdb311c5c49b076eddf3fe9e69dc02902542f2312d472b6109c5f"
+dependencies = [
+ "formualizer-common 2.0.0",
  "once_cell",
  "smallvec",
 ]
@@ -2064,7 +2073,7 @@ dependencies = [
 name = "xlstream-parse"
 version = "0.2.0"
 dependencies = [
- "formualizer-common",
+ "formualizer-common 1.1.2",
  "formualizer-parse",
  "phf",
  "smallvec",
