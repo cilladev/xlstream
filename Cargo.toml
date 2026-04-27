@@ -59,7 +59,7 @@ memory-stats = "1.2"
 
 # Dev-only
 proptest = "1.5"
-criterion = "0.5"
+criterion = "0.8"
 tempfile = "3.14"
 
 [profile.release]
