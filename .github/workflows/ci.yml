@@ -30,25 +30,15 @@ jobs:
       - name: Doctests
         run: cargo test --workspace --doc --exclude xlstream-python
 
-  # End-to-end integration tests (full pipeline per feature).
-  end-to-end:
+  # Conformance tests (per-function xlsx fixtures vs LibreOffice cached values).
+  conformance:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: End-to-end integration tests
-        run: cargo test -p xlstream-eval --test end_to_end -- --nocapture
-
-  # Golden-file regression (all 117 surfaces vs Excel cached values).
-  regression:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Golden-file regression
-        run: cargo test -p xlstream-eval --test regression_base -- --nocapture
+      - name: Conformance tests
+        run: cargo test -p xlstream-eval --test conformance -- --nocapture
 
   # Python wheel + pytest across platforms.
   python:

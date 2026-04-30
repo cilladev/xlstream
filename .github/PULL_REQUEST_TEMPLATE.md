@@ -10,8 +10,7 @@
 
 <!-- Test location guide:
   - Unit tests: in-module `#[cfg(test)] mod tests`
-  - Per-category integration: `crates/xlstream-eval/tests/<category>.rs`
-  - End-to-end pipeline: `crates/xlstream-eval/tests/end_to_end/<feature>.rs`
+  - Conformance: `crates/xlstream-eval/tests/conformance/<category>.rs` + fixture in `tests/fixtures/<category>/`
   - See docs/standards/testing.md for the full test structure.
 -->
 
