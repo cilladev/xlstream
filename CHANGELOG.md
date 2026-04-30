@@ -9,6 +9,9 @@ Semver.
 - MINIFS and MAXIFS conditional aggregate functions
 - SUMPRODUCT: sum of element-wise products of bounded ranges; single-array degenerate case sums the array; booleans coerce to 1/0
 
+### Changed
+- Test infrastructure: replaced monolithic golden-file regression and end-to-end tests with per-function conformance fixtures (LibreOffice as oracle, one xlsx per function)
+
 ### Fixed
 - Formulas on sheets not referenced by the main sheet are now evaluated instead of producing None (#42)
 - Mixed-column formulas: columns where later rows have structurally different formulas (e.g., cross-sheet ref vs same-sheet ref) now store per-row AST overrides instead of silently using the first formula's AST for all rows
