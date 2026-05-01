@@ -274,4 +274,76 @@ mod tests {
         let scope = RowScope::new(&[], 0);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Number(-5.0));
     }
+
+    #[test]
+    fn eval_rows_bounded_range() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("ROWS(A1:A10)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(10.0));
+    }
+
+    #[test]
+    fn eval_columns_bounded_range() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("COLUMNS(A1:C5)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(3.0));
+    }
+
+    #[test]
+    fn eval_rows_whole_column() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("ROWS(A:A)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(1_048_576.0));
+    }
+
+    #[test]
+    fn eval_columns_whole_row() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("COLUMNS(1:1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(16_384.0));
+    }
+
+    #[test]
+    fn eval_rows_single_cell() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("ROWS(A1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(1.0));
+    }
+
+    #[test]
+    fn eval_columns_single_cell() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("COLUMNS(A1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(1.0));
+    }
+
+    #[test]
+    fn eval_rows_no_args() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("ROWS()").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn eval_columns_no_args() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("COLUMNS()").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value));
+    }
 }
