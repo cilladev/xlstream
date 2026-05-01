@@ -55,6 +55,12 @@ pub(crate) fn lower(node: &formualizer_parse::ASTNode) -> Node {
         }
         T::Array(rows) => Node::Array(rows.iter().map(|r| r.iter().map(lower).collect()).collect()),
         T::Reference { reference, .. } => Node::Reference(lower_reference(reference)),
+        T::Call { callee, args } => {
+            let mut all_args = Vec::with_capacity(args.len() + 1);
+            all_args.push(lower(callee));
+            all_args.extend(args.iter().map(lower));
+            Node::Function { name: "LAMBDA".into(), args: all_args }
+        }
     }
 }
 
@@ -81,6 +87,12 @@ fn lower_reference(r: &formualizer_parse::parser::ReferenceType) -> Reference {
             name: t.name.clone(),
             specifier: t.specifier.as_ref().map(|s| format!("{s}")),
         },
+        R::Cell3D { sheet_first, sheet_last, .. } | R::Range3D { sheet_first, sheet_last, .. } => {
+            Reference::ThreeDimensional {
+                sheet_first: sheet_first.clone(),
+                sheet_last: sheet_last.clone(),
+            }
+        }
     }
 }
 
@@ -170,5 +182,21 @@ mod tests {
             let e = ExcelError::from(kind);
             assert_eq!(map_excel_error(&e), expected, "kind={kind:?}");
         }
+    }
+
+    #[test]
+    fn lower_handles_3d_cell_reference() {
+        let upstream = formualizer_parse::parse("=SUM(Sheet1:Sheet3!A1)").unwrap();
+        let node = lower(&upstream);
+        let dbg = format!("{node:?}");
+        assert!(dbg.contains("ThreeDimensional"), "expected 3D ref: {dbg}");
+    }
+
+    #[test]
+    fn lower_handles_lambda_call() {
+        let upstream = formualizer_parse::parse("=LAMBDA(x, x+1)(5)").unwrap();
+        let node = lower(&upstream);
+        let dbg = format!("{node:?}");
+        assert!(dbg.contains("LAMBDA"), "expected LAMBDA function: {dbg}");
     }
 }

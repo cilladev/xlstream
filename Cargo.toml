@@ -35,8 +35,8 @@ calamine = "0.34"
 rust_xlsxwriter = { version = "0.94", features = ["constant_memory", "zlib", "ryu"] }
 
 # formula parser — pinned exactly per ADR docs/decisions/2026-04-18-phase-02-toolchain-bump.md.
-formualizer-parse = "=1.1.2"
-formualizer-common = "=1.1.2"
+formualizer-parse = "=2.0.0"
+formualizer-common = "=2.0.0"
 
 # Python binding
 pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }

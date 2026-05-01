@@ -66,6 +66,15 @@ pub enum Reference {
         /// `None` = whole table.
         specifier: Option<String>,
     },
+    /// `Sheet1:Sheet3!A1` — 3D sheet reference spanning multiple sheets.
+    /// Refused at classification with
+    /// [`crate::UnsupportedReason::ThreeDimensionalRef`].
+    ThreeDimensional {
+        /// First sheet name.
+        sheet_first: String,
+        /// Last sheet name.
+        sheet_last: String,
+    },
 }
 
 /// References surfaced by the (Chunk 1) `extract_references` walker.
@@ -149,6 +158,14 @@ fn collect_view(rv: formualizer_parse::parser::RefView<'_>, out: &mut References
         V::NamedRange { name } => {
             out.ranges.push(Reference::Named(name.to_owned()));
         }
+        V::Cell3D { sheet_first, sheet_last, .. } | V::Range3D { sheet_first, sheet_last, .. } => {
+            push_sheet(Some(sheet_first), out);
+            push_sheet(Some(sheet_last), out);
+            out.ranges.push(Reference::ThreeDimensional {
+                sheet_first: sheet_first.to_owned(),
+                sheet_last: sheet_last.to_owned(),
+            });
+        }
     }
 }
 
@@ -186,6 +203,12 @@ fn walk_functions(root: &formualizer_parse::ASTNode, out: &mut References) {
                     }
                 }
             }
+            T::Call { callee, args } => {
+                stack.push(callee);
+                for a in args.iter().rev() {
+                    stack.push(a);
+                }
+            }
         }
     }
 }
@@ -205,7 +228,7 @@ impl Reference {
         match self {
             Self::Cell { sheet, .. } | Self::Range { sheet, .. } => sheet.as_deref(),
             Self::External { sheet, .. } => Some(sheet.as_str()),
-            Self::Named(_) | Self::Table { .. } => None,
+            Self::Named(_) | Self::Table { .. } | Self::ThreeDimensional { .. } => None,
         }
     }
 
@@ -325,5 +348,17 @@ mod tests {
         };
         assert!(!r.is_whole_column());
         assert!(!r.is_whole_row());
+    }
+
+    #[test]
+    fn extract_references_captures_3d_ref() {
+        let ast = crate::parse("SUM(Sheet1:Sheet3!A1)").unwrap();
+        let refs = extract_references(&ast);
+        assert!(
+            refs.ranges.iter().any(|r| matches!(r, Reference::ThreeDimensional { .. })),
+            "expected ThreeDimensional ref in ranges: {refs:?}"
+        );
+        assert!(refs.sheets.iter().any(|s| s == "Sheet1"), "expected Sheet1 in sheets");
+        assert!(refs.sheets.iter().any(|s| s == "Sheet3"), "expected Sheet3 in sheets");
     }
 }
