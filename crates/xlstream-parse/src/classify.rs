@@ -1007,7 +1007,7 @@ mod tests {
                 start_col: 0,
             },
         );
-        let resolved = crate::resolve_table_references(ast, &tables, Some(sheet), row);
+        let resolved = crate::resolve_table_references(ast, &tables, Some(sheet), row, col);
         let names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         let resolved = crate::resolve_named_ranges(resolved, &names);
         let mut ctx = ClassificationContext::for_cell(sheet, row, col);
