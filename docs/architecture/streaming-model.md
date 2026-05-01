@@ -141,7 +141,7 @@ Key properties:
 
 Formula columns may reference each other. Example: column `Net Value = Deal Value * (1 - Discount)`, column `Profit = Net Value - Cost`. `Profit` depends on `Net Value`.
 
-Build a tiny intra-row DAG over formula columns. Topo-sort. Self-edges (a column referencing itself) are filtered out and the column is marked as self-referential for iterative evaluation. If a cross-column cycle exists (A depends on B, B depends on A), it's refused during classification.
+Build a tiny intra-row DAG over formula columns. Self-edges (a column referencing itself) are filtered out and the column is marked as self-referential for iterative evaluation. Topo-sort the remaining graph. If a cross-column cycle exists (A depends on B, B depends on A), topo-sort detects it and returns a `CircularReference` error.
 
 ## Writer buffering
 
