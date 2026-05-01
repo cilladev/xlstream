@@ -26,12 +26,16 @@ mod cell_error;
 pub mod coerce;
 mod date;
 mod error;
+mod options;
 mod value;
 
 pub use address::col_row_to_a1;
 pub use cell_error::CellError;
 pub use date::ExcelDate;
 pub use error::XlStreamError;
+pub use options::{
+    EvaluateOptions, ITERATIVE_CALC_DEFAULT_MAX_CHANGE, ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS,
+};
 pub use value::Value;
 
 /// Maximum row count in an Excel xlsx worksheet (2^20).
