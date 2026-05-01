@@ -13,9 +13,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Per-PR performance gate — fails if micro-benchmarks regress >15%.
-  # Skips comparison if no baseline exists yet (first run).
+  # Per-PR performance gate — fails if micro-benchmarks regress >20%.
+  # Only runs on PRs (not main pushes — bench-update handles main).
   bench-gate:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
