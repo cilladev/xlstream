@@ -49,6 +49,8 @@ pub enum UnsupportedReason {
     LookupSheetNotPrepared,
     /// Lookup range points at the main streaming sheet.
     LookupIntoStreamingSheet,
+    /// `Sheet1:Sheet3!A1`-style 3D sheet reference.
+    ThreeDimensionalRef,
 }
 
 impl std::fmt::Display for UnsupportedReason {
@@ -83,6 +85,9 @@ impl std::fmt::Display for UnsupportedReason {
             Self::LookupIntoStreamingSheet => {
                 write!(f, "lookup range points at the main streaming sheet")
             }
+            Self::ThreeDimensionalRef => {
+                write!(f, "3D sheet references are incompatible with streaming")
+            }
         }
     }
 }
@@ -108,7 +113,8 @@ impl UnsupportedReason {
             Self::NonStaticCriteria => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#aggregate-pre-pass",
             Self::LookupSheetNotPrepared => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md#lookup-index-pre-pass",
             Self::TableReference | Self::NamedRange => "https://github.com/cilladev/xlstream/blob/main/docs/roadmap/v0.2/README.md",
-            Self::NestedUnsupported => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md",
+            Self::NestedUnsupported
+            | Self::ThreeDimensionalRef => "https://github.com/cilladev/xlstream/blob/main/docs/architecture/streaming-model.md",
         }
     }
 }
@@ -438,6 +444,9 @@ fn classify_reference(
             Disposition::Unsupported(UnsupportedReason::ExternalReference)
         }
         Reference::Table { .. } => Disposition::Unsupported(UnsupportedReason::TableReference),
+        Reference::ThreeDimensional { .. } => {
+            Disposition::Unsupported(UnsupportedReason::ThreeDimensionalRef)
+        }
     }
 }
 

@@ -92,6 +92,13 @@ pub enum NodeView<'a> {
         /// Number of columns.
         cols: usize,
     },
+    /// 3D sheet reference (`Sheet1:Sheet3!A1`).
+    ThreeDimensionalRef {
+        /// First sheet name.
+        sheet_first: &'a str,
+        /// Last sheet name.
+        sheet_last: &'a str,
+    },
     /// Prelude-computed reference.
     PreludeRef(&'a PreludeKey),
 }
@@ -147,6 +154,12 @@ impl<'a> NodeRef<'a> {
             },
             Node::Reference(Reference::Table { name, specifier }) => {
                 NodeView::TableRef { name: name.as_str(), specifier: specifier.as_deref() }
+            }
+            Node::Reference(Reference::ThreeDimensional { sheet_first, sheet_last }) => {
+                NodeView::ThreeDimensionalRef {
+                    sheet_first: sheet_first.as_str(),
+                    sheet_last: sheet_last.as_str(),
+                }
             }
             Node::BinaryOp { op, .. } => NodeView::BinaryOp { op: op.as_str() },
             Node::UnaryOp { op, .. } => NodeView::UnaryOp { op: op.as_str() },

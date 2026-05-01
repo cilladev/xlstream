@@ -93,9 +93,10 @@ impl<'ctx> Interpreter<'ctx> {
             NodeView::RangeRef { .. } => Value::Error(CellError::Ref),
 
             // Named/External/Table -> #NAME?
-            NodeView::NamedRef(_) | NodeView::ExternalRef { .. } | NodeView::TableRef { .. } => {
-                Value::Error(CellError::Name)
-            }
+            NodeView::NamedRef(_)
+            | NodeView::ExternalRef { .. }
+            | NodeView::TableRef { .. }
+            | NodeView::ThreeDimensionalRef { .. } => Value::Error(CellError::Name),
 
             NodeView::BinaryOp { op } => {
                 let (Some(left_node), Some(right_node)) = (node.left(), node.right()) else {
