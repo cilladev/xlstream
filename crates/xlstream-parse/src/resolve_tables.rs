@@ -179,16 +179,13 @@ fn resolve_table_ref<S: BuildHasher>(
 ) -> Option<Node> {
     let info = if table_name.is_empty() {
         let sheet = cell_sheet?;
-        tables
-            .values()
-            .find(|t| {
-                t.sheet_name.eq_ignore_ascii_case(sheet)
-                    && current_row > t.header_row
-                    && current_row <= t.data_end_row + 1
-                    && current_col > t.start_col
-                    && current_col <= t.start_col + t.columns.len() as u32
-            })
-            .or_else(|| tables.values().find(|t| t.sheet_name.eq_ignore_ascii_case(sheet)))?
+        tables.values().find(|t| {
+            t.sheet_name.eq_ignore_ascii_case(sheet)
+                && current_row > t.header_row
+                && current_row <= t.data_end_row + 1
+                && current_col > t.start_col
+                && current_col <= t.start_col + t.columns.len() as u32
+        })?
     } else {
         tables.get(&table_name.to_ascii_lowercase())?
     };
