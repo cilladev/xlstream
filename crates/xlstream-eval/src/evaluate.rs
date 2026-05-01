@@ -870,6 +870,7 @@ fn build_eval_plan(
             table_infos,
             Some(main_sheet),
             first_row + 1,
+            col + 1,
         );
 
         let mut ctx = ClassificationContext::for_cell(main_sheet, first_row + 1, col + 1);
@@ -906,6 +907,7 @@ fn build_eval_plan(
                 table_infos,
                 Some(main_sheet),
                 row + 1,
+                col + 1,
             );
 
             if ast_streaming_eq(first_ast.root(), ast.root()) {

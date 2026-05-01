@@ -75,8 +75,10 @@ impl TableInfo {
 /// The `tables` map must use **lowercase** keys. Table names and column
 /// names are matched case-insensitively. `cell_sheet` is used to infer
 /// the table for bare `[@Column]` references (empty table name).
-/// `current_row` is the 1-based row used for `[@Column]` resolution —
-/// the classifier checks `row == ctx.current_row()`, so this must match.
+/// `current_row` and `current_col` are 1-based cell coordinates used
+/// for `[@Column]` resolution — the classifier checks
+/// `row == ctx.current_row()`, so `current_row` must match. `current_col`
+/// is used for positional table inference on bare `[@Column]` refs.
 ///
 /// Unresolvable references (unknown table, unknown column) are left as
 /// `Reference::Table` for the classifier to reject.
@@ -97,7 +99,7 @@ impl TableInfo {
 ///     data_end_row: 10,
 ///     start_col: 0,
 /// });
-/// let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 2);
+/// let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 2, 1);
 /// let dbg = format!("{resolved:?}");
 /// assert!(dbg.contains("Range"), "expected Range in: {dbg}");
 /// ```
@@ -107,11 +109,12 @@ pub fn resolve_table_references<S: BuildHasher>(
     tables: &HashMap<String, TableInfo, S>,
     cell_sheet: Option<&str>,
     current_row: u32,
+    current_col: u32,
 ) -> Ast {
     if tables.is_empty() {
         return ast;
     }
-    let new_root = resolve_node(ast.root, tables, cell_sheet, current_row);
+    let new_root = resolve_node(ast.root, tables, cell_sheet, current_row, current_col);
     Ast { upstream: ast.upstream, root: new_root }
 }
 
@@ -120,33 +123,39 @@ fn resolve_node<S: BuildHasher>(
     tables: &HashMap<String, TableInfo, S>,
     cell_sheet: Option<&str>,
     current_row: u32,
+    current_col: u32,
 ) -> Node {
     match node {
-        Node::Reference(Reference::Table { ref name, ref specifier }) => {
-            resolve_table_ref(name, specifier.as_deref(), tables, cell_sheet, current_row)
-                .unwrap_or(node)
-        }
+        Node::Reference(Reference::Table { ref name, ref specifier }) => resolve_table_ref(
+            name,
+            specifier.as_deref(),
+            tables,
+            cell_sheet,
+            current_row,
+            current_col,
+        )
+        .unwrap_or(node),
         Node::Function { name, args } => Node::Function {
             name,
             args: args
                 .into_iter()
-                .map(|a| resolve_node(a, tables, cell_sheet, current_row))
+                .map(|a| resolve_node(a, tables, cell_sheet, current_row, current_col))
                 .collect(),
         },
         Node::BinaryOp { op, left, right } => Node::BinaryOp {
             op,
-            left: Box::new(resolve_node(*left, tables, cell_sheet, current_row)),
-            right: Box::new(resolve_node(*right, tables, cell_sheet, current_row)),
+            left: Box::new(resolve_node(*left, tables, cell_sheet, current_row, current_col)),
+            right: Box::new(resolve_node(*right, tables, cell_sheet, current_row, current_col)),
         },
         Node::UnaryOp { op, expr } => Node::UnaryOp {
             op,
-            expr: Box::new(resolve_node(*expr, tables, cell_sheet, current_row)),
+            expr: Box::new(resolve_node(*expr, tables, cell_sheet, current_row, current_col)),
         },
         Node::Array(rows) => Node::Array(
             rows.into_iter()
                 .map(|row| {
                     row.into_iter()
-                        .map(|n| resolve_node(n, tables, cell_sheet, current_row))
+                        .map(|n| resolve_node(n, tables, cell_sheet, current_row, current_col))
                         .collect()
                 })
                 .collect(),
@@ -159,12 +168,14 @@ fn resolve_node<S: BuildHasher>(
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn resolve_table_ref<S: BuildHasher>(
     table_name: &str,
     specifier: Option<&str>,
     tables: &HashMap<String, TableInfo, S>,
     cell_sheet: Option<&str>,
     current_row: u32,
+    current_col: u32,
 ) -> Option<Node> {
     let info = if table_name.is_empty() {
         let sheet = cell_sheet?;
@@ -174,6 +185,8 @@ fn resolve_table_ref<S: BuildHasher>(
                 t.sheet_name.eq_ignore_ascii_case(sheet)
                     && current_row > t.header_row
                     && current_row <= t.data_end_row + 1
+                    && current_col > t.start_col
+                    && current_col <= t.start_col + t.columns.len() as u32
             })
             .or_else(|| tables.values().find(|t| t.sheet_name.eq_ignore_ascii_case(sheet)))?
     } else {
@@ -337,7 +350,7 @@ mod tests {
 
     fn resolve(formula: &str) -> Ast {
         let ast = crate::parse(formula).unwrap();
-        resolve_table_references(ast, &test_tables(), Some("Sheet1"), 2)
+        resolve_table_references(ast, &test_tables(), Some("Sheet1"), 2, 3)
     }
 
     fn dbg_root(ast: &Ast) -> String {
