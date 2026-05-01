@@ -222,6 +222,25 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let named_ranges: HashMap<String, String> =
         reader.defined_names().into_iter().map(|(k, v)| (k.to_ascii_lowercase(), v)).collect();
 
+    let table_infos: HashMap<String, xlstream_parse::TableInfo> = reader
+        .table_metadata()
+        .unwrap_or_else(|_| Vec::new())
+        .into_iter()
+        .map(|m| {
+            (
+                m.name.to_ascii_lowercase(),
+                xlstream_parse::TableInfo {
+                    sheet_name: m.sheet_name,
+                    columns: m.columns,
+                    header_row: m.header_row,
+                    data_start_row: m.data_start_row,
+                    data_end_row: m.data_end_row,
+                    start_col: m.start_col,
+                },
+            )
+        })
+        .collect();
+
     // Collect formulas from all sheets; first with formulas becomes main.
     let mut sheets_with_formulas = Vec::<(String, Vec<(u32, u32, String)>)>::new();
     for name in &sheet_names {
@@ -237,7 +256,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     // Parse + classify formula columns; build topo order.
     let (topo_order, col_asts, row_overrides, lookup_keys, self_referential_cols) =
         if let Some(ref main) = main_sheet {
-            build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges)?
+            build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
         } else {
             (Vec::new(), HashMap::new(), HashMap::new(), Vec::new(), HashSet::new())
         };
@@ -247,7 +266,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let mut secondary_lookup_keys: Vec<LookupKey> = Vec::new();
     for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
         let (sec_topo, sec_asts, sec_overrides, lk, sec_self_ref_cols) =
-            build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges)?;
+            build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges, &table_infos)?;
         // Detect cross-sheet cell references and add as lookup keys.
         for ast in sec_asts.values() {
             let refs = extract_references(ast);
@@ -819,12 +838,13 @@ fn eval_column(
 
 /// Parse + classify all formula columns for `main_sheet`. Returns the
 /// topo-sorted column evaluation order and the per-column [`Ast`] cache.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
 fn build_eval_plan(
     main_sheet: &str,
     all_formulas: &[(u32, u32, String)],
     all_sheet_names: &[String],
     named_ranges: &HashMap<String, String>,
+    table_infos: &HashMap<String, xlstream_parse::TableInfo>,
 ) -> Result<
     (Vec<u32>, HashMap<u32, Ast>, HashMap<u32, HashMap<u32, Ast>>, Vec<LookupKey>, HashSet<u32>),
     XlStreamError,
@@ -845,6 +865,12 @@ fn build_eval_plan(
         let formula_str = strip_xlfn_prefix(formula_str);
         let first_ast = parse(&formula_str)?;
         let first_ast = resolve_named_ranges(first_ast, named_ranges);
+        let first_ast = xlstream_parse::resolve_table_references(
+            first_ast,
+            table_infos,
+            Some(main_sheet),
+            first_row + 1,
+        );
 
         let mut ctx = ClassificationContext::for_cell(main_sheet, first_row + 1, col + 1);
         for name in all_sheet_names {
@@ -875,6 +901,12 @@ fn build_eval_plan(
             let formula_str = strip_xlfn_prefix(formula_str);
             let ast = parse(&formula_str)?;
             let ast = resolve_named_ranges(ast, named_ranges);
+            let ast = xlstream_parse::resolve_table_references(
+                ast,
+                table_infos,
+                Some(main_sheet),
+                row + 1,
+            );
 
             if ast_streaming_eq(first_ast.root(), ast.root()) {
                 continue;
