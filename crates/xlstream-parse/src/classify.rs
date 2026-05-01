@@ -75,7 +75,7 @@ impl std::fmt::Display for UnsupportedReason {
                 write!(f, "external-workbook references are not supported (single-file model)")
             }
             Self::TableReference => {
-                write!(f, "structured table references are not supported in v0.1")
+                write!(f, "table reference could not be resolved (unknown table or column)")
             }
             Self::NamedRange => write!(f, "named range not found in workbook"),
             Self::NestedUnsupported => write!(f, "contains an unsupported sub-expression"),
