@@ -967,4 +967,156 @@ mod tests {
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
         assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
+
+    // -- Table reference classification (v0.2) --
+
+    fn resolve_tables_and_classify(
+        formula: &str,
+        sheet: &str,
+        row: u32,
+        col: u32,
+        lookup_sheets: &[&str],
+    ) -> Classification {
+        let ast = crate::parse(formula).unwrap();
+        let mut tables = std::collections::HashMap::new();
+        tables.insert(
+            "table1".to_string(),
+            crate::TableInfo {
+                sheet_name: "Sheet1".into(),
+                columns: vec![
+                    "Region".into(),
+                    "Amount".into(),
+                    "Price".into(),
+                    "Qty".into(),
+                    "Status".into(),
+                ],
+                header_row: 0,
+                data_start_row: 1,
+                data_end_row: 10,
+                start_col: 0,
+            },
+        );
+        tables.insert(
+            "table2".to_string(),
+            crate::TableInfo {
+                sheet_name: "Sheet2".into(),
+                columns: vec!["Key".into(), "Value".into()],
+                header_row: 0,
+                data_start_row: 1,
+                data_end_row: 5,
+                start_col: 0,
+            },
+        );
+        let resolved = crate::resolve_table_references(ast, &tables, Some(sheet), row);
+        let names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let resolved = crate::resolve_named_ranges(resolved, &names);
+        let mut ctx = ClassificationContext::for_cell(sheet, row, col);
+        for ls in lookup_sheets {
+            ctx = ctx.with_lookup_sheet(ls);
+        }
+        classify(&resolved, &ctx)
+    }
+
+    #[test]
+    fn table_whole_column_classifies_as_aggregate() {
+        let c = resolve_tables_and_classify("SUM(Table1[Amount])", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn table_this_row_classifies_as_row_local() {
+        let c = resolve_tables_and_classify("[@Price]*1.1", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::RowLocal);
+    }
+
+    #[test]
+    fn table_this_row_mixed_with_aggregate() {
+        let c = resolve_tables_and_classify("[@Amount]/SUM(Table1[Amount])", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::Mixed);
+    }
+
+    #[test]
+    fn table_countif_on_column_classifies_as_aggregate() {
+        let c =
+            resolve_tables_and_classify("COUNTIF(Table1[Region],\"EMEA\")", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn table_if_with_this_row_classifies_as_row_local() {
+        let c = resolve_tables_and_classify(
+            "IF([@Status]=\"Active\",[@Amount],0)",
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::RowLocal);
+    }
+
+    #[test]
+    fn table_unknown_table_classifies_as_unsupported() {
+        let c = resolve_tables_and_classify("SUM(UnknownTable[Col])", "Sheet1", 2, 5, &[]);
+        assert!(
+            matches!(c, Classification::Unsupported(UnsupportedReason::TableReference)),
+            "expected Unsupported(TableReference), got {c:?}"
+        );
+    }
+
+    #[test]
+    fn table_case_insensitive_resolves_and_classifies() {
+        let c = resolve_tables_and_classify("SUM(table1[amount])", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn table_sumif_both_columns_classifies_as_aggregate() {
+        let c = resolve_tables_and_classify(
+            "SUMIF(Table1[Region],\"EMEA\",Table1[Amount])",
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    #[test]
+    fn table_iferror_with_this_row_classifies_as_row_local() {
+        let c = resolve_tables_and_classify("IFERROR([@Price]/[@Qty],0)", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::RowLocal);
+    }
+
+    #[test]
+    fn table_this_row_mixed_with_cell_ref_is_row_local() {
+        let c = resolve_tables_and_classify("[@Price]+B2", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::RowLocal);
+    }
+
+    #[test]
+    fn table_unknown_column_classifies_as_unsupported() {
+        let c = resolve_tables_and_classify("SUM(Table1[NonexistentCol])", "Sheet1", 2, 5, &[]);
+        assert!(
+            matches!(c, Classification::Unsupported(UnsupportedReason::TableReference)),
+            "expected Unsupported(TableReference), got {c:?}"
+        );
+    }
+
+    #[test]
+    fn table_nested_if_with_this_row_classifies_as_row_local() {
+        let c = resolve_tables_and_classify(
+            "IF([@Amount]>100,[@Price]*2,[@Price])",
+            "Sheet1",
+            2,
+            5,
+            &[],
+        );
+        assert_eq!(c, Classification::RowLocal);
+    }
+
+    #[test]
+    fn table_average_whole_column_classifies_as_aggregate() {
+        let c = resolve_tables_and_classify("AVERAGE(Table1[Price])", "Sheet1", 2, 5, &[]);
+        assert_eq!(c, Classification::AggregateOnly);
+    }
 }
