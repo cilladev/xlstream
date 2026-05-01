@@ -12,7 +12,7 @@ We are not building a general-purpose spreadsheet engine. We are building the *f
 
 ## Why this exists
 
-The alternative, `formualizer` (Rust, graph-based), takes **5h 40m wall-clock at 3.3 GB peak RSS** to evaluate a 700k × 20 workbook (measured 2026-04-17). That's architectural: the graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no iterative calc, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we target **~13× less memory and ~100× faster wall-clock** on the identical workload.
+The alternative, `formualizer` (Rust, graph-based), takes **5h 40m wall-clock at 3.3 GB peak RSS** to evaluate a 700k × 20 workbook (measured 2026-04-17). That's architectural: the graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we target **~13× less memory and ~100× faster wall-clock** on the identical workload.
 
 Full background: [`docs/brief.md`](docs/brief.md) and [`docs/research/formualizer.md`](docs/research/formualizer.md).
 

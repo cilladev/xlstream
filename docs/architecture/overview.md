@@ -73,7 +73,7 @@ For each formula in the main sheet:
   - **LookupOnly** — uses only current-row cells + lookup-sheet references through supported lookup functions.
   - **RowLocal** — uses only current-row cells.
   - **Mixed** — combines row-local / aggregate / lookup sub-expressions. Supported.
-  - **Unsupported** — references other rows, has circular deps, uses spilling functions. Refused with a clear error citing the formula.
+  - **Unsupported** — references other rows, has cross-column circular deps, uses spilling functions. Refused with a clear error citing the formula. Self-referential formulas are supported via iterative calculation.
 
 For each lookup sheet referenced: load it into memory once, build hash indexes keyed by the column(s) actually looked up.
 

@@ -12,7 +12,7 @@
 - [ ] **Table references** — `Table[Column]`, `Table[@Column]`. Parse `tables/table*.xml`, resolve to ranges. ~2 days.
 - [x] **SUMPRODUCT** — sum of element-wise products. Requires bounded-range evaluation. ~1 day.
 - [x] **MINIFS / MAXIFS** — conditional min/max. Same pattern as SUMIFS/COUNTIFS. ~0.5 day.
-- [ ] **ROWS / COLUMNS** — return row/column count. Uses `EXCEL_MAX_ROWS`/`EXCEL_MAX_COLS` constants (already in xlstream-core). ~0.5 day.
+- [x] **ROWS / COLUMNS** — return row/column count. Uses `EXCEL_MAX_ROWS`/`EXCEL_MAX_COLS` constants (already in xlstream-core). ~0.5 day.
 
 ### Output fidelity
 
@@ -35,7 +35,7 @@
 - External workbook references (`[Book.xlsx]Sheet1!A1`) — violates single-file model
 - `.xls`, `.xlsb`, `.ods` input formats
 - Cell formatting preservation
-- Circular references / iterative calculation
+- Cross-column / cross-row circular references (self-referential formulas are supported via iterative calc)
 - Dynamic arrays (FILTER, UNIQUE, SORT, SEQUENCE)
 - OFFSET, INDIRECT (runtime address resolution)
 - LAMBDA, LET (user-defined functions)

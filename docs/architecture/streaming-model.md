@@ -14,7 +14,7 @@ A spreadsheet evaluator has to answer "what is cell C5?" — and the answer can 
 2. **Scalars** derived from a full column / sheet / workbook in a cheap single pass (aggregates).
 3. **Lookup tables** that fit in memory and can be hash-indexed once (lookup sheets).
 
-Together these cover the overwhelming majority of real business workbooks. The minority that fall outside — forward/backward row refs, circular refs, dynamic-array spills that depend on future rows — we refuse with a clear error.
+Together these cover the overwhelming majority of real business workbooks. The minority that fall outside — forward/backward row refs, cross-row circular refs, dynamic-array spills that depend on future rows — we refuse with a clear error. Self-referential formulas (a cell referencing itself) are supported via iterative calculation within the current row.
 
 ## The three formula shapes
 
@@ -68,7 +68,7 @@ For each formula found in the main sheet, walk the AST. Record every `CellRef`, 
 | `'Sheet X'!A:C` used as lookup range inside a supported lookup function | **LookupOnly** |
 | `A:A` outside an aggregate function (e.g. `A:A * 2`) | **Unsupported** (would require full-column materialisation) |
 | `A3` where 3 ≠ current row | **Unsupported** (forward/backward row ref) |
-| Self-reference (`A2` in cell `A2`) | **Unsupported** (circular) |
+| Self-reference (`A2` in cell `A2`) | **RowLocal** (iterative calc using cached value as seed) |
 | Function in the `VOLATILE_STREAMING_OK` set (`TODAY`, `NOW`) | **Supported** with single-evaluation-per-run semantics |
 | Function in the `UNSUPPORTED` set (`OFFSET`, `INDIRECT`, `FILTER`, `UNIQUE`, `SORT`) | **Unsupported** |
 | Named range (`MyRange`) | **Supported** (resolved at classification time via `defined_names()`) |
@@ -141,7 +141,7 @@ Key properties:
 
 Formula columns may reference each other. Example: column `Net Value = Deal Value * (1 - Discount)`, column `Profit = Net Value - Cost`. `Profit` depends on `Net Value`.
 
-Build a tiny intra-row DAG over formula columns. Topo-sort. If a cycle exists, it's intra-row circular — refuse during classification.
+Build a tiny intra-row DAG over formula columns. Topo-sort. Self-edges (a column referencing itself) are filtered out and the column is marked as self-referential for iterative evaluation. If a cross-column cycle exists (A depends on B, B depends on A), it's refused during classification.
 
 ## Writer buffering
 
