@@ -77,29 +77,6 @@ fn values_match(expected: &Data, actual: &Data) -> bool {
 }
 
 pub fn run_conformance(fixture_rel_path: &str) {
-    let fixture = fixtures_dir().join(fixture_rel_path);
-    if !fixture.exists() {
-        panic!("fixture not found: {}", fixture.display());
-    }
-
-    let mut expected_wb: Xlsx<_> = open_workbook(&fixture).unwrap();
-    let sheet_names: Vec<String> = expected_wb.sheet_names().to_vec();
-
-    // Collect formula cell positions so we only compare formula outputs.
-    let mut formula_cells: std::collections::HashSet<(String, u32, u32)> =
-        std::collections::HashSet::new();
-    for sheet_name in &sheet_names {
-        if let Ok(formula_range) = expected_wb.worksheet_formula(sheet_name) {
-            for (row_idx, row) in formula_range.rows().enumerate() {
-                for (col_idx, cell) in row.iter().enumerate() {
-                    if !cell.is_empty() {
-                        formula_cells.insert((sheet_name.clone(), row_idx as u32, col_idx as u32));
-                    }
-                }
-            }
-        }
-    }
-
     run_conformance_with_options(fixture_rel_path, &xlstream_eval::EvaluateOptions::default());
 }
 
