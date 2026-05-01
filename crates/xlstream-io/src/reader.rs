@@ -199,6 +199,64 @@ impl Reader {
         }
         Ok(out)
     }
+
+    /// Load and return metadata for all tables in the workbook.
+    ///
+    /// Calls calamine's `load_tables()` internally. Returns an empty vec
+    /// if the workbook has no tables.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XlStreamError::Xlsx`] if calamine encounters a parse error
+    /// while loading table metadata.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::Path;
+    /// use xlstream_io::Reader;
+    ///
+    /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
+    /// let tables = reader.table_metadata().unwrap();
+    /// for t in &tables {
+    ///     println!("{}: {} columns on {}", t.name, t.columns.len(), t.sheet_name);
+    /// }
+    /// ```
+    pub fn table_metadata(&mut self) -> Result<Vec<crate::table_meta::TableMeta>, XlStreamError> {
+        self.workbook.load_tables().map_err(|e| XlStreamError::Xlsx(e.to_string()))?;
+
+        let names: Vec<String> = self.workbook.table_names().into_iter().cloned().collect();
+
+        let mut metas = Vec::with_capacity(names.len());
+        for name in &names {
+            let table = self
+                .workbook
+                .table_by_name(name)
+                .map_err(|e| XlStreamError::Xlsx(e.to_string()))?;
+
+            let data_range = table.data();
+            let Some((data_start_row, start_col)) = data_range.start() else {
+                continue;
+            };
+            let Some((data_end_row, _end_col)) = data_range.end() else {
+                continue;
+            };
+
+            let header_row = data_start_row.saturating_sub(1);
+
+            metas.push(crate::table_meta::TableMeta {
+                name: table.name().to_owned(),
+                sheet_name: table.sheet_name().to_owned(),
+                columns: table.columns().to_vec(),
+                header_row,
+                data_start_row,
+                data_end_row,
+                start_col,
+            });
+        }
+
+        Ok(metas)
+    }
 }
 
 #[cfg(test)]
@@ -223,5 +281,16 @@ mod tests {
 
         let reader = Reader::open(tmp.path()).unwrap();
         assert!(reader.defined_names().is_empty());
+    }
+
+    #[test]
+    fn table_metadata_returns_empty_for_plain_workbook() {
+        let tmp = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+        let mut wb = rust_xlsxwriter::Workbook::new();
+        wb.save(tmp.path()).unwrap();
+
+        let mut reader = Reader::open(tmp.path()).unwrap();
+        let tables = reader.table_metadata().unwrap();
+        assert!(tables.is_empty());
     }
 }
