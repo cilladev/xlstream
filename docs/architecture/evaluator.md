@@ -36,7 +36,7 @@ fn eval(&self, node: NodeRef<'_>, scope: &RowScope<'_>) -> Value {
         NodeView::Function { name }        => crate::builtins::dispatch(name, &node.args(), self, scope)
                                                   .unwrap_or(Value::Error(CellError::Value)),
         NodeView::PreludeRef(key)          => self.resolve_prelude(key),
-        // NamedRef, ExternalRef, TableRef -> #NAME?
+        // NamedRef, ExternalRef, TableRef, ThreeDimensionalRef -> #NAME?
         // Array -> #VALUE!
     }
 }
