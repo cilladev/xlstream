@@ -47,7 +47,14 @@ Table references resolve at **classification time** (before prelude), following 
    - `Table[Column]` (whole column) → `Reference::Range` over the column's data rows on the table's sheet.
    - `Table[@Column]` or `[@Column]` (current row) → `Reference::Cell` pointing to the column index on the current sheet. Row is unresolved at classification time — the evaluator fills it per-row.
    - `Table` (whole table, no specifier) → `Reference::Range` over all data columns/rows.
-   - Unknown table name → leave as `Reference::Table`, classifier rejects with a new `UnsupportedReason::UnknownTable` or similar.
+   - `Table[#Data]` → same as no specifier (data rows range).
+   - `Table[#Headers]` → single row range (header row only).
+   - `Table[#Totals]` → single row range (totals row, if table has one).
+   - `Table[#All]` → range from header row through totals row (or last data row).
+   - `Table[[Col1]:[Col3]]` (column range) → bounded range across multiple columns.
+   - Unknown table name → leave as `Reference::Table`, classifier rejects with existing `UnsupportedReason::TableReference`.
+
+   **Important:** The specifier is stored as `Option<String>` from formualizer-parse's `Display` output. The implementing agent MUST verify the actual specifier string format against formualizer-parse 2.0.0 (now on main) before writing resolution code. Parse test formulas through the actual parser and print the `Reference::Table { name, specifier }` values. Do not assume the format from documentation.
 
 3. **Eval layer** (`xlstream-eval`): `build_plan()` loads table metadata from the reader (same location as named ranges loading), passes it to the parse layer for resolution before classification.
 
@@ -80,6 +87,10 @@ The agent should evaluate both against the existing evaluator's row-dispatch cod
 - Unknown column name: `Table1[NonexistentCol]` produces a classification error
 - Empty specifier: `Table1` (whole table reference) resolves to full data range
 - Column range: `Table1[[Col1]:[Col3]]` resolves to bounded range
+- `Table1[#Data]` resolves to data rows range (same as no specifier)
+- `Table1[#Headers]` resolves to header row only
+- `Table1[#All]` resolves to full range including headers
+- `Table1[#Totals]` on a table without totals → classification error
 - Nested in SUMIF: `SUMIF(Table1[Region], "EMEA", Table1[Amount])` classifies as Aggregate
 - Nested in IF: `IF([@A]>0, [@B], [@C])` classifies as RowLocal
 - Mixed with named ranges: `SUM(MyRange) + [@Price]` — both resolve
@@ -92,26 +103,57 @@ The agent should evaluate both against the existing evaluator's row-dispatch cod
 - Named range resolution still works
 - Formulas without table references are unaffected
 
-### Evaluation (integration tests)
+### Conformance fixture
 
-- Programmatic xlsx with a table (created via openpyxl with `ws.add_table()`), formula `=[@Price]*[@Qty]` on each row — verify correct per-row multiplication
-- `=SUM(Table1[Amount])` on a non-table sheet referencing a table column — verify correct aggregate
-- `=VLOOKUP([@Key], Table2[[Key]:[Value]], 2, FALSE)` — table reference as lookup table array
-- Table on a non-main sheet with `[@Column]` formulas — verify evaluation (related to issue #42 if resolved)
-- Unknown table name in formula — verify `UnsupportedFormula` error with actionable message
+Create `tests/fixtures/lookup/table_references.xlsx` with openpyxl (using `ws.add_table()`), recalculate with LibreOffice headless.
 
-### Golden-file regression
+**Table setup:**
+- `Table1` on Sheet1: columns Region, Amount, Price, Qty, Status (10 data rows)
+- `Table2` on Sheet2: columns Key, Value (5 rows, for cross-sheet lookup)
 
-The golden regression fixture will need new formula columns exercising table references. The fixture must be created in Excel (not openpyxl) to have correct cached values. Alternatively, add a separate table-reference regression fixture.
+**Formulas to include (25+):**
+
+Happy path:
+- `=[@Price]*[@Qty]` — current row multiplication (per-row, 10 rows)
+- `=[@Amount]*1.1` — current row with constant
+- `=SUM(Table1[Amount])` — whole-column aggregate
+- `=AVERAGE(Table1[Price])` — whole-column aggregate
+- `=COUNTIF(Table1[Region],"EMEA")` — conditional aggregate on table column
+
+Current row (@) variations:
+- `=[@Price]+[@Amount]` — two current-row refs
+- `=IF([@Status]="Active",[@Amount],0)` — conditional on current row
+- `=[@Amount]/SUM(Table1[Amount])` — mixed: current row + aggregate
+
+Cross-sheet:
+- `=VLOOKUP([@Region],Table2[Key]:Table2[Value],2,FALSE)` — lookup into another table
+
+Case insensitivity:
+- `=SUM(table1[amount])` — lowercase table and column names
+
+Nested:
+- `=IFERROR([@Price]/[@Qty],0)` — nested in IFERROR
+- `=IF([@Amount]>100,[@Price]*2,[@Price])` — nested in IF
+
+Whole table:
+- `=ROWS(Table1)` — row count of table (if ROWS supports table refs)
+
+Error cases:
+- Formula referencing unknown column — should produce error
+
+Fixture workflow:
+1. Generate with openpyxl using `ws.add_table(Table, ref, displayName, ...)`
+2. Recalculate with LibreOffice headless
+3. Add `#[test] fn table_references()` in `conformance/lookup.rs`
 
 ## Docs to update (same PR)
 
 | File | Change |
 |---|---|
 | `CHANGELOG.md` | Add table reference entry under `[Unreleased]` |
-| `docs/functions.md` | Tick the table reference checkbox (line 607) |
+| `docs/functions.md` | Tick the table reference checkbox |
 | `docs/roadmap/v0.2/README.md` | Tick the table references checkbox |
-| `docs/architecture/streaming-model.md` | Update table reference row from "Unsupported" to supported with resolution description (line 75) |
+| `docs/architecture/streaming-model.md` | Update table reference row from "Unsupported" to supported |
 
 ## Streaming invariant
 
