@@ -8,6 +8,7 @@ Semver.
 ### Added
 - MINIFS and MAXIFS conditional aggregate functions
 - SUMPRODUCT: sum of element-wise products of bounded ranges; single-array degenerate case sums the array; booleans coerce to 1/0
+- ROWS and COLUMNS: return row/column count from range references (lazy dispatch, no cell reads)
 
 ### Changed
 - Test infrastructure: replaced monolithic golden-file regression and end-to-end tests with per-function conformance fixtures (LibreOffice as oracle, one xlsx per function)
