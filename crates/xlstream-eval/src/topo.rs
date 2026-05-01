@@ -165,4 +165,28 @@ mod tests {
         let err = topo_sort(&deps, &formula_cols).unwrap_err();
         assert!(matches!(err, XlStreamError::CircularReference { .. }));
     }
+
+    #[test]
+    fn self_edge_filtered_before_sort_succeeds() {
+        let deps = vec![(1u32, vec![0u32])];
+        let formula_cols: HashSet<u32> = [1].into_iter().collect();
+        let order = topo_sort(&deps, &formula_cols).unwrap();
+        assert_eq!(order, vec![1]);
+    }
+
+    #[test]
+    fn self_edge_filtered_with_other_formula_dep() {
+        let deps = vec![(1u32, vec![0u32]), (2, vec![1])];
+        let formula_cols: HashSet<u32> = [1, 2].into_iter().collect();
+        let order = topo_sort(&deps, &formula_cols).unwrap();
+        assert_eq!(order, vec![1, 2]);
+    }
+
+    #[test]
+    fn cross_column_same_row_circular_still_fails() {
+        let deps = vec![(1u32, vec![2u32]), (2, vec![1])];
+        let formula_cols: HashSet<u32> = [1, 2].into_iter().collect();
+        let err = topo_sort(&deps, &formula_cols).unwrap_err();
+        assert!(matches!(err, XlStreamError::CircularReference { .. }));
+    }
 }

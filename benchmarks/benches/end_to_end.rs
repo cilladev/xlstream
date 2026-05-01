@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use rust_xlsxwriter::{Formula, Workbook};
 use std::path::Path;
 use tempfile::TempDir;
-use xlstream_eval::evaluate;
+use xlstream_eval::{evaluate, EvaluateOptions};
 
 fn generate_bench_fixture(path: &Path, n_rows: usize) {
     let mut wb = Workbook::new();
@@ -69,7 +69,8 @@ fn bench_end_to_end(c: &mut Criterion) {
     group.bench_function("evaluate_10k_rows", |b| {
         b.iter(|| {
             // Single-threaded for deterministic benchmarking
-            evaluate(&input_path, &output_path, Some(1)).unwrap();
+            let options = EvaluateOptions { workers: Some(1), ..EvaluateOptions::default() };
+            evaluate(&input_path, &output_path, &options).unwrap();
         });
     });
     group.finish();

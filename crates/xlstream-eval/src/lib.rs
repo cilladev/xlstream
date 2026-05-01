@@ -39,3 +39,4 @@ pub use interp::Interpreter;
 pub use prelude::Prelude;
 pub use scope::RowScope;
 pub use topo::topo_sort;
+pub use xlstream_core::EvaluateOptions;
