@@ -8,9 +8,18 @@ Semver.
 ### Added
 - MINIFS and MAXIFS conditional aggregate functions
 - SUMPRODUCT: sum of element-wise products of bounded ranges; single-array degenerate case sums the array; booleans coerce to 1/0
+- ROWS and COLUMNS: return row/column count from range references (lazy dispatch, no cell reads)
+- Self-referential formula support via iterative calculation — formulas referencing their own cell (e.g., `=IF(G2="Risk_KC",O2*-1,O2)`) now evaluate using cached values as seed, with configurable max_iterations and max_change
+- `EvaluateOptions` struct with `iterative_calc`, `max_iterations`, `max_change` settings (matches Excel defaults)
+- CLI flags: `--max-iterations`, `--max-change`, `--no-iterative-calc`
+- Python kwargs: `iterative_calc`, `max_iterations`, `max_change`
+- Criterion benchmarks expanded to cover all code paths (string, math, conditional, info, date, financial, end-to-end pipeline)
 
 ### Changed
+- `evaluate()` signature now takes `&EvaluateOptions` instead of `Option<usize>` for workers
 - Test infrastructure: replaced monolithic golden-file regression and end-to-end tests with per-function conformance fixtures (LibreOffice as oracle, one xlsx per function)
+- Magic numbers extracted to named constants in xlstream-core
+- Benchmark gate threshold raised from 15% to 20% to reduce CI noise on shared runners
 
 ### Fixed
 - Formulas on sheets not referenced by the main sheet are now evaluated instead of producing None (#42)
