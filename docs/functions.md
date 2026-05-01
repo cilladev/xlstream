@@ -604,7 +604,7 @@ Old function names. Thin wrappers over modern equivalents (implemented in v0.3/v
 | Cell reference (`A2`, `Sheet1!B3`) | [x] | Row-local only |
 | Range reference (`A:A`, `A1:B10`) | [x] | Aggregate/lookup context only |
 | Named range (`MyRange`) | [x] | Resolved via `defined_names()` at classification time (v0.2) |
-| Table reference (`Table1[Column]`) | [ ] | v0.2 planned |
+| Table reference (`Table1[Column]`) | [x] | Resolved at classification time (v0.2) |
 | External reference (`[Book.xlsx]Sheet1!A1`) | - | Violates single-file model |
 
 ## Tallies

@@ -6,6 +6,7 @@ Semver.
 ## [Unreleased]
 
 ### Added
+- Table reference support: `Table[Column]` and `[@Column]` structured references resolve to cell/range references at classification time
 - MINIFS and MAXIFS conditional aggregate functions
 - SUMPRODUCT: sum of element-wise products of bounded ranges
 - ROWS and COLUMNS: return row/column count from range references
