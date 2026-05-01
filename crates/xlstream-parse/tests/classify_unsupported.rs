@@ -33,11 +33,11 @@ fn non_current_row_ref_is_refused() {
 }
 
 #[test]
-fn circular_self_reference_is_refused() {
-    // Cell E2 references E2
+fn self_reference_classifies_as_row_local() {
+    // Cell E2 references E2 — self-referential, handled by iterative calc
     let ast = parse("E2+1").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::Unsupported(UnsupportedReason::CircularRef));
+    assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
 }
 
 #[test]

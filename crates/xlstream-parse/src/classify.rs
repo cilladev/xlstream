@@ -384,7 +384,7 @@ fn classify_reference(
                 && *row == ctx.current_row()
                 && *col == ctx.current_col()
             {
-                return Disposition::Unsupported(UnsupportedReason::CircularRef);
+                return Disposition::RowLocal;
             }
             if resolved.eq_ignore_ascii_case(ctx.current_sheet()) && *row == ctx.current_row() {
                 Disposition::RowLocal
@@ -929,5 +929,33 @@ mod tests {
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
         );
+    }
+
+    #[test]
+    fn self_reference_classifies_as_row_local() {
+        let ast = crate::parse("E2+1").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn self_reference_in_if_classifies_as_row_local() {
+        let ast = crate::parse("IF(A2=\"Risk_KC\",E2*-1,E2)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn self_reference_mixed_with_other_deps_classifies_as_row_local() {
+        let ast = crate::parse("E2+D2").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn cross_column_same_row_ref_is_row_local_individually() {
+        let ast = crate::parse("B2+1").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
 }
