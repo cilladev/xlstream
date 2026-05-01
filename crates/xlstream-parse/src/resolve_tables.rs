@@ -462,4 +462,95 @@ mod tests {
         assert_eq!(parse_this_row_column("#Data"), None);
         assert_eq!(parse_this_row_column("[@],[]"), None);
     }
+
+    // -- Positional table inference for bare [@Column] --
+
+    fn two_tables_same_sheet() -> HashMap<String, TableInfo> {
+        let mut m = HashMap::new();
+        // Table1: A1:C5 (cols 0-2, rows 0-4, data rows 1-4)
+        m.insert(
+            "sales".to_string(),
+            TableInfo {
+                sheet_name: "Sheet1".into(),
+                columns: vec!["Region".into(), "Amount".into(), "Price".into()],
+                header_row: 0,
+                data_start_row: 1,
+                data_end_row: 4,
+                start_col: 0,
+            },
+        );
+        // Table2: E1:G10 (cols 4-6, rows 0-9, data rows 1-9)
+        m.insert(
+            "inventory".to_string(),
+            TableInfo {
+                sheet_name: "Sheet1".into(),
+                columns: vec!["Item".into(), "Count".into(), "Price".into()],
+                header_row: 0,
+                data_start_row: 1,
+                data_end_row: 9,
+                start_col: 4,
+            },
+        );
+        m
+    }
+
+    #[test]
+    fn bare_at_column_picks_correct_table_by_position() {
+        let tables = two_tables_same_sheet();
+        // Cell at row 2, col 2 (B2) — inside Sales table (cols 1-3, rows 1-5)
+        let ast = crate::parse("[@Amount]").unwrap();
+        let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 2, 2);
+        let dbg = dbg_root(&resolved);
+        assert!(dbg.contains("Cell"), "expected Cell ref: {dbg}");
+        assert!(dbg.contains("col: 2"), "Amount is col 2 in Sales: {dbg}");
+    }
+
+    #[test]
+    fn bare_at_column_picks_other_table_by_position() {
+        let tables = two_tables_same_sheet();
+        // Cell at row 3, col 6 (F3) — inside Inventory table (cols 5-7, rows 1-10)
+        let ast = crate::parse("[@Count]").unwrap();
+        let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 3, 6);
+        let dbg = dbg_root(&resolved);
+        assert!(dbg.contains("Cell"), "expected Cell ref: {dbg}");
+        assert!(dbg.contains("col: 6"), "Count is col 6 in Inventory: {dbg}");
+    }
+
+    #[test]
+    fn bare_at_column_outside_all_tables_stays_unresolved() {
+        let tables = two_tables_same_sheet();
+        // Cell at row 2, col 10 (J2) — outside both tables
+        let ast = crate::parse("[@Price]").unwrap();
+        let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 2, 10);
+        let dbg = dbg_root(&resolved);
+        assert!(dbg.contains("Table"), "should stay unresolved: {dbg}");
+    }
+
+    #[test]
+    fn bare_at_column_shared_name_resolves_from_correct_table() {
+        let tables = two_tables_same_sheet();
+        // Both tables have "Price". Cell at row 2, col 1 (A2) → Sales.Price = col 3
+        let ast = crate::parse("[@Price]").unwrap();
+        let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 2, 1);
+        let dbg = dbg_root(&resolved);
+        assert!(dbg.contains("Cell"), "expected Cell ref: {dbg}");
+        assert!(dbg.contains("col: 3"), "Price is col 3 in Sales: {dbg}");
+
+        // Cell at row 2, col 5 (E2) → Inventory.Price = col 7
+        let ast2 = crate::parse("[@Price]").unwrap();
+        let resolved2 = resolve_table_references(ast2, &tables, Some("Sheet1"), 2, 5);
+        let dbg2 = dbg_root(&resolved2);
+        assert!(dbg2.contains("Cell"), "expected Cell ref: {dbg2}");
+        assert!(dbg2.contains("col: 7"), "Price is col 7 in Inventory: {dbg2}");
+    }
+
+    #[test]
+    fn bare_at_column_below_table_rows_stays_unresolved() {
+        let tables = two_tables_same_sheet();
+        // Cell at row 20, col 2 — correct column range for Sales but below its data rows
+        let ast = crate::parse("[@Amount]").unwrap();
+        let resolved = resolve_table_references(ast, &tables, Some("Sheet1"), 20, 2);
+        let dbg = dbg_root(&resolved);
+        assert!(dbg.contains("Table"), "should stay unresolved: {dbg}");
+    }
 }
