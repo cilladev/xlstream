@@ -25,6 +25,7 @@ mod classify;
 mod parser;
 mod references;
 mod resolve;
+mod resolve_tables;
 pub mod rewrite;
 pub mod sets;
 mod view;
@@ -34,6 +35,7 @@ pub use classify::{classify, Classification, ClassificationContext, UnsupportedR
 pub use parser::parse;
 pub use references::{extract_references, Reference, References};
 pub use resolve::resolve_named_ranges;
+pub use resolve_tables::{resolve_table_references, TableInfo};
 pub use rewrite::{
     collect_lookup_keys, rewrite, AggKind, AggregateKey, LookupKey, LookupKind, PreludeKey,
 };
