@@ -452,6 +452,10 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
         return Disposition::RowLocal;
     }
 
+    if sets::is_range_metadata(name) {
+        return Disposition::RowLocal;
+    }
+
     if sets::is_aggregate(name) {
         return classify_aggregate(name, args, ctx);
     }
@@ -929,5 +933,56 @@ mod tests {
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
         );
+    }
+
+    // -- ROWS / COLUMNS classification --
+
+    #[test]
+    fn rows_bounded_range_classifies_as_row_local() {
+        let ast = crate::parse("ROWS(A1:A10)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn columns_bounded_range_classifies_as_row_local() {
+        let ast = crate::parse("COLUMNS(A1:C1)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_whole_column_classifies_as_row_local() {
+        let ast = crate::parse("ROWS(A:A)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn columns_whole_row_classifies_as_row_local() {
+        let ast = crate::parse("COLUMNS(1:1)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_case_insensitive() {
+        let ast = crate::parse("rows(a1:a10)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_nested_in_if() {
+        let ast = crate::parse("IF(ROWS(A1:A10)>5,\"big\",\"small\")").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_cross_sheet_classifies_as_row_local() {
+        let ast = crate::parse("ROWS(Sheet2!A1:A20)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
 }
