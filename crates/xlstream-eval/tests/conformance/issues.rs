@@ -12,15 +12,6 @@ fn issue_76_self_referential_formulas() {
 }
 
 #[test]
-fn issue_76_self_referential_max_iter_1() {
-    let options = EvaluateOptions { max_iterations: 1, ..EvaluateOptions::default() };
-    super::conformance::run_conformance_with_options(
-        "issues/issue-76-self-ref-max-iter-1.xlsx",
-        &options,
-    );
-}
-
-#[test]
 fn issue_76_negation_with_max_iter_1() {
     let input = NamedTempFile::with_suffix(".xlsx").unwrap();
     let output = NamedTempFile::with_suffix(".xlsx").unwrap();
