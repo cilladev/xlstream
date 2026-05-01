@@ -72,18 +72,23 @@ fn to_pyerr(e: RustXlStreamError) -> PyErr {
 /// The GIL is released for the entire Rust evaluation so other Python
 /// threads can run concurrently.
 #[pyfunction]
-#[pyo3(signature = (input_path, output_path, *, workers=None))]
+#[pyo3(signature = (input_path, output_path, *, workers=None, iterative_calc=true, max_iterations=100, max_change=0.001))]
 fn evaluate(
     py: Python<'_>,
     input_path: &str,
     output_path: &str,
     workers: Option<usize>,
+    iterative_calc: bool,
+    max_iterations: u32,
+    max_change: f64,
 ) -> PyResult<Py<PyDict>> {
     let input = PathBuf::from(input_path);
     let output = PathBuf::from(output_path);
+    let options =
+        xlstream_eval::EvaluateOptions { workers, iterative_calc, max_iterations, max_change };
 
     let summary =
-        py.detach(move || xlstream_eval::evaluate(&input, &output, workers)).map_err(to_pyerr)?;
+        py.detach(move || xlstream_eval::evaluate(&input, &output, &options)).map_err(to_pyerr)?;
 
     let dict = PyDict::new(py);
     dict.set_item("rows_processed", summary.rows_processed)?;

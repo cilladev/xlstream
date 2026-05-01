@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use xlstream_core::{col_row_to_a1, Value, XlStreamError, PARALLEL_ROW_THRESHOLD};
+use xlstream_core::{col_row_to_a1, EvaluateOptions, Value, XlStreamError, PARALLEL_ROW_THRESHOLD};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
     classify, collect_lookup_keys, extract_references, parse, resolve_named_ranges, rewrite,
@@ -47,12 +47,16 @@ struct EvalPlan {
     col_asts: HashMap<u32, Ast>,
     row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
+    self_referential_cols: HashSet<u32>,
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
     /// Data rows counted during prelude (or fallback count). Used by the
     /// parallel streamer to decide chunk sizes and dispatch logic.
     total_data_rows: u32,
+    iterative_calc: bool,
+    max_iterations: u32,
+    max_change: f64,
 }
 
 /// Per-sheet formula evaluation data for secondary (non-main) sheets.
@@ -60,6 +64,7 @@ struct SheetEvalPlan {
     col_asts: HashMap<u32, Ast>,
     row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
+    self_referential_cols: HashSet<u32>,
 }
 
 /// Evaluate every formula in `input`, write results to `output`, and return
@@ -69,11 +74,8 @@ struct SheetEvalPlan {
 /// intra-row topo evaluation order, then streams rows through the interpreter
 /// and writes results. All other sheets are copied verbatim.
 ///
-/// `workers` controls parallelism:
-/// - `None` — auto-detect via `num_cpus::get()`.
-/// - `Some(1)` — force single-threaded.
-/// - `Some(n)` where `n > 1` — use `n` worker threads if the main sheet
-///   has >= 10,000 data rows; otherwise fall back to single-threaded.
+/// `options` controls parallelism and iterative calculation behavior.
+/// See [`EvaluateOptions`] for details.
 ///
 /// # Errors
 ///
@@ -87,21 +89,28 @@ struct SheetEvalPlan {
 ///
 /// ```no_run
 /// use std::path::Path;
-/// use xlstream_eval::evaluate;
-/// let err = evaluate(Path::new("missing.xlsx"), Path::new("out.xlsx"), None).unwrap_err();
+/// use xlstream_eval::{evaluate, EvaluateOptions};
+/// let err = evaluate(
+///     Path::new("missing.xlsx"),
+///     Path::new("out.xlsx"),
+///     &EvaluateOptions::default(),
+/// ).unwrap_err();
 /// assert!(matches!(err, xlstream_core::XlStreamError::Xlsx(_)));
 /// ```
 #[must_use = "evaluation results must be inspected for errors"]
 pub fn evaluate(
     input: &Path,
     output: &Path,
-    workers: Option<usize>,
+    options: &EvaluateOptions,
 ) -> Result<EvaluateSummary, XlStreamError> {
     let start = Instant::now();
-    let (plan, mut reader) = build_plan(input)?;
+    let (mut plan, mut reader) = build_plan(input)?;
+    plan.iterative_calc = options.iterative_calc;
+    plan.max_iterations = options.max_iterations;
+    plan.max_change = options.max_change;
     let mut writer = Writer::create(output)?;
 
-    let num_workers = workers.unwrap_or_else(num_cpus::get).max(1);
+    let num_workers = options.workers.unwrap_or_else(num_cpus::get).max(1);
 
     let use_parallel = num_workers > 1
         && plan.main_sheet.is_some()
@@ -129,6 +138,12 @@ pub fn evaluate(
 
                 if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
                     let sec_interp = Interpreter::new(&plan.prelude);
+                    let sec_options = EvaluateOptions {
+                        workers: None,
+                        iterative_calc: plan.iterative_calc,
+                        max_iterations: plan.max_iterations,
+                        max_change: plan.max_change,
+                    };
                     let mut header_pending = true;
                     while let Some((row_idx, mut row_values)) = stream.next_row()? {
                         if header_pending {
@@ -143,15 +158,15 @@ pub fn evaluate(
                                 .and_then(|overrides| overrides.get(&row_idx))
                                 .or_else(|| sp.col_asts.get(&fcol));
                             let Some(ast) = ast else { continue };
-                            let fcol_idx = fcol as usize;
-                            if fcol_idx >= row_values.len() {
-                                row_values.resize(fcol_idx + 1, Value::Empty);
-                            }
-                            let result = {
-                                let scope = RowScope::new(&row_values, row_idx);
-                                sec_interp.eval(ast.root(), &scope)
-                            };
-                            row_values[fcol_idx] = result;
+                            eval_column(
+                                &sec_interp,
+                                ast,
+                                &mut row_values,
+                                row_idx,
+                                fcol,
+                                sp.self_referential_cols.contains(&fcol),
+                                &sec_options,
+                            );
                         }
                         sh.write_row(row_idx, &row_values)?;
                     }
@@ -165,6 +180,13 @@ pub fn evaluate(
             }
         }
 
+        let eval_options = Arc::new(EvaluateOptions {
+            workers: options.workers,
+            iterative_calc: plan.iterative_calc,
+            max_iterations: plan.max_iterations,
+            max_change: plan.max_change,
+        });
+        let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
         let prelude = Arc::new(plan.prelude);
         let col_asts = Arc::new(plan.col_asts);
         let row_overrides_arc = Arc::new(plan.row_overrides);
@@ -176,6 +198,8 @@ pub fn evaluate(
             &col_asts,
             &row_overrides_arc,
             &plan.topo_order,
+            &self_referential_cols_arc,
+            &eval_options,
             &main_sheet_name,
             plan.total_data_rows,
             num_workers,
@@ -211,17 +235,18 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         sheets_with_formulas.first().map(|(_, f)| f.clone()).unwrap_or_default();
 
     // Parse + classify formula columns; build topo order.
-    let (topo_order, col_asts, row_overrides, lookup_keys) = if let Some(ref main) = main_sheet {
-        build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges)?
-    } else {
-        (Vec::new(), HashMap::new(), HashMap::new(), Vec::new())
-    };
+    let (topo_order, col_asts, row_overrides, lookup_keys, self_referential_cols) =
+        if let Some(ref main) = main_sheet {
+            build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges)?
+        } else {
+            (Vec::new(), HashMap::new(), HashMap::new(), Vec::new(), HashSet::new())
+        };
 
     // Build eval plans for secondary formula-bearing sheets.
     let mut secondary_plans: HashMap<String, SheetEvalPlan> = HashMap::new();
     let mut secondary_lookup_keys: Vec<LookupKey> = Vec::new();
     for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
-        let (sec_topo, sec_asts, sec_overrides, lk) =
+        let (sec_topo, sec_asts, sec_overrides, lk, sec_self_ref_cols) =
             build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges)?;
         // Detect cross-sheet cell references and add as lookup keys.
         for ast in sec_asts.values() {
@@ -269,6 +294,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 col_asts: sec_asts,
                 row_overrides: sec_overrides,
                 topo_order: sec_topo,
+                self_referential_cols: sec_self_ref_cols,
             },
         );
     }
@@ -430,10 +456,14 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         col_asts,
         row_overrides,
         topo_order,
+        self_referential_cols,
         secondary_plans,
         main_sheet,
         sheet_names,
         total_data_rows,
+        iterative_calc: true,
+        max_iterations: 100,
+        max_change: 0.001,
     };
     Ok((plan, reader))
 }
@@ -465,6 +495,12 @@ fn stream_single_threaded(
     plan: &EvalPlan,
 ) -> Result<(u64, u64), XlStreamError> {
     let interp = Interpreter::new(&plan.prelude);
+    let eval_options = EvaluateOptions {
+        workers: None,
+        iterative_calc: plan.iterative_calc,
+        max_iterations: plan.max_iterations,
+        max_change: plan.max_change,
+    };
     let mut rows_processed: u64 = 0;
     let mut formulas_evaluated: u64 = 0;
 
@@ -478,16 +514,27 @@ fn stream_single_threaded(
             &HashMap<u32, Ast>,
             &HashMap<u32, HashMap<u32, Ast>>,
             &[u32],
+            &HashSet<u32>,
         )> = if is_main {
             if plan.col_asts.is_empty() {
                 None
             } else {
-                Some((&plan.col_asts, &plan.row_overrides, &plan.topo_order))
+                Some((
+                    &plan.col_asts,
+                    &plan.row_overrides,
+                    &plan.topo_order,
+                    &plan.self_referential_cols,
+                ))
             }
         } else {
-            plan.secondary_plans
-                .get(name.as_str())
-                .map(|sp| (&sp.col_asts, &sp.row_overrides, sp.topo_order.as_slice()))
+            plan.secondary_plans.get(name.as_str()).map(|sp| {
+                (
+                    &sp.col_asts,
+                    &sp.row_overrides,
+                    sp.topo_order.as_slice(),
+                    &sp.self_referential_cols,
+                )
+            })
         };
 
         let mut header_pending = sheet_plan.is_some();
@@ -500,7 +547,7 @@ fn stream_single_threaded(
                 continue;
             }
 
-            if let Some((col_asts, row_overrides, topo_order)) = &sheet_plan {
+            if let Some((col_asts, row_overrides, topo_order, self_ref_cols)) = &sheet_plan {
                 for &fcol in *topo_order {
                     let ast = row_overrides
                         .get(&fcol)
@@ -509,15 +556,15 @@ fn stream_single_threaded(
                     let Some(ast) = ast else {
                         continue;
                     };
-                    let fcol_idx = fcol as usize;
-                    if fcol_idx >= row_values.len() {
-                        row_values.resize(fcol_idx + 1, Value::Empty);
-                    }
-                    let result = {
-                        let scope = RowScope::new(&row_values, row_idx);
-                        interp.eval(ast.root(), &scope)
-                    };
-                    row_values[fcol_idx] = result;
+                    eval_column(
+                        &interp,
+                        ast,
+                        &mut row_values,
+                        row_idx,
+                        fcol,
+                        self_ref_cols.contains(&fcol),
+                        &eval_options,
+                    );
                     formulas_evaluated += 1;
                 }
             }
@@ -545,6 +592,8 @@ fn stream_parallel(
     col_asts: &Arc<HashMap<u32, Ast>>,
     row_overrides: &Arc<HashMap<u32, HashMap<u32, Ast>>>,
     topo_order: &[u32],
+    self_referential_cols: &Arc<HashSet<u32>>,
+    eval_options: &Arc<EvaluateOptions>,
     main_sheet: &str,
     total_data_rows: u32,
     num_workers: usize,
@@ -578,6 +627,8 @@ fn stream_parallel(
         let prelude = Arc::clone(prelude);
         let col_asts = Arc::clone(col_asts);
         let row_overrides = Arc::clone(row_overrides);
+        let self_ref_cols = Arc::clone(self_referential_cols);
+        let opts = Arc::clone(eval_options);
         let topo_order = topo_order.to_owned();
         let input_path = input_path.clone();
         let main_name = main_name.clone();
@@ -595,6 +646,8 @@ fn stream_parallel(
                 &col_asts,
                 &row_overrides,
                 &topo_order,
+                &self_ref_cols,
+                &opts,
                 start_row,
                 end_row,
                 &tx,
@@ -659,6 +712,8 @@ fn run_worker(
     col_asts: &HashMap<u32, Ast>,
     row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
     topo_order: &[u32],
+    self_referential_cols: &HashSet<u32>,
+    options: &EvaluateOptions,
     start_row: u32,
     end_row: u32,
     tx: &crossbeam_channel::Sender<WorkerMsg>,
@@ -685,15 +740,15 @@ fn run_worker(
             let Some(ast) = ast else {
                 continue;
             };
-            let fcol_idx = fcol as usize;
-            if fcol_idx >= row_values.len() {
-                row_values.resize(fcol_idx + 1, Value::Empty);
-            }
-            let result = {
-                let scope = RowScope::new(&row_values, row_idx);
-                interp.eval(ast.root(), &scope)
-            };
-            row_values[fcol_idx] = result;
+            eval_column(
+                &interp,
+                ast,
+                &mut row_values,
+                row_idx,
+                fcol,
+                self_referential_cols.contains(&fcol),
+                options,
+            );
             formulas_in_row += 1;
         }
 
@@ -705,6 +760,63 @@ fn run_worker(
     Ok(())
 }
 
+/// Evaluate a single formula column for one row. If the column is
+/// self-referential and iterative calc is enabled, loop until convergence
+/// or `max_iterations`.
+fn eval_column(
+    interp: &Interpreter<'_>,
+    ast: &Ast,
+    row_values: &mut Vec<Value>,
+    row_idx: u32,
+    fcol: u32,
+    is_self_ref: bool,
+    options: &EvaluateOptions,
+) {
+    let fcol_idx = fcol as usize;
+    if fcol_idx >= row_values.len() {
+        row_values.resize(fcol_idx + 1, Value::Empty);
+    }
+
+    if !is_self_ref || !options.iterative_calc {
+        let result = {
+            let scope = RowScope::new(row_values, row_idx);
+            interp.eval(ast.root(), &scope)
+        };
+        row_values[fcol_idx] = result;
+        return;
+    }
+
+    let mut previous = row_values[fcol_idx].clone();
+    for iteration in 0..options.max_iterations {
+        let result = {
+            let scope = RowScope::new(row_values, row_idx);
+            interp.eval(ast.root(), &scope)
+        };
+
+        if matches!(result, Value::Error(_)) {
+            row_values[fcol_idx] = result;
+            return;
+        }
+
+        let Value::Number(current_num) = &result else {
+            row_values[fcol_idx] = result;
+            return;
+        };
+
+        if iteration > 0 {
+            if let Value::Number(prev_num) = &previous {
+                if (current_num - prev_num).abs() < options.max_change {
+                    row_values[fcol_idx] = result;
+                    return;
+                }
+            }
+        }
+
+        previous = result.clone();
+        row_values[fcol_idx] = result;
+    }
+}
+
 /// Parse + classify all formula columns for `main_sheet`. Returns the
 /// topo-sorted column evaluation order and the per-column [`Ast`] cache.
 #[allow(clippy::type_complexity)]
@@ -714,7 +826,7 @@ fn build_eval_plan(
     all_sheet_names: &[String],
     named_ranges: &HashMap<String, String>,
 ) -> Result<
-    (Vec<u32>, HashMap<u32, Ast>, HashMap<u32, HashMap<u32, Ast>>, Vec<LookupKey>),
+    (Vec<u32>, HashMap<u32, Ast>, HashMap<u32, HashMap<u32, Ast>>, Vec<LookupKey>, HashSet<u32>),
     XlStreamError,
 > {
     let mut col_formulas: HashMap<u32, Vec<(u32, String)>> = HashMap::new();
@@ -791,6 +903,7 @@ fn build_eval_plan(
     }
 
     let formula_cols: HashSet<u32> = col_asts.keys().copied().collect();
+    let mut self_referential_cols: HashSet<u32> = HashSet::new();
     let deps: Vec<(u32, Vec<u32>)> = col_asts
         .iter()
         .map(|(&col, ast)| {
@@ -809,12 +922,15 @@ fn build_eval_plan(
                     }
                 }
             }
+            if dep_cols.remove(&col) {
+                self_referential_cols.insert(col);
+            }
             (col, dep_cols.into_iter().collect())
         })
         .collect();
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
-    Ok((topo_order, col_asts, row_overrides, all_lookup_keys))
+    Ok((topo_order, col_asts, row_overrides, all_lookup_keys, self_referential_cols))
 }
 
 /// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes that `rust_xlsxwriter`
@@ -949,8 +1065,12 @@ mod tests {
 
     #[test]
     fn evaluate_nonexistent_file_returns_xlsx_error() {
-        let err = evaluate(Path::new("this_file_does_not_exist.xlsx"), Path::new("out.xlsx"), None)
-            .unwrap_err();
+        let err = evaluate(
+            Path::new("this_file_does_not_exist.xlsx"),
+            Path::new("out.xlsx"),
+            &EvaluateOptions::default(),
+        )
+        .unwrap_err();
         assert!(matches!(err, XlStreamError::Xlsx(_)), "expected Xlsx error, got {err:?}");
     }
 

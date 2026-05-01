@@ -100,8 +100,37 @@ pub fn run_conformance(fixture_rel_path: &str) {
         }
     }
 
+    run_conformance_with_options(fixture_rel_path, &xlstream_eval::EvaluateOptions::default());
+}
+
+pub fn run_conformance_with_options(
+    fixture_rel_path: &str,
+    options: &xlstream_eval::EvaluateOptions,
+) {
+    let fixture = fixtures_dir().join(fixture_rel_path);
+    if !fixture.exists() {
+        panic!("fixture not found: {}", fixture.display());
+    }
+
+    let mut expected_wb: Xlsx<_> = open_workbook(&fixture).unwrap();
+    let sheet_names: Vec<String> = expected_wb.sheet_names().to_vec();
+
+    let mut formula_cells: std::collections::HashSet<(String, u32, u32)> =
+        std::collections::HashSet::new();
+    for sheet_name in &sheet_names {
+        if let Ok(formula_range) = expected_wb.worksheet_formula(sheet_name) {
+            for (row_idx, row) in formula_range.rows().enumerate() {
+                for (col_idx, cell) in row.iter().enumerate() {
+                    if !cell.is_empty() {
+                        formula_cells.insert((sheet_name.clone(), row_idx as u32, col_idx as u32));
+                    }
+                }
+            }
+        }
+    }
+
     let output = NamedTempFile::with_suffix(".xlsx").unwrap();
-    evaluate(&fixture, output.path(), None).unwrap();
+    evaluate(&fixture, output.path(), options).unwrap();
 
     let mut actual_wb: Xlsx<_> = open_workbook(output.path()).unwrap();
 

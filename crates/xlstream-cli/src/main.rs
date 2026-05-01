@@ -41,6 +41,15 @@ enum Command {
         /// Number of parallel workers (default: auto).
         #[arg(long, short = 'w', value_name = "N")]
         workers: Option<usize>,
+        /// Maximum iterations for self-referential formulas.
+        #[arg(long, value_name = "N")]
+        max_iterations: Option<u32>,
+        /// Convergence threshold for iterative calculation.
+        #[arg(long, value_name = "DELTA")]
+        max_change: Option<f64>,
+        /// Disable iterative calculation (self-referential formulas will error).
+        #[arg(long)]
+        no_iterative_calc: bool,
         /// Print phase timings and evaluation summary.
         #[arg(long, short = 'v')]
         verbose: bool,
@@ -93,8 +102,23 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
     match cli.command {
-        Command::Evaluate { input, output, workers, verbose } => {
-            let summary = xlstream_eval::evaluate(&input, &output, workers)?;
+        Command::Evaluate {
+            input,
+            output,
+            workers,
+            max_iterations,
+            max_change,
+            no_iterative_calc,
+            verbose,
+        } => {
+            let options = xlstream_eval::EvaluateOptions {
+                workers,
+                iterative_calc: !no_iterative_calc,
+                max_iterations: max_iterations
+                    .unwrap_or(xlstream_core::ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS),
+                max_change: max_change.unwrap_or(xlstream_core::ITERATIVE_CALC_DEFAULT_MAX_CHANGE),
+            };
+            let summary = xlstream_eval::evaluate(&input, &output, &options)?;
             if verbose {
                 let rss_mb = memory_stats::memory_stats().map_or(0, |s| s.physical_mem / 1_000_000);
                 info!(
@@ -166,7 +190,7 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Command::Evaluate { input, output, workers, verbose } => {
+            Command::Evaluate { input, output, workers, verbose, .. } => {
                 assert_eq!(input.to_str(), Some("in.xlsx"));
                 assert_eq!(output.to_str(), Some("out.xlsx"));
                 assert_eq!(workers, Some(4));
