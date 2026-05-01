@@ -24,3 +24,8 @@ fn hlookup() {
 fn choose() {
     run_conformance("lookup/choose.xlsx");
 }
+
+#[test]
+fn table_references() {
+    run_conformance("lookup/table_references.xlsx");
+}
