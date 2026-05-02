@@ -154,11 +154,15 @@ impl<'a> SheetHandle<'a> {
                 XlStreamError::Internal(format!("column index {col_offset} exceeds u16::MAX"))
             })?;
             if let Some(formula_text) = formulas.get(&col) {
-                let cached_str = value_to_result_string(val);
-                let f = Formula::new(formula_text).set_result(&cached_str);
-                self.worksheet
-                    .write_formula(row_idx, col, f)
-                    .map_err(|e| XlStreamError::XlsxWrite(e.to_string()))?;
+                if can_round_trip_as_formula(val) {
+                    let cached_str = value_to_result_string(val);
+                    let f = Formula::new(formula_text).set_result(&cached_str);
+                    self.worksheet
+                        .write_formula(row_idx, col, f)
+                        .map_err(|e| XlStreamError::XlsxWrite(e.to_string()))?;
+                } else {
+                    self.write_value(row_idx, col, val)?;
+                }
             } else {
                 self.write_value(row_idx, col, val)?;
             }
@@ -219,4 +223,11 @@ impl<'a> SheetHandle<'a> {
         }
         Ok(())
     }
+}
+
+/// `Formula::set_result()` stores a raw string — calamine will parse it back
+/// as a number for numeric-looking strings. Only write a formula cell when
+/// the cached value type survives the round-trip.
+fn can_round_trip_as_formula(val: &Value) -> bool {
+    matches!(val, Value::Number(_) | Value::Integer(_) | Value::Bool(_) | Value::Empty)
 }
