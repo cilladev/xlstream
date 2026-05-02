@@ -257,3 +257,17 @@ fn empty_sheet_round_trip() {
     let mut stream = re_reader.cells("Empty").unwrap();
     assert!(stream.next_row().unwrap().is_none(), "empty sheet should yield no rows");
 }
+
+/// Verify calamine's `formulas()` returns text WITHOUT leading `=`.
+/// If this fails after a calamine upgrade, update the formula text
+/// storage in xlstream-eval to handle the new format.
+#[test]
+fn calamine_formulas_returns_text_without_equals_prefix() {
+    let fixture = helpers::generate_formula_fixture();
+    let mut reader = Reader::open(fixture.path()).unwrap();
+    let formulas = reader.formulas("Sheet1").unwrap();
+    assert!(!formulas.is_empty(), "fixture should have formulas");
+    for (_, _, text) in &formulas {
+        assert!(!text.starts_with('='), "expected formula text without '=' prefix, got: {text}");
+    }
+}
