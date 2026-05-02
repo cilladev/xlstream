@@ -143,6 +143,7 @@ pub fn evaluate(
                         iterative_calc: plan.iterative_calc,
                         max_iterations: plan.max_iterations,
                         max_change: plan.max_change,
+                        values_only: false,
                     };
                     let mut header_pending = true;
                     while let Some((row_idx, mut row_values)) = stream.next_row()? {
@@ -185,6 +186,7 @@ pub fn evaluate(
             iterative_calc: plan.iterative_calc,
             max_iterations: plan.max_iterations,
             max_change: plan.max_change,
+            values_only: false,
         });
         let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
         let prelude = Arc::new(plan.prelude);
@@ -519,6 +521,7 @@ fn stream_single_threaded(
         iterative_calc: plan.iterative_calc,
         max_iterations: plan.max_iterations,
         max_change: plan.max_change,
+        values_only: false,
     };
     let mut rows_processed: u64 = 0;
     let mut formulas_evaluated: u64 = 0;

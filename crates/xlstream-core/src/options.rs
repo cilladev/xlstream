@@ -14,6 +14,7 @@ pub const ITERATIVE_CALC_DEFAULT_MAX_CHANGE: f64 = 0.001;
 /// let opts = EvaluateOptions::default();
 /// assert!(opts.iterative_calc);
 /// assert_eq!(opts.max_iterations, 100);
+/// assert!(!opts.values_only);
 /// ```
 #[derive(Debug, Clone)]
 pub struct EvaluateOptions {
@@ -25,6 +26,10 @@ pub struct EvaluateOptions {
     pub max_iterations: u32,
     /// Convergence threshold — stop when delta < this (only for numeric results).
     pub max_change: f64,
+    /// Write only computed values, discarding formula text. When `false`
+    /// (the default), output cells preserve the original formula alongside
+    /// the cached result.
+    pub values_only: bool,
 }
 
 impl Default for EvaluateOptions {
@@ -34,6 +39,7 @@ impl Default for EvaluateOptions {
             iterative_calc: true,
             max_iterations: ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS,
             max_change: ITERATIVE_CALC_DEFAULT_MAX_CHANGE,
+            values_only: false,
         }
     }
 }
@@ -50,6 +56,12 @@ mod tests {
         assert_eq!(opts.max_iterations, 100);
         assert!((opts.max_change - 0.001).abs() < f64::EPSILON);
         assert!(opts.workers.is_none());
+    }
+
+    #[test]
+    fn default_options_values_only_is_false() {
+        let opts = EvaluateOptions::default();
+        assert!(!opts.values_only);
     }
 
     #[test]
