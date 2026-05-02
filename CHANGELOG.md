@@ -6,6 +6,7 @@ Semver.
 ## [Unreleased]
 
 ### Added
+- Formulas preserved in output by default; add `--values-only` / `values_only` for static output
 - Table reference support: `Table[Column]` and `[@Column]` structured references resolve to cell/range references at classification time
 - MINIFS and MAXIFS conditional aggregate functions
 - SUMPRODUCT: sum of element-wise products of bounded ranges
