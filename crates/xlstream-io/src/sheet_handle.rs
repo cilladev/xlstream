@@ -138,7 +138,7 @@ impl<'a> SheetHandle<'a> {
     /// let mut sh = w.add_sheet("Sheet1").unwrap();
     /// let values = vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
     /// let mut formulas = HashMap::new();
-    /// formulas.insert(2u16, "=A1+B1");
+    /// formulas.insert(2u16, "A1+B1");
     /// sh.write_row_with_formulas(0, &values, &formulas).unwrap();
     /// ```
     pub fn write_row_with_formulas(
@@ -161,6 +161,11 @@ impl<'a> SheetHandle<'a> {
                         .write_formula(row_idx, col, f)
                         .map_err(|e| XlStreamError::XlsxWrite(e.to_string()))?;
                 } else {
+                    tracing::warn!(
+                        row = row_idx,
+                        col = col,
+                        "formula discarded: cached value type ({val:?}) cannot round-trip through set_result()"
+                    );
                     self.write_value(row_idx, col, val)?;
                 }
             } else {
@@ -229,5 +234,32 @@ impl<'a> SheetHandle<'a> {
 /// as a number for numeric-looking strings. Only write a formula cell when
 /// the cached value type survives the round-trip.
 fn can_round_trip_as_formula(val: &Value) -> bool {
-    matches!(val, Value::Number(_) | Value::Integer(_) | Value::Bool(_) | Value::Empty)
+    matches!(
+        val,
+        Value::Number(_) | Value::Integer(_) | Value::Bool(_) | Value::Date(_) | Value::Empty
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use xlstream_core::{CellError, ExcelDate, Value};
+
+    use super::can_round_trip_as_formula;
+
+    #[test]
+    fn can_round_trip_accepts_numeric_types() {
+        assert!(can_round_trip_as_formula(&Value::Number(42.0)));
+        assert!(can_round_trip_as_formula(&Value::Integer(7)));
+        assert!(can_round_trip_as_formula(&Value::Bool(true)));
+        assert!(can_round_trip_as_formula(&Value::Date(ExcelDate { serial: 45000.0 })));
+        assert!(can_round_trip_as_formula(&Value::Empty));
+    }
+
+    #[test]
+    fn can_round_trip_rejects_text_and_error() {
+        assert!(!can_round_trip_as_formula(&Value::Text("hello".into())));
+        assert!(!can_round_trip_as_formula(&Value::Error(CellError::Na)));
+    }
 }

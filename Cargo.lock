@@ -1990,6 +1990,7 @@ dependencies = [
  "calamine",
  "rust_xlsxwriter",
  "tempfile",
+ "tracing",
  "xlstream-core",
 ]
 

@@ -15,6 +15,7 @@ authors.workspace = true
 xlstream-core = { path = "../xlstream-core", version = "0.2.0" }
 calamine.workspace = true
 rust_xlsxwriter.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -141,6 +141,8 @@ pub fn evaluate(
 
                 if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
                     let sec_interp = Interpreter::new(&plan.prelude);
+                    // eval-only options — values_only irrelevant here (write path
+                    // uses options.values_only directly)
                     let sec_options = EvaluateOptions {
                         workers: None,
                         iterative_calc: plan.iterative_calc,
@@ -199,6 +201,8 @@ pub fn evaluate(
             std::mem::take(&mut plan.formula_texts)
         };
 
+        // eval-only options shared with workers — values_only irrelevant
+        // (formula writing happens in the writer thread via formula_texts)
         let eval_options = Arc::new(EvaluateOptions {
             workers: options.workers,
             iterative_calc: plan.iterative_calc,
@@ -545,6 +549,7 @@ fn stream_single_threaded(
     values_only: bool,
 ) -> Result<(u64, u64), XlStreamError> {
     let interp = Interpreter::new(&plan.prelude);
+    // eval-only — values_only handled by the write path below
     let eval_options = EvaluateOptions {
         workers: None,
         iterative_calc: plan.iterative_calc,
@@ -1042,6 +1047,8 @@ fn build_row_formula_map(
         if let Some(text) = row_map.get(&row_idx) {
             if let Ok(col16) = u16::try_from(*col) {
                 map.insert(col16, text.as_str());
+            } else {
+                tracing::warn!(col = *col, "formula column index exceeds u16::MAX, skipping");
             }
         }
     }
