@@ -197,3 +197,55 @@ fn multi_sheet_write() {
     let (_, row) = stream.next_row().unwrap().expect("Beta row 0");
     assert_eq!(row[0], Value::Number(20.0));
 }
+
+/// Write a row with mixed data and formula cells, re-read, verify both
+/// cached values and formula text survive.
+#[test]
+fn write_row_with_formulas_preserves_formulas_and_values() {
+    use std::collections::HashMap;
+
+    let tmp = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+    let path = tmp.path();
+
+    let mut w = Writer::create(path).unwrap();
+    let mut sh = w.add_sheet("Sheet1").unwrap();
+
+    let values = vec![Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)];
+    let mut formulas = HashMap::new();
+    formulas.insert(2u16, "=A1+B1");
+    sh.write_row_with_formulas(0, &values, &formulas).unwrap();
+    drop(sh);
+    w.finish().unwrap();
+
+    let mut reader = Reader::open(path).unwrap();
+    {
+        let mut stream = reader.cells("Sheet1").unwrap();
+        let (_, row) = stream.next_row().unwrap().expect("expected row 0");
+        assert_eq!(row[0], Value::Number(10.0));
+        assert_eq!(row[1], Value::Number(20.0));
+        assert_eq!(row[2], Value::Number(30.0));
+    }
+
+    let formulas_read = reader.formulas("Sheet1").unwrap();
+    assert_eq!(formulas_read.len(), 1);
+    assert_eq!(formulas_read[0].0, 0);
+    assert_eq!(formulas_read[0].1, 2);
+    assert!(
+        formulas_read[0].2.contains("A1") && formulas_read[0].2.contains("B1"),
+        "formula should reference A1 and B1, got: {}",
+        formulas_read[0].2,
+    );
+}
+
+#[test]
+fn write_row_with_formulas_rejects_duplicate_row() {
+    let tmp = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+    let mut w = Writer::create(tmp.path()).unwrap();
+    let mut sh = w.add_sheet("Sheet1").unwrap();
+
+    let values = vec![Value::Number(1.0)];
+    let formulas = std::collections::HashMap::new();
+    sh.write_row_with_formulas(0, &values, &formulas).unwrap();
+    let err = sh.write_row_with_formulas(0, &values, &formulas).unwrap_err();
+    assert!(matches!(err, XlStreamError::Internal(_)), "expected Internal error, got {err:?}",);
+}
