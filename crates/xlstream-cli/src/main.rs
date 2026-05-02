@@ -50,6 +50,9 @@ enum Command {
         /// Disable iterative calculation (self-referential formulas will error).
         #[arg(long)]
         no_iterative_calc: bool,
+        /// Write computed values only, discarding formula text from output.
+        #[arg(long)]
+        values_only: bool,
         /// Print phase timings and evaluation summary.
         #[arg(long, short = 'v')]
         verbose: bool,
@@ -109,6 +112,7 @@ fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
             max_iterations,
             max_change,
             no_iterative_calc,
+            values_only,
             verbose,
         } => {
             let options = xlstream_eval::EvaluateOptions {
@@ -117,7 +121,7 @@ fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
                 max_iterations: max_iterations
                     .unwrap_or(xlstream_core::ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS),
                 max_change: max_change.unwrap_or(xlstream_core::ITERATIVE_CALC_DEFAULT_MAX_CHANGE),
-                values_only: false,
+                values_only,
             };
             let summary = xlstream_eval::evaluate(&input, &output, &options)?;
             if verbose {
@@ -231,6 +235,26 @@ mod tests {
                 assert_eq!(lookup_sheets, vec!["Region Info"]);
             }
             Command::Evaluate { .. } => panic!("expected Classify"),
+        }
+    }
+
+    #[test]
+    fn evaluate_subcommand_parses_values_only_flag() {
+        let cli = Cli::try_parse_from([
+            "xlstream",
+            "evaluate",
+            "in.xlsx",
+            "--output",
+            "out.xlsx",
+            "--values-only",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Evaluate { values_only, .. } => {
+                assert!(values_only);
+            }
+            Command::Classify { .. } => panic!("expected Evaluate"),
         }
     }
 }
