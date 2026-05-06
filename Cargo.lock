@@ -1988,9 +1988,11 @@ name = "xlstream-io"
 version = "0.2.0"
 dependencies = [
  "calamine",
+ "quick-xml",
  "rust_xlsxwriter",
  "tempfile",
  "xlstream-core",
+ "zip",
 ]
 
 [[package]]
