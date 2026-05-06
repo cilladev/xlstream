@@ -57,6 +57,7 @@ struct EvalPlan {
     iterative_calc: bool,
     max_iterations: u32,
     max_change: f64,
+    formula_texts: HashMap<u32, HashMap<u32, String>>,
 }
 
 /// Per-sheet formula evaluation data for secondary (non-main) sheets.
@@ -65,6 +66,7 @@ struct SheetEvalPlan {
     row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
     self_referential_cols: HashSet<u32>,
+    formula_texts: HashMap<u32, HashMap<u32, String>>,
 }
 
 /// Evaluate every formula in `input`, write results to `output`, and return
@@ -98,6 +100,7 @@ struct SheetEvalPlan {
 /// assert!(matches!(err, xlstream_core::XlStreamError::Xlsx(_)));
 /// ```
 #[must_use = "evaluation results must be inspected for errors"]
+#[allow(clippy::too_many_lines)]
 pub fn evaluate(
     input: &Path,
     output: &Path,
@@ -108,6 +111,12 @@ pub fn evaluate(
     plan.iterative_calc = options.iterative_calc;
     plan.max_iterations = options.max_iterations;
     plan.max_change = options.max_change;
+    if options.values_only {
+        plan.formula_texts = HashMap::new();
+        for sp in plan.secondary_plans.values_mut() {
+            sp.formula_texts = HashMap::new();
+        }
+    }
     let mut writer = Writer::create(output)?;
 
     let num_workers = options.workers.unwrap_or_else(num_cpus::get).max(1);
@@ -138,11 +147,14 @@ pub fn evaluate(
 
                 if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
                     let sec_interp = Interpreter::new(&plan.prelude);
+                    // eval-only options — values_only irrelevant here (write path
+                    // uses options.values_only directly)
                     let sec_options = EvaluateOptions {
                         workers: None,
                         iterative_calc: plan.iterative_calc,
                         max_iterations: plan.max_iterations,
                         max_change: plan.max_change,
+                        values_only: false,
                     };
                     let mut header_pending = true;
                     while let Some((row_idx, mut row_values)) = stream.next_row()? {
@@ -168,7 +180,16 @@ pub fn evaluate(
                                 &sec_options,
                             );
                         }
-                        sh.write_row(row_idx, &row_values)?;
+                        if options.values_only {
+                            sh.write_row(row_idx, &row_values)?;
+                        } else {
+                            let row_formulas = build_row_formula_map(&sp.formula_texts, row_idx);
+                            if row_formulas.is_empty() {
+                                sh.write_row(row_idx, &row_values)?;
+                            } else {
+                                sh.write_row_with_formulas(row_idx, &row_values, &row_formulas)?;
+                            }
+                        }
                     }
                 } else {
                     while let Some((row_idx, row_values)) = stream.next_row()? {
@@ -180,11 +201,20 @@ pub fn evaluate(
             }
         }
 
+        let main_formula_texts = if options.values_only {
+            HashMap::new()
+        } else {
+            std::mem::take(&mut plan.formula_texts)
+        };
+
+        // eval-only options shared with workers — values_only irrelevant
+        // (formula writing happens in the writer thread via formula_texts)
         let eval_options = Arc::new(EvaluateOptions {
             workers: options.workers,
             iterative_calc: plan.iterative_calc,
             max_iterations: plan.max_iterations,
             max_change: plan.max_change,
+            values_only: false,
         });
         let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
         let prelude = Arc::new(plan.prelude);
@@ -203,10 +233,11 @@ pub fn evaluate(
             &main_sheet_name,
             plan.total_data_rows,
             num_workers,
+            &main_formula_texts,
         )?
     } else {
         tracing::debug!("single-threaded evaluation");
-        stream_single_threaded(&mut reader, &mut writer, &plan)?
+        stream_single_threaded(&mut reader, &mut writer, &plan, options.values_only)?
     };
 
     writer.finish()?;
@@ -254,18 +285,24 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         sheets_with_formulas.first().map(|(_, f)| f.clone()).unwrap_or_default();
 
     // Parse + classify formula columns; build topo order.
-    let (topo_order, col_asts, row_overrides, lookup_keys, self_referential_cols) =
-        if let Some(ref main) = main_sheet {
-            build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
-        } else {
-            (Vec::new(), HashMap::new(), HashMap::new(), Vec::new(), HashSet::new())
-        };
+    let (
+        topo_order,
+        col_asts,
+        row_overrides,
+        lookup_keys,
+        self_referential_cols,
+        main_formula_texts,
+    ) = if let Some(ref main) = main_sheet {
+        build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
+    } else {
+        (Vec::new(), HashMap::new(), HashMap::new(), Vec::new(), HashSet::new(), HashMap::new())
+    };
 
     // Build eval plans for secondary formula-bearing sheets.
     let mut secondary_plans: HashMap<String, SheetEvalPlan> = HashMap::new();
     let mut secondary_lookup_keys: Vec<LookupKey> = Vec::new();
     for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
-        let (sec_topo, sec_asts, sec_overrides, lk, sec_self_ref_cols) =
+        let (sec_topo, sec_asts, sec_overrides, lk, sec_self_ref_cols, sec_formula_texts) =
             build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges, &table_infos)?;
         // Detect cross-sheet cell references and add as lookup keys.
         for ast in sec_asts.values() {
@@ -314,6 +351,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 row_overrides: sec_overrides,
                 topo_order: sec_topo,
                 self_referential_cols: sec_self_ref_cols,
+                formula_texts: sec_formula_texts,
             },
         );
     }
@@ -483,6 +521,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         iterative_calc: true,
         max_iterations: 100,
         max_change: 0.001,
+        formula_texts: main_formula_texts,
     };
     Ok((plan, reader))
 }
@@ -508,17 +547,21 @@ fn count_data_rows(reader: &mut Reader, main_sheet: &str) -> Result<u32, XlStrea
 /// sheet and copy all other sheets verbatim.
 ///
 /// Returns `(rows_processed, formulas_evaluated)`.
+#[allow(clippy::too_many_lines)]
 fn stream_single_threaded(
     reader: &mut Reader,
     writer: &mut Writer,
     plan: &EvalPlan,
+    values_only: bool,
 ) -> Result<(u64, u64), XlStreamError> {
     let interp = Interpreter::new(&plan.prelude);
+    // eval-only — values_only handled by the write path below
     let eval_options = EvaluateOptions {
         workers: None,
         iterative_calc: plan.iterative_calc,
         max_iterations: plan.max_iterations,
         max_change: plan.max_change,
+        values_only: false,
     };
     let mut rows_processed: u64 = 0;
     let mut formulas_evaluated: u64 = 0;
@@ -588,7 +631,24 @@ fn stream_single_threaded(
                 }
             }
 
-            sh.write_row(row_idx, &row_values)?;
+            if values_only {
+                sh.write_row(row_idx, &row_values)?;
+            } else {
+                let empty_ft = HashMap::new();
+                let ft = if is_main {
+                    &plan.formula_texts
+                } else {
+                    plan.secondary_plans
+                        .get(name.as_str())
+                        .map_or(&empty_ft, |sp| &sp.formula_texts)
+                };
+                let row_formulas = build_row_formula_map(ft, row_idx);
+                if row_formulas.is_empty() {
+                    sh.write_row(row_idx, &row_values)?;
+                } else {
+                    sh.write_row_with_formulas(row_idx, &row_values, &row_formulas)?;
+                }
+            }
             rows_processed += 1;
         }
 
@@ -616,6 +676,7 @@ fn stream_parallel(
     main_sheet: &str,
     total_data_rows: u32,
     num_workers: usize,
+    formula_texts: &HashMap<u32, HashMap<u32, String>>,
 ) -> Result<(u64, u64), XlStreamError> {
     let chunk_size = (total_data_rows as usize).div_ceil(num_workers);
 
@@ -689,7 +750,7 @@ fn stream_parallel(
             Ok((row_idx, values, formulas_count)) => {
                 buffer.insert(row_idx, (values, formulas_count));
                 while let Some((vals, fc)) = buffer.remove(&expected_row) {
-                    sh.write_row(expected_row, &vals)?;
+                    write_row_or_formula(&mut sh, expected_row, &vals, formula_texts)?;
                     rows_processed += 1;
                     formulas_evaluated += fc;
                     expected_row += 1;
@@ -707,7 +768,7 @@ fn stream_parallel(
         if first_error.is_some() {
             break;
         }
-        sh.write_row(row_idx, &vals)?;
+        write_row_or_formula(&mut sh, row_idx, &vals, formula_texts)?;
         rows_processed += 1;
         formulas_evaluated += fc;
     }
@@ -846,7 +907,14 @@ fn build_eval_plan(
     named_ranges: &HashMap<String, String>,
     table_infos: &HashMap<String, xlstream_parse::TableInfo>,
 ) -> Result<
-    (Vec<u32>, HashMap<u32, Ast>, HashMap<u32, HashMap<u32, Ast>>, Vec<LookupKey>, HashSet<u32>),
+    (
+        Vec<u32>,
+        HashMap<u32, Ast>,
+        HashMap<u32, HashMap<u32, Ast>>,
+        Vec<LookupKey>,
+        HashSet<u32>,
+        HashMap<u32, HashMap<u32, String>>,
+    ),
     XlStreamError,
 > {
     let mut col_formulas: HashMap<u32, Vec<(u32, String)>> = HashMap::new();
@@ -964,7 +1032,53 @@ fn build_eval_plan(
         .collect();
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
-    Ok((topo_order, col_asts, row_overrides, all_lookup_keys, self_referential_cols))
+
+    let mut formula_texts: HashMap<u32, HashMap<u32, String>> = HashMap::new();
+    for (col, rows) in col_formulas {
+        let row_map: HashMap<u32, String> = rows.into_iter().collect();
+        formula_texts.insert(col, row_map);
+    }
+
+    Ok((topo_order, col_asts, row_overrides, all_lookup_keys, self_referential_cols, formula_texts))
+}
+
+/// Build a formula map for a single row: col -> formula text as-is from
+/// calamine (without `=`). `Formula::new()` handles the prefix internally.
+fn build_row_formula_map(
+    formula_texts: &HashMap<u32, HashMap<u32, String>>,
+    row_idx: u32,
+) -> HashMap<u16, &str> {
+    let mut map = HashMap::new();
+    for (col, row_map) in formula_texts {
+        if let Some(text) = row_map.get(&row_idx) {
+            if let Ok(col16) = u16::try_from(*col) {
+                map.insert(col16, text.as_str());
+            } else {
+                tracing::warn!(col = *col, "formula column index exceeds u16::MAX, skipping");
+            }
+        }
+    }
+    map
+}
+
+/// Write a row using formulas where available, falling back to plain values.
+fn write_row_or_formula(
+    sh: &mut xlstream_io::SheetHandle<'_>,
+    row_idx: u32,
+    values: &[Value],
+    formula_texts: &HashMap<u32, HashMap<u32, String>>,
+) -> Result<(), XlStreamError> {
+    if formula_texts.is_empty() {
+        sh.write_row(row_idx, values)?;
+    } else {
+        let row_formulas = build_row_formula_map(formula_texts, row_idx);
+        if row_formulas.is_empty() {
+            sh.write_row(row_idx, values)?;
+        } else {
+            sh.write_row_with_formulas(row_idx, values, &row_formulas)?;
+        }
+    }
+    Ok(())
 }
 
 /// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes that `rust_xlsxwriter`
