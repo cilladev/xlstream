@@ -21,6 +21,7 @@
 #![allow(clippy::multiple_crate_versions)]
 
 pub mod convert;
+pub mod formula_preserve;
 mod reader;
 mod sheet_handle;
 mod stream;
