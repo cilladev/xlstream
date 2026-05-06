@@ -29,7 +29,7 @@ mod error;
 mod options;
 mod value;
 
-pub use address::col_row_to_a1;
+pub use address::{a1_to_col_row, col_row_to_a1};
 pub use cell_error::CellError;
 pub use date::ExcelDate;
 pub use error::XlStreamError;
