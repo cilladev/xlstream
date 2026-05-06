@@ -10,6 +10,10 @@ def evaluate(
     output_path: str,
     *,
     workers: Optional[int] = None,
+    iterative_calc: bool = True,
+    max_iterations: int = 100,
+    max_change: float = 0.001,
+    values_only: bool = False,
 ) -> EvaluateResult:
     """Evaluate formulas in an xlsx workbook and write the results.
 
@@ -17,6 +21,10 @@ def evaluate(
         input_path: Path to the source xlsx file.
         output_path: Path where the evaluated xlsx is written.
         workers: Number of parallel worker threads. None = auto-detect.
+        iterative_calc: Enable iterative calculation for self-referential formulas.
+        max_iterations: Maximum iterations for iterative calculation.
+        max_change: Convergence threshold for iterative calculation.
+        values_only: Write only computed values, discarding formula text.
 
     Returns:
         Dict with rows_processed, formulas_evaluated, and duration_ms.
