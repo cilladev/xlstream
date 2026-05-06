@@ -111,6 +111,12 @@ pub fn evaluate(
     plan.iterative_calc = options.iterative_calc;
     plan.max_iterations = options.max_iterations;
     plan.max_change = options.max_change;
+    if options.values_only {
+        plan.formula_texts = HashMap::new();
+        for sp in plan.secondary_plans.values_mut() {
+            sp.formula_texts = HashMap::new();
+        }
+    }
     let mut writer = Writer::create(output)?;
 
     let num_workers = options.workers.unwrap_or_else(num_cpus::get).max(1);
@@ -1028,8 +1034,8 @@ fn build_eval_plan(
     let topo_order = topo_sort(&deps, &formula_cols)?;
 
     let mut formula_texts: HashMap<u32, HashMap<u32, String>> = HashMap::new();
-    for (&col, rows) in &col_formulas {
-        let row_map: HashMap<u32, String> = rows.iter().cloned().collect();
+    for (col, rows) in col_formulas {
+        let row_map: HashMap<u32, String> = rows.into_iter().collect();
         formula_texts.insert(col, row_map);
     }
 
