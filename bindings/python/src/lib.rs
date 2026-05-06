@@ -84,8 +84,13 @@ fn evaluate(
 ) -> PyResult<Py<PyDict>> {
     let input = PathBuf::from(input_path);
     let output = PathBuf::from(output_path);
-    let options =
-        xlstream_eval::EvaluateOptions { workers, iterative_calc, max_iterations, max_change };
+    let options = xlstream_eval::EvaluateOptions {
+        workers,
+        iterative_calc,
+        max_iterations,
+        max_change,
+        values_only: false,
+    };
 
     let summary =
         py.detach(move || xlstream_eval::evaluate(&input, &output, &options)).map_err(to_pyerr)?;
