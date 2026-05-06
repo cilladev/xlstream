@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use xlstream_core::{col_row_to_a1, EvaluateOptions, Value, XlStreamError, PARALLEL_ROW_THRESHOLD};
+use xlstream_io::convert::{value_to_cell_result, CellResult};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
     classify, collect_lookup_keys, extract_references, parse, resolve_named_ranges, rewrite,
@@ -20,6 +21,9 @@ use crate::topo::topo_sort;
 
 /// Message type sent from parallel workers to the writer loop.
 type WorkerMsg = Result<(u32, Vec<Value>, u64), XlStreamError>;
+
+/// Per-sheet formula results: sheet name → (0-based row, 0-based col) → result.
+type SheetResults = HashMap<String, HashMap<(u32, u16), CellResult>>;
 
 /// Summary of a completed evaluation run.
 ///
@@ -108,109 +112,35 @@ pub fn evaluate(
     plan.iterative_calc = options.iterative_calc;
     plan.max_iterations = options.max_iterations;
     plan.max_change = options.max_change;
-    let mut writer = Writer::create(output)?;
 
     let num_workers = options.workers.unwrap_or_else(num_cpus::get).max(1);
-
     let use_parallel = num_workers > 1
         && plan.main_sheet.is_some()
         && !plan.col_asts.is_empty()
         && plan.total_data_rows >= PARALLEL_ROW_THRESHOLD;
 
-    let (rows_processed, formulas_evaluated) = if use_parallel {
-        let main_sheet_name = plan
-            .main_sheet
-            .as_ref()
-            .ok_or_else(|| XlStreamError::Internal("no main sheet".into()))?
-            .clone();
-
-        tracing::info!(
-            workers = num_workers,
-            total_rows = plan.total_data_rows,
-            "parallel evaluation: spawning workers"
-        );
-
-        // Write non-main sheets — evaluate formulas on secondary formula sheets.
-        for name in &plan.sheet_names {
-            if Some(name.as_str()) != plan.main_sheet.as_deref() {
-                let mut sh = writer.add_sheet(name)?;
-                let mut stream = reader.cells(name)?;
-
-                if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
-                    let sec_interp = Interpreter::new(&plan.prelude);
-                    let sec_options = EvaluateOptions {
-                        workers: None,
-                        iterative_calc: plan.iterative_calc,
-                        max_iterations: plan.max_iterations,
-                        max_change: plan.max_change,
-                    };
-                    let mut header_pending = true;
-                    while let Some((row_idx, mut row_values)) = stream.next_row()? {
-                        if header_pending {
-                            sh.write_row(row_idx, &row_values)?;
-                            header_pending = false;
-                            continue;
-                        }
-                        for &fcol in &sp.topo_order {
-                            let ast = sp
-                                .row_overrides
-                                .get(&fcol)
-                                .and_then(|overrides| overrides.get(&row_idx))
-                                .or_else(|| sp.col_asts.get(&fcol));
-                            let Some(ast) = ast else { continue };
-                            eval_column(
-                                &sec_interp,
-                                ast,
-                                &mut row_values,
-                                row_idx,
-                                fcol,
-                                sp.self_referential_cols.contains(&fcol),
-                                &sec_options,
-                            );
-                        }
-                        sh.write_row(row_idx, &row_values)?;
-                    }
-                } else {
-                    while let Some((row_idx, row_values)) = stream.next_row()? {
-                        sh.write_row(row_idx, &row_values)?;
-                    }
-                }
-
-                drop(sh);
-            }
-        }
-
-        let eval_options = Arc::new(EvaluateOptions {
-            workers: options.workers,
-            iterative_calc: plan.iterative_calc,
-            max_iterations: plan.max_iterations,
-            max_change: plan.max_change,
-        });
-        let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
-        let prelude = Arc::new(plan.prelude);
-        let col_asts = Arc::new(plan.col_asts);
-        let row_overrides_arc = Arc::new(plan.row_overrides);
-
-        stream_parallel(
-            input,
-            &mut writer,
-            &prelude,
-            &col_asts,
-            &row_overrides_arc,
-            &plan.topo_order,
-            &self_referential_cols_arc,
-            &eval_options,
-            &main_sheet_name,
-            plan.total_data_rows,
-            num_workers,
-        )?
+    if options.values_only {
+        // Values-only: write from scratch via rust_xlsxwriter (no <f> elements).
+        let mut writer = Writer::create(output)?;
+        let (rows_processed, formulas_evaluated) = if use_parallel {
+            stream_parallel_write(input, &mut reader, &mut writer, plan, options, num_workers)?
+        } else {
+            tracing::debug!("single-threaded evaluation (values-only)");
+            stream_single_threaded(&mut reader, &mut writer, &plan)?
+        };
+        writer.finish()?;
+        Ok(EvaluateSummary { rows_processed, formulas_evaluated, duration: start.elapsed() })
     } else {
-        tracing::debug!("single-threaded evaluation");
-        stream_single_threaded(&mut reader, &mut writer, &plan)?
-    };
-
-    writer.finish()?;
-    Ok(EvaluateSummary { rows_processed, formulas_evaluated, duration: start.elapsed() })
+        // Keep-formulas: collect results, then copy-and-replace.
+        let (rows_processed, formulas_evaluated, results) = if use_parallel {
+            collect_parallel(input, &mut reader, plan, options, num_workers)?
+        } else {
+            tracing::debug!("single-threaded evaluation (keep-formulas)");
+            collect_single_threaded(&mut reader, &plan)?
+        };
+        xlstream_io::formula_preserve::copy_and_replace(input, output, &results)?;
+        Ok(EvaluateSummary { rows_processed, formulas_evaluated, duration: start.elapsed() })
+    }
 }
 
 /// Build the full evaluation plan: open reader, find main sheet, parse +
@@ -519,6 +449,7 @@ fn stream_single_threaded(
         iterative_calc: plan.iterative_calc,
         max_iterations: plan.max_iterations,
         max_change: plan.max_change,
+        values_only: false,
     };
     let mut rows_processed: u64 = 0;
     let mut formulas_evaluated: u64 = 0;
@@ -596,6 +527,388 @@ fn stream_single_threaded(
     }
 
     Ok((rows_processed, formulas_evaluated))
+}
+
+/// Values-only parallel write: evaluate secondary sheets, then spawn
+/// parallel workers for the main sheet, writing all results via Writer.
+#[allow(clippy::too_many_lines)]
+fn stream_parallel_write(
+    input: &Path,
+    reader: &mut Reader,
+    writer: &mut Writer,
+    plan: EvalPlan,
+    options: &EvaluateOptions,
+    num_workers: usize,
+) -> Result<(u64, u64), XlStreamError> {
+    let main_sheet_name = plan
+        .main_sheet
+        .as_ref()
+        .ok_or_else(|| XlStreamError::Internal("no main sheet".into()))?
+        .clone();
+
+    tracing::info!(
+        workers = num_workers,
+        total_rows = plan.total_data_rows,
+        "parallel evaluation (values-only): spawning workers"
+    );
+
+    for name in &plan.sheet_names {
+        if Some(name.as_str()) != plan.main_sheet.as_deref() {
+            let mut sh = writer.add_sheet(name)?;
+            let mut stream = reader.cells(name)?;
+
+            if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
+                let sec_interp = Interpreter::new(&plan.prelude);
+                let sec_options = EvaluateOptions {
+                    workers: None,
+                    iterative_calc: plan.iterative_calc,
+                    max_iterations: plan.max_iterations,
+                    max_change: plan.max_change,
+                    values_only: true,
+                };
+                let mut header_pending = true;
+                while let Some((row_idx, mut row_values)) = stream.next_row()? {
+                    if header_pending {
+                        sh.write_row(row_idx, &row_values)?;
+                        header_pending = false;
+                        continue;
+                    }
+                    for &fcol in &sp.topo_order {
+                        let ast = sp
+                            .row_overrides
+                            .get(&fcol)
+                            .and_then(|overrides| overrides.get(&row_idx))
+                            .or_else(|| sp.col_asts.get(&fcol));
+                        let Some(ast) = ast else { continue };
+                        eval_column(
+                            &sec_interp,
+                            ast,
+                            &mut row_values,
+                            row_idx,
+                            fcol,
+                            sp.self_referential_cols.contains(&fcol),
+                            &sec_options,
+                        );
+                    }
+                    sh.write_row(row_idx, &row_values)?;
+                }
+            } else {
+                while let Some((row_idx, row_values)) = stream.next_row()? {
+                    sh.write_row(row_idx, &row_values)?;
+                }
+            }
+
+            drop(sh);
+        }
+    }
+
+    let eval_options = Arc::new(EvaluateOptions {
+        workers: options.workers,
+        iterative_calc: plan.iterative_calc,
+        max_iterations: plan.max_iterations,
+        max_change: plan.max_change,
+        values_only: true,
+    });
+    let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
+    let prelude = Arc::new(plan.prelude);
+    let col_asts = Arc::new(plan.col_asts);
+    let row_overrides_arc = Arc::new(plan.row_overrides);
+
+    stream_parallel(
+        input,
+        writer,
+        &prelude,
+        &col_asts,
+        &row_overrides_arc,
+        &plan.topo_order,
+        &self_referential_cols_arc,
+        &eval_options,
+        &main_sheet_name,
+        plan.total_data_rows,
+        num_workers,
+    )
+}
+
+/// Evaluate all sheets single-threaded and collect formula results for
+/// the copy-and-replace path (keep-formulas mode).
+#[allow(clippy::cast_possible_truncation)]
+fn collect_single_threaded(
+    reader: &mut Reader,
+    plan: &EvalPlan,
+) -> Result<(u64, u64, SheetResults), XlStreamError> {
+    let interp = Interpreter::new(&plan.prelude);
+    let eval_options = EvaluateOptions {
+        workers: None,
+        iterative_calc: plan.iterative_calc,
+        max_iterations: plan.max_iterations,
+        max_change: plan.max_change,
+        values_only: false,
+    };
+    let mut results: SheetResults = HashMap::new();
+    let mut rows_processed: u64 = 0;
+    let mut formulas_evaluated: u64 = 0;
+
+    for name in &plan.sheet_names {
+        let mut stream = reader.cells(name)?;
+
+        let is_main = plan.main_sheet.as_deref() == Some(name.as_str());
+        #[allow(clippy::type_complexity)]
+        let sheet_plan: Option<(
+            &HashMap<u32, Ast>,
+            &HashMap<u32, HashMap<u32, Ast>>,
+            &[u32],
+            &HashSet<u32>,
+        )> = if is_main {
+            if plan.col_asts.is_empty() {
+                None
+            } else {
+                Some((
+                    &plan.col_asts,
+                    &plan.row_overrides,
+                    &plan.topo_order,
+                    &plan.self_referential_cols,
+                ))
+            }
+        } else {
+            plan.secondary_plans.get(name.as_str()).map(|sp| {
+                (
+                    &sp.col_asts,
+                    &sp.row_overrides,
+                    sp.topo_order.as_slice(),
+                    &sp.self_referential_cols,
+                )
+            })
+        };
+
+        let mut header_pending = sheet_plan.is_some();
+        let sheet_results = results.entry(name.clone()).or_default();
+
+        while let Some((row_idx, mut row_values)) = stream.next_row()? {
+            if header_pending {
+                header_pending = false;
+                rows_processed += 1;
+                continue;
+            }
+
+            if let Some((col_asts, row_overrides, topo_order, self_ref_cols)) = &sheet_plan {
+                for &fcol in *topo_order {
+                    let ast = row_overrides
+                        .get(&fcol)
+                        .and_then(|overrides| overrides.get(&row_idx))
+                        .or_else(|| col_asts.get(&fcol));
+                    let Some(ast) = ast else { continue };
+                    eval_column(
+                        &interp,
+                        ast,
+                        &mut row_values,
+                        row_idx,
+                        fcol,
+                        self_ref_cols.contains(&fcol),
+                        &eval_options,
+                    );
+                    let fcol_idx = fcol as usize;
+                    sheet_results.insert(
+                        (row_idx, fcol as u16),
+                        value_to_cell_result(&row_values[fcol_idx]),
+                    );
+                    formulas_evaluated += 1;
+                }
+            }
+
+            rows_processed += 1;
+        }
+    }
+
+    Ok((rows_processed, formulas_evaluated, results))
+}
+
+/// Parallel formula result collection for the keep-formulas path.
+/// Workers evaluate rows and send them through a channel; the main
+/// thread extracts formula cell results.
+#[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
+fn collect_parallel(
+    input: &Path,
+    reader: &mut Reader,
+    plan: EvalPlan,
+    options: &EvaluateOptions,
+    num_workers: usize,
+) -> Result<(u64, u64, SheetResults), XlStreamError> {
+    let main_sheet_name = plan
+        .main_sheet
+        .as_ref()
+        .ok_or_else(|| XlStreamError::Internal("no main sheet".into()))?
+        .clone();
+
+    tracing::info!(
+        workers = num_workers,
+        total_rows = plan.total_data_rows,
+        "parallel evaluation (keep-formulas): spawning workers"
+    );
+
+    let mut results: SheetResults = HashMap::new();
+
+    // Collect secondary sheets.
+    for name in &plan.sheet_names {
+        if Some(name.as_str()) != plan.main_sheet.as_deref() {
+            let mut stream = reader.cells(name)?;
+            if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
+                let sec_interp = Interpreter::new(&plan.prelude);
+                let sec_options = EvaluateOptions {
+                    workers: None,
+                    iterative_calc: plan.iterative_calc,
+                    max_iterations: plan.max_iterations,
+                    max_change: plan.max_change,
+                    values_only: false,
+                };
+                let sheet_results = results.entry(name.clone()).or_default();
+                let mut header_pending = true;
+                while let Some((row_idx, mut row_values)) = stream.next_row()? {
+                    if header_pending {
+                        header_pending = false;
+                        continue;
+                    }
+                    for &fcol in &sp.topo_order {
+                        let ast = sp
+                            .row_overrides
+                            .get(&fcol)
+                            .and_then(|o| o.get(&row_idx))
+                            .or_else(|| sp.col_asts.get(&fcol));
+                        let Some(ast) = ast else { continue };
+                        eval_column(
+                            &sec_interp,
+                            ast,
+                            &mut row_values,
+                            row_idx,
+                            fcol,
+                            sp.self_referential_cols.contains(&fcol),
+                            &sec_options,
+                        );
+                        let fcol_idx = fcol as usize;
+                        sheet_results.insert(
+                            (row_idx, fcol as u16),
+                            value_to_cell_result(&row_values[fcol_idx]),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Parallel main sheet.
+    let topo_order = plan.topo_order.clone();
+    let eval_options = Arc::new(EvaluateOptions {
+        workers: options.workers,
+        iterative_calc: plan.iterative_calc,
+        max_iterations: plan.max_iterations,
+        max_change: plan.max_change,
+        values_only: false,
+    });
+    let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
+    let prelude = Arc::new(plan.prelude);
+    let col_asts = Arc::new(plan.col_asts);
+    let row_overrides_arc = Arc::new(plan.row_overrides);
+
+    let chunk_size = (plan.total_data_rows as usize).div_ceil(num_workers);
+    let (tx, rx) = crossbeam_channel::bounded::<WorkerMsg>(num_workers * 1024);
+
+    let input_path = input.to_path_buf();
+    let main_name = main_sheet_name.clone();
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_workers)
+        .build()
+        .map_err(|e| XlStreamError::Internal(format!("failed to build thread pool: {e}")))?;
+
+    for worker_id in 0..num_workers {
+        let tx = tx.clone();
+        let prelude = Arc::clone(&prelude);
+        let col_asts = Arc::clone(&col_asts);
+        let row_overrides = Arc::clone(&row_overrides_arc);
+        let self_ref_cols = Arc::clone(&self_referential_cols_arc);
+        let opts = Arc::clone(&eval_options);
+        let topo_order = topo_order.clone();
+        let input_path = input_path.clone();
+        let main_name = main_name.clone();
+
+        let start_row = 1 + u32::try_from(worker_id * chunk_size).unwrap_or(u32::MAX - 1);
+        let end_row = u32::try_from(1 + (worker_id + 1) * chunk_size)
+            .unwrap_or(u32::MAX)
+            .min(1 + plan.total_data_rows);
+
+        pool.spawn(move || {
+            if let Err(e) = run_worker(
+                &input_path,
+                &main_name,
+                &prelude,
+                &col_asts,
+                &row_overrides,
+                &topo_order,
+                &self_ref_cols,
+                &opts,
+                start_row,
+                end_row,
+                &tx,
+            ) {
+                let _ = tx.send(Err(e));
+            }
+        });
+    }
+
+    drop(tx);
+
+    let sheet_results = results.entry(main_sheet_name).or_default();
+    let mut rows_processed: u64 = 1;
+    let mut formulas_evaluated: u64 = 0;
+    let mut expected_row: u32 = 1;
+    let mut buffer: BTreeMap<u32, (Vec<Value>, u64)> = BTreeMap::new();
+    let mut first_error: Option<XlStreamError> = None;
+
+    for msg in &rx {
+        match msg {
+            Ok((row_idx, values, formulas_count)) => {
+                buffer.insert(row_idx, (values, formulas_count));
+                while let Some((vals, fc)) = buffer.remove(&expected_row) {
+                    for &fcol in &topo_order {
+                        let fcol_idx = fcol as usize;
+                        if fcol_idx < vals.len() {
+                            sheet_results.insert(
+                                (expected_row, fcol as u16),
+                                value_to_cell_result(&vals[fcol_idx]),
+                            );
+                        }
+                    }
+                    rows_processed += 1;
+                    formulas_evaluated += fc;
+                    expected_row += 1;
+                }
+            }
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+        }
+    }
+
+    while let Some((row_idx, (vals, fc))) = buffer.pop_first() {
+        if first_error.is_some() {
+            break;
+        }
+        for &fcol in &topo_order {
+            let fcol_idx = fcol as usize;
+            if fcol_idx < vals.len() {
+                sheet_results.insert((row_idx, fcol as u16), value_to_cell_result(&vals[fcol_idx]));
+            }
+        }
+        rows_processed += 1;
+        formulas_evaluated += fc;
+    }
+
+    if let Some(e) = first_error {
+        return Err(e);
+    }
+
+    Ok((rows_processed, formulas_evaluated, results))
 }
 
 /// Parallel row evaluation. Spawns `num_workers` threads, each with its

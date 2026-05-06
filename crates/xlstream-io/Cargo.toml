@@ -15,9 +15,13 @@ authors.workspace = true
 xlstream-core = { path = "../xlstream-core", version = "0.2.0" }
 calamine.workspace = true
 rust_xlsxwriter.workspace = true
+quick-xml.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }
+calamine = { workspace = true }
+rust_xlsxwriter = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

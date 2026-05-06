@@ -12,8 +12,9 @@ Semver.
 - ROWS and COLUMNS: return row/column count from range references
 - Self-referential formula support via iterative calculation (e.g., `=IF(G2="Risk_KC",O2*-1,O2)` in cell O2)
 - `EvaluateOptions` with `iterative_calc`, `max_iterations`, `max_change` settings
-- CLI: `--max-iterations`, `--max-change`, `--no-iterative-calc`
-- Python: `iterative_calc`, `max_iterations`, `max_change` kwargs
+- CLI: `--max-iterations`, `--max-change`, `--no-iterative-calc`, `--values-only`
+- Python: `iterative_calc`, `max_iterations`, `max_change`, `values_only` kwargs
+- Formula preservation in output (default): `<f>` elements pass through from input xlsx via copy-and-replace, `<v>` values updated with re-evaluated results
 
 ### Changed
 - `evaluate()` signature now takes `&EvaluateOptions` instead of `Option<usize>`

@@ -20,7 +20,8 @@
 // Phase-1 stub doesn't use either crate's API so we can't avoid the pull-in.
 #![allow(clippy::multiple_crate_versions)]
 
-pub(crate) mod convert;
+pub mod convert;
+pub mod formula_preserve;
 mod reader;
 mod sheet_handle;
 mod stream;
