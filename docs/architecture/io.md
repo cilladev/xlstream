@@ -164,7 +164,7 @@ Why "all up front": constant_memory mode creates a tempfile per sheet; the order
 For sheets that xlstream doesn't evaluate (no formulas, or all unsupported), we can:
 
 - v0.1: copy the sheet's raw values through (read with calamine, write with rust_xlsxwriter). Styles are NOT preserved. Documented limitation.
-- v0.2: investigate copying the raw xlsx sheet XML bytes for perfect fidelity.
+- v0.2 (implemented): copy-and-replace — copy the input xlsx at the zip level, stream each worksheet's XML through `quick_xml`, replace `<v>` cached values for formula cells. `<f>` elements and all other XML pass through untouched. `--values-only` mode uses the v0.1 approach (rust_xlsxwriter from scratch).
 
 ## What we do not support
 
