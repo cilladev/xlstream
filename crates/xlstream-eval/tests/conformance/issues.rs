@@ -36,12 +36,24 @@ fn make_formula_workbook() -> NamedTempFile {
     let mut wb = Workbook::new();
     let ws = wb.add_worksheet();
     ws.set_name("Sheet1").unwrap();
+    // Headers
     ws.write_string(0, 0, "Value").unwrap();
     ws.write_string(0, 1, "Double").unwrap();
+    ws.write_string(0, 2, "Label").unwrap();
+    ws.write_string(0, 3, "Check").unwrap();
+    ws.write_string(0, 4, "Inverse").unwrap();
+    // Row 2: numeric, text, boolean, error formulas
     ws.write_number(1, 0, 10.0).unwrap();
     ws.write_formula(1, 1, Formula::new("A2*2").set_result("20")).unwrap();
-    ws.write_number(2, 0, 30.0).unwrap();
-    ws.write_formula(2, 1, Formula::new("A3*2").set_result("60")).unwrap();
+    ws.write_formula(1, 2, Formula::new("IF(A2>5,\"high\",\"low\")").set_result("high")).unwrap();
+    ws.write_formula(1, 3, Formula::new("A2>5").set_result("TRUE")).unwrap();
+    ws.write_formula(1, 4, Formula::new("1/0").set_result("#DIV/0!")).unwrap();
+    // Row 3: different values
+    ws.write_number(2, 0, 0.0).unwrap();
+    ws.write_formula(2, 1, Formula::new("A3*2").set_result("0")).unwrap();
+    ws.write_formula(2, 2, Formula::new("IF(A3>5,\"high\",\"low\")").set_result("low")).unwrap();
+    ws.write_formula(2, 3, Formula::new("A3>5").set_result("FALSE")).unwrap();
+    ws.write_formula(2, 4, Formula::new("1/A3").set_result("#DIV/0!")).unwrap();
     wb.save(tmp.path()).unwrap();
     tmp
 }
@@ -74,10 +86,19 @@ fn keep_formulas_produces_correct_values() {
     let range = wb.worksheet_range("Sheet1").unwrap();
     let rows: Vec<_> = range.rows().collect();
 
+    // Numeric
     assert_eq!(rows[1][0], Data::Float(10.0));
     assert_eq!(rows[1][1], Data::Float(20.0));
-    assert_eq!(rows[2][0], Data::Float(30.0));
-    assert_eq!(rows[2][1], Data::Float(60.0));
+    // Text
+    assert_eq!(rows[1][2], Data::String("high".into()));
+    // Boolean
+    assert_eq!(rows[1][3], Data::Bool(true));
+    // Error
+    assert!(matches!(rows[1][4], Data::Error(_)), "expected error, got {:?}", rows[1][4]);
+    // Row 3
+    assert_eq!(rows[2][1], Data::Float(0.0));
+    assert_eq!(rows[2][2], Data::String("low".into()));
+    assert_eq!(rows[2][3], Data::Bool(false));
 }
 
 #[test]

@@ -43,6 +43,22 @@ enum CellState {
 /// # Errors
 ///
 /// Returns [`XlStreamError::Internal`] on XML parse or write failures.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use xlstream_io::convert::CellResult;
+/// use xlstream_io::formula_preserve::replace_sheet_values;
+///
+/// let xml = br#"<?xml version="1.0"?><worksheet><sheetData>
+/// <row r="2"><c r="A2"><v>10</v></c><c r="B2"><f>A2*2</f><v>20</v></c></row>
+/// </sheetData></worksheet>"#;
+/// let mut results = HashMap::new();
+/// results.insert((1u32, 1u16), CellResult { value: "42".into(), cell_type: None });
+/// let out = replace_sheet_values(xml, &results).unwrap();
+/// assert!(String::from_utf8_lossy(&out).contains("<v>42</v>"));
+/// ```
 #[allow(clippy::implicit_hasher)]
 pub fn replace_sheet_values(
     xml_in: &[u8],
@@ -143,6 +159,18 @@ pub fn replace_sheet_values(
 ///
 /// Returns [`XlStreamError::Internal`] if the archive lacks the
 /// expected workbook XML entries.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::io::BufReader;
+/// use xlstream_io::formula_preserve::resolve_sheet_paths;
+///
+/// let file = std::fs::File::open("workbook.xlsx").unwrap();
+/// let mut archive = zip::ZipArchive::new(BufReader::new(file)).unwrap();
+/// let paths = resolve_sheet_paths(&mut archive).unwrap();
+/// // e.g. {"Sheet1" => "xl/worksheets/sheet1.xml"}
+/// ```
 pub fn resolve_sheet_paths<R: Read + std::io::Seek>(
     archive: &mut ZipArchive<R>,
 ) -> Result<HashMap<String, String>, XlStreamError> {
@@ -167,12 +195,29 @@ pub fn resolve_sheet_paths<R: Read + std::io::Seek>(
 /// formula cells according to `results`.
 ///
 /// Non-worksheet entries (styles, shared strings, images, etc.) are
-/// copied byte-for-byte from the input archive.
+/// copied byte-for-byte from the input archive. Sheets absent from
+/// `results` pass through unchanged.
 ///
 /// # Errors
 ///
 /// - [`XlStreamError::Io`] on filesystem errors.
-/// - [`XlStreamError::Internal`] on zip or XML parse failures.
+/// - [`XlStreamError::Internal`] on zip or XML parse failures, or if a
+///   sheet in `results` has no matching zip entry.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::collections::HashMap;
+/// use std::path::Path;
+/// use xlstream_io::convert::CellResult;
+/// use xlstream_io::formula_preserve::copy_and_replace;
+///
+/// let mut results = HashMap::new();
+/// let mut cells = HashMap::new();
+/// cells.insert((0u32, 1u16), CellResult { value: "42".into(), cell_type: None });
+/// results.insert("Sheet1".to_string(), cells);
+/// copy_and_replace(Path::new("in.xlsx"), Path::new("out.xlsx"), &results).unwrap();
+/// ```
 #[allow(clippy::implicit_hasher)]
 pub fn copy_and_replace(
     input: &Path,
@@ -185,6 +230,15 @@ pub fn copy_and_replace(
         .map_err(|e| XlStreamError::Internal(format!("zip open: {e}")))?;
 
     let sheet_paths = resolve_sheet_paths(&mut archive)?;
+
+    for sheet_name in results.keys() {
+        if !sheet_paths.contains_key(sheet_name) {
+            return Err(XlStreamError::Internal(format!(
+                "sheet '{sheet_name}' has formula results but no matching zip entry"
+            )));
+        }
+    }
+
     let path_to_sheet: HashMap<String, String> =
         sheet_paths.into_iter().map(|(name, path)| (path, name)).collect();
 
@@ -292,8 +346,7 @@ fn parse_workbook_sheets<R: Read + std::io::Seek>(
                         b"name" => {
                             name = std::str::from_utf8(&attr.value).ok().map(String::from);
                         }
-                        // The namespace-prefixed form (r:id) is the standard.
-                        k if k.ends_with(b"id") && k != b"sheetId" => {
+                        b"r:id" => {
                             rid = std::str::from_utf8(&attr.value).ok().map(String::from);
                         }
                         _ => {}
