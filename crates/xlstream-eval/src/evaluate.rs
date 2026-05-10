@@ -707,10 +707,12 @@ fn collect_single_threaded(
                         &eval_options,
                     );
                     let fcol_idx = fcol as usize;
-                    sheet_results.insert(
-                        (row_idx, fcol as u16),
-                        value_to_cell_result(&row_values[fcol_idx]),
-                    );
+                    if fcol_idx < row_values.len() {
+                        sheet_results.insert(
+                            (row_idx, fcol as u16),
+                            value_to_cell_result(&row_values[fcol_idx]),
+                        );
+                    }
                     formulas_evaluated += 1;
                 }
             }
@@ -784,10 +786,12 @@ fn collect_parallel(
                             &sec_options,
                         );
                         let fcol_idx = fcol as usize;
-                        sheet_results.insert(
-                            (row_idx, fcol as u16),
-                            value_to_cell_result(&row_values[fcol_idx]),
-                        );
+                        if fcol_idx < row_values.len() {
+                            sheet_results.insert(
+                                (row_idx, fcol as u16),
+                                value_to_cell_result(&row_values[fcol_idx]),
+                            );
+                        }
                     }
                 }
             }

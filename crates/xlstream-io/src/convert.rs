@@ -33,6 +33,14 @@ fn convert_cell_error(e: &CellErrorType) -> CellError {
 }
 
 /// Render a [`CellError`] as the Excel error string.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::CellError;
+/// use xlstream_io::convert::cell_error_to_excel_string;
+/// assert_eq!(cell_error_to_excel_string(CellError::Na), "#N/A");
+/// ```
 #[must_use]
 pub fn cell_error_to_excel_string(e: CellError) -> &'static str {
     match e {
@@ -47,6 +55,14 @@ pub fn cell_error_to_excel_string(e: CellError) -> &'static str {
 }
 
 /// Render a [`Value`] as a result string for `Formula::set_result()`.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_io::convert::value_to_result_string;
+/// assert_eq!(value_to_result_string(&Value::Number(5.0)), "5");
+/// ```
 #[must_use]
 pub fn value_to_result_string(val: &Value) -> String {
     match val {
@@ -61,26 +77,58 @@ pub fn value_to_result_string(val: &Value) -> String {
     }
 }
 
+/// The `t` attribute value for the `<c>` element in xlsx XML.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_io::convert::XmlCellType;
+/// assert_eq!(XmlCellType::Number.as_attr(), None);
+/// assert_eq!(XmlCellType::InlineString.as_attr(), Some("str"));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XmlCellType {
+    /// Numeric value (no `t` attribute).
+    Number,
+    /// Inline string result (`t="str"`).
+    InlineString,
+    /// Boolean result (`t="b"`).
+    Boolean,
+    /// Error result (`t="e"`).
+    Error,
+}
+
+impl XmlCellType {
+    /// The `t` attribute value, or `None` for numbers (omit `t`).
+    #[must_use]
+    pub fn as_attr(self) -> Option<&'static str> {
+        match self {
+            Self::Number => None,
+            Self::InlineString => Some("str"),
+            Self::Boolean => Some("b"),
+            Self::Error => Some("e"),
+        }
+    }
+}
+
 /// Cached formula result for XML replacement. Holds the `<v>` text
-/// content and the `t` attribute value for the enclosing `<c>` element.
+/// content and the cell type for the enclosing `<c>` element.
 ///
 /// # Examples
 ///
 /// ```
 /// use xlstream_core::Value;
-/// use xlstream_io::convert::value_to_cell_result;
+/// use xlstream_io::convert::{value_to_cell_result, XmlCellType};
 /// let r = value_to_cell_result(&Value::Number(42.0));
 /// assert_eq!(r.value, "42");
-/// assert_eq!(r.cell_type, None);
+/// assert_eq!(r.cell_type, XmlCellType::Number);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CellResult {
     /// Text content for the `<v>` element.
     pub value: String,
-    /// Value of the `t` attribute on `<c>`. `None` for numbers/dates
-    /// (omit `t`), `Some("str")` for text, `Some("b")` for boolean,
-    /// `Some("e")` for error.
-    pub cell_type: Option<&'static str>,
+    /// Cell type for the `t` attribute on `<c>`.
+    pub cell_type: XmlCellType,
 }
 
 /// Convert a [`Value`] to a [`CellResult`] for XML replacement.
@@ -89,24 +137,27 @@ pub struct CellResult {
 ///
 /// ```
 /// use xlstream_core::Value;
-/// use xlstream_io::convert::value_to_cell_result;
+/// use xlstream_io::convert::{value_to_cell_result, XmlCellType};
 /// let r = value_to_cell_result(&Value::Bool(true));
 /// assert_eq!(r.value, "1");
-/// assert_eq!(r.cell_type, Some("b"));
+/// assert_eq!(r.cell_type, XmlCellType::Boolean);
 /// ```
 #[must_use]
 pub fn value_to_cell_result(val: &Value) -> CellResult {
     match val {
-        Value::Number(n) => CellResult { value: format!("{n}"), cell_type: None },
-        Value::Integer(i) => CellResult { value: format!("{i}"), cell_type: None },
-        Value::Text(s) => CellResult { value: s.to_string(), cell_type: Some("str") },
-        Value::Bool(true) => CellResult { value: "1".into(), cell_type: Some("b") },
-        Value::Bool(false) => CellResult { value: "0".into(), cell_type: Some("b") },
-        Value::Date(d) => CellResult { value: format!("{}", d.serial), cell_type: None },
-        Value::Error(e) => {
-            CellResult { value: cell_error_to_excel_string(*e).to_owned(), cell_type: Some("e") }
+        Value::Number(n) => CellResult { value: format!("{n}"), cell_type: XmlCellType::Number },
+        Value::Integer(i) => CellResult { value: format!("{i}"), cell_type: XmlCellType::Number },
+        Value::Text(s) => CellResult { value: s.to_string(), cell_type: XmlCellType::InlineString },
+        Value::Bool(true) => CellResult { value: "1".into(), cell_type: XmlCellType::Boolean },
+        Value::Bool(false) => CellResult { value: "0".into(), cell_type: XmlCellType::Boolean },
+        Value::Date(d) => {
+            CellResult { value: format!("{}", d.serial), cell_type: XmlCellType::Number }
         }
-        Value::Empty => CellResult { value: String::new(), cell_type: None },
+        Value::Error(e) => CellResult {
+            value: cell_error_to_excel_string(*e).to_owned(),
+            cell_type: XmlCellType::Error,
+        },
+        Value::Empty => CellResult { value: String::new(), cell_type: XmlCellType::Number },
     }
 }
 
@@ -195,51 +246,51 @@ mod tests {
     fn cell_result_from_number() {
         let r = value_to_cell_result(&Value::Number(42.5));
         assert_eq!(r.value, "42.5");
-        assert_eq!(r.cell_type, None);
+        assert_eq!(r.cell_type, XmlCellType::Number);
     }
 
     #[test]
     fn cell_result_from_integer() {
         let r = value_to_cell_result(&Value::Integer(7));
         assert_eq!(r.value, "7");
-        assert_eq!(r.cell_type, None);
+        assert_eq!(r.cell_type, XmlCellType::Number);
     }
 
     #[test]
     fn cell_result_from_text() {
         let r = value_to_cell_result(&Value::Text("hello".into()));
         assert_eq!(r.value, "hello");
-        assert_eq!(r.cell_type, Some("str"));
+        assert_eq!(r.cell_type, XmlCellType::InlineString);
     }
 
     #[test]
     fn cell_result_from_bool() {
         let r = value_to_cell_result(&Value::Bool(true));
         assert_eq!(r.value, "1");
-        assert_eq!(r.cell_type, Some("b"));
+        assert_eq!(r.cell_type, XmlCellType::Boolean);
         let r = value_to_cell_result(&Value::Bool(false));
         assert_eq!(r.value, "0");
-        assert_eq!(r.cell_type, Some("b"));
+        assert_eq!(r.cell_type, XmlCellType::Boolean);
     }
 
     #[test]
     fn cell_result_from_error() {
         let r = value_to_cell_result(&Value::Error(CellError::Div0));
         assert_eq!(r.value, "#DIV/0!");
-        assert_eq!(r.cell_type, Some("e"));
+        assert_eq!(r.cell_type, XmlCellType::Error);
     }
 
     #[test]
     fn cell_result_from_date() {
         let r = value_to_cell_result(&Value::Date(ExcelDate { serial: 44927.0 }));
         assert_eq!(r.value, "44927");
-        assert_eq!(r.cell_type, None);
+        assert_eq!(r.cell_type, XmlCellType::Number);
     }
 
     #[test]
     fn cell_result_from_empty() {
         let r = value_to_cell_result(&Value::Empty);
         assert_eq!(r.value, "");
-        assert_eq!(r.cell_type, None);
+        assert_eq!(r.cell_type, XmlCellType::Number);
     }
 }

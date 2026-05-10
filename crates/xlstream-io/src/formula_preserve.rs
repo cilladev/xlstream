@@ -15,7 +15,7 @@ use xlstream_core::{a1_to_col_row, XlStreamError};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
-use crate::convert::CellResult;
+use crate::convert::{CellResult, XmlCellType};
 
 /// State machine for tracking position within `<c>` elements.
 enum CellState {
@@ -48,14 +48,14 @@ enum CellState {
 ///
 /// ```
 /// use std::collections::HashMap;
-/// use xlstream_io::convert::CellResult;
+/// use xlstream_io::convert::{CellResult, XmlCellType};
 /// use xlstream_io::formula_preserve::replace_sheet_values;
 ///
 /// let xml = br#"<?xml version="1.0"?><worksheet><sheetData>
 /// <row r="2"><c r="A2"><v>10</v></c><c r="B2"><f>A2*2</f><v>20</v></c></row>
 /// </sheetData></worksheet>"#;
 /// let mut results = HashMap::new();
-/// results.insert((1u32, 1u16), CellResult { value: "42".into(), cell_type: None });
+/// results.insert((1u32, 1u16), CellResult { value: "42".into(), cell_type: XmlCellType::Number });
 /// let out = replace_sheet_values(xml, &results).unwrap();
 /// assert!(String::from_utf8_lossy(&out).contains("<v>42</v>"));
 /// ```
@@ -77,7 +77,7 @@ pub fn replace_sheet_values(
             Ok(Event::Start(ref e)) if e.name().as_ref() == b"c" => {
                 if let Some((row, col)) = parse_cell_position(e) {
                     if let Some(result) = results.get(&(row, col)) {
-                        let modified = rewrite_cell_start(e, result.cell_type);
+                        let modified = rewrite_cell_start(e, result.cell_type)?;
                         write_event(&mut writer, Event::Start(modified))?;
                         state = CellState::FormulaCell { row, col, has_value: false };
                         buf.clear();
@@ -100,7 +100,7 @@ pub fn replace_sheet_values(
                 let CellState::InValue { row, col } = state else {
                     return Err(XlStreamError::Internal("unexpected state".into()));
                 };
-                let result = &results[&(row, col)];
+                let result = lookup_result(results, row, col)?;
                 write_event(&mut writer, Event::Text(BytesText::new(&result.value)))?;
                 state = CellState::FormulaCell { row, col, has_value: true };
             }
@@ -120,7 +120,7 @@ pub fn replace_sheet_values(
             {
                 if let CellState::FormulaCell { row, col, ref mut has_value } = state {
                     *has_value = true;
-                    let result = &results[&(row, col)];
+                    let result = lookup_result(results, row, col)?;
                     write_event(&mut writer, Event::Start(BytesStart::new("v")))?;
                     write_event(&mut writer, Event::Text(BytesText::new(&result.value)))?;
                     write_event(&mut writer, Event::End(BytesEnd::new("v")))?;
@@ -129,7 +129,7 @@ pub fn replace_sheet_values(
 
             Ok(Event::End(ref e)) if e.name().as_ref() == b"c" => {
                 if let CellState::FormulaCell { row, col, has_value: false } = state {
-                    let result = &results[&(row, col)];
+                    let result = lookup_result(results, row, col)?;
                     write_event(&mut writer, Event::Start(BytesStart::new("v")))?;
                     write_event(&mut writer, Event::Text(BytesText::new(&result.value)))?;
                     write_event(&mut writer, Event::End(BytesEnd::new("v")))?;
@@ -209,12 +209,12 @@ pub fn resolve_sheet_paths<R: Read + std::io::Seek>(
 /// ```no_run
 /// use std::collections::HashMap;
 /// use std::path::Path;
-/// use xlstream_io::convert::CellResult;
+/// use xlstream_io::convert::{CellResult, XmlCellType};
 /// use xlstream_io::formula_preserve::copy_and_replace;
 ///
 /// let mut results = HashMap::new();
 /// let mut cells = HashMap::new();
-/// cells.insert((0u32, 1u16), CellResult { value: "42".into(), cell_type: None });
+/// cells.insert((0u32, 1u16), CellResult { value: "42".into(), cell_type: XmlCellType::Number });
 /// results.insert("Sheet1".to_string(), cells);
 /// copy_and_replace(Path::new("in.xlsx"), Path::new("out.xlsx"), &results).unwrap();
 /// ```
@@ -293,6 +293,16 @@ fn write_event<W: std::io::Write>(
     writer.write_event(event).map_err(|e| XlStreamError::Internal(e.to_string()))
 }
 
+fn lookup_result(
+    results: &HashMap<(u32, u16), CellResult>,
+    row: u32,
+    col: u16,
+) -> Result<&CellResult, XlStreamError> {
+    results
+        .get(&(row, col))
+        .ok_or_else(|| XlStreamError::Internal(format!("missing result for cell ({row}, {col})")))
+}
+
 fn parse_cell_position(elem: &BytesStart<'_>) -> Option<(u32, u16)> {
     for attr in elem.attributes().filter_map(Result::ok) {
         if attr.key.as_ref() == b"r" {
@@ -305,22 +315,27 @@ fn parse_cell_position(elem: &BytesStart<'_>) -> Option<(u32, u16)> {
 
 fn rewrite_cell_start(
     elem: &BytesStart<'_>,
-    cell_type: Option<&'static str>,
-) -> BytesStart<'static> {
-    let name = std::str::from_utf8(elem.name().as_ref()).unwrap_or("c").to_owned();
+    cell_type: XmlCellType,
+) -> Result<BytesStart<'static>, XlStreamError> {
+    let name = std::str::from_utf8(elem.name().as_ref())
+        .map_err(|e| XlStreamError::Internal(format!("non-UTF8 element name: {e}")))?
+        .to_owned();
     let mut new_elem = BytesStart::new(name);
-    for attr in elem.attributes().filter_map(Result::ok) {
+    for attr_result in elem.attributes() {
+        let attr = attr_result
+            .map_err(|e| XlStreamError::Internal(format!("malformed XML attribute: {e}")))?;
         if attr.key.as_ref() != b"t" {
-            new_elem.push_attribute((
-                std::str::from_utf8(attr.key.as_ref()).unwrap_or(""),
-                std::str::from_utf8(&attr.value).unwrap_or(""),
-            ));
+            let key = std::str::from_utf8(attr.key.as_ref())
+                .map_err(|e| XlStreamError::Internal(format!("non-UTF8 attr key: {e}")))?;
+            let val = std::str::from_utf8(&attr.value)
+                .map_err(|e| XlStreamError::Internal(format!("non-UTF8 attr value: {e}")))?;
+            new_elem.push_attribute((key, val));
         }
     }
-    if let Some(t) = cell_type {
+    if let Some(t) = cell_type.as_attr() {
         new_elem.push_attribute(("t", t));
     }
-    new_elem
+    Ok(new_elem)
 }
 
 fn parse_workbook_sheets<R: Read + std::io::Seek>(
@@ -420,11 +435,9 @@ mod tests {
     use calamine::Reader as CalReader;
 
     use super::*;
-    use crate::convert::CellResult;
+    use crate::convert::{CellResult, XmlCellType};
 
-    fn make_results(
-        entries: &[(u32, u16, &str, Option<&'static str>)],
-    ) -> HashMap<(u32, u16), CellResult> {
+    fn make_results(entries: &[(u32, u16, &str, XmlCellType)]) -> HashMap<(u32, u16), CellResult> {
         entries
             .iter()
             .map(|(r, c, v, t)| ((*r, *c), CellResult { value: (*v).to_string(), cell_type: *t }))
@@ -434,7 +447,7 @@ mod tests {
     #[test]
     fn replaces_number_value_in_formula_cell() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="A2"><v>10</v></c><c r="B2"><f>A2*2</f><v>20</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "42", None)]);
+        let results = make_results(&[(1, 1, "42", XmlCellType::Number)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains("<f>A2*2</f>"), "formula must be preserved");
@@ -454,7 +467,7 @@ mod tests {
     #[test]
     fn updates_cell_type_for_string_result() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2"><f>A2&amp;"!"</f><v>hi</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "hello", Some("str"))]);
+        let results = make_results(&[(1, 1, "hello", XmlCellType::InlineString)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains(r#"t="str""#), "t must be set to str: {out_str}");
@@ -464,7 +477,7 @@ mod tests {
     #[test]
     fn updates_cell_type_for_boolean_result() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2"><f>A2&gt;0</f><v>0</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "1", Some("b"))]);
+        let results = make_results(&[(1, 1, "1", XmlCellType::Boolean)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains(r#"t="b""#), "t must be set to b: {out_str}");
@@ -474,7 +487,7 @@ mod tests {
     #[test]
     fn updates_cell_type_for_error_result() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2"><f>1/0</f><v>0</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "#DIV/0!", Some("e"))]);
+        let results = make_results(&[(1, 1, "#DIV/0!", XmlCellType::Error)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains(r#"t="e""#));
@@ -484,7 +497,7 @@ mod tests {
     #[test]
     fn inserts_value_when_no_v_element_exists() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2"><f>A2*2</f></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "42", None)]);
+        let results = make_results(&[(1, 1, "42", XmlCellType::Number)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains("<v>42</v>"), "must insert <v>: {out_str}");
@@ -493,7 +506,7 @@ mod tests {
     #[test]
     fn removes_old_type_for_number_result() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2" t="e"><f>1/0</f><v>#DIV/0!</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "42", None)]);
+        let results = make_results(&[(1, 1, "42", XmlCellType::Number)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(!out_str.contains(r#"t="e""#), "old t must be removed: {out_str}");
@@ -503,7 +516,7 @@ mod tests {
     #[test]
     fn preserves_style_attribute() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2" s="4"><f>A2*2</f><v>20</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "42", None)]);
+        let results = make_results(&[(1, 1, "42", XmlCellType::Number)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains(r#"s="4""#), "style must be preserved: {out_str}");
@@ -512,7 +525,8 @@ mod tests {
     #[test]
     fn handles_mixed_formula_and_data_rows() {
         let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2"><v>10</v></c><c r="B2"><f>A2*2</f><v>20</v></c></row><row r="3"><c r="A3"><v>30</v></c><c r="B3"><f>A3*2</f><v>60</v></c></row></sheetData></worksheet>"#;
-        let results = make_results(&[(1, 1, "42", None), (2, 1, "99", None)]);
+        let results =
+            make_results(&[(1, 1, "42", XmlCellType::Number), (2, 1, "99", XmlCellType::Number)]);
         let out = replace_sheet_values(xml, &results).unwrap();
         let out_str = std::str::from_utf8(&out).unwrap();
         assert!(out_str.contains(r#"<c r="A1" t="s"><v>0</v></c>"#));
@@ -561,8 +575,11 @@ mod tests {
 
         let mut sheet_results = HashMap::new();
         let mut cells = HashMap::new();
-        cells.insert((0u32, 1u16), CellResult { value: "42".into(), cell_type: None });
-        cells.insert((1, 1), CellResult { value: "99".into(), cell_type: None });
+        cells.insert(
+            (0u32, 1u16),
+            CellResult { value: "42".into(), cell_type: XmlCellType::Number },
+        );
+        cells.insert((1, 1), CellResult { value: "99".into(), cell_type: XmlCellType::Number });
         sheet_results.insert("Sheet1".to_string(), cells);
 
         copy_and_replace(input.path(), output.path(), &sheet_results).unwrap();
@@ -574,5 +591,37 @@ mod tests {
         assert_eq!(rows[0][1], calamine::Data::Float(42.0));
         assert_eq!(rows[1][1], calamine::Data::Float(99.0));
         assert_eq!(rows[0][0], calamine::Data::Float(10.0));
+    }
+
+    #[test]
+    fn replaces_self_closing_v_element() {
+        let xml = br#"<?xml version="1.0"?><worksheet><sheetData><row r="2"><c r="B2"><f>A2*2</f><v/></c></row></sheetData></worksheet>"#;
+        let results = make_results(&[(1, 1, "42", XmlCellType::Number)]);
+        let out = replace_sheet_values(xml, &results).unwrap();
+        let out_str = std::str::from_utf8(&out).unwrap();
+        assert!(out_str.contains("<v>42</v>"), "self-closing <v/> must expand: {out_str}");
+    }
+
+    #[test]
+    fn copy_and_replace_errors_on_unknown_sheet() {
+        let input = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+        {
+            let mut wb = rust_xlsxwriter::Workbook::new();
+            let ws = wb.add_worksheet();
+            ws.set_name("Sheet1").unwrap();
+            ws.write_number(0, 0, 1.0).unwrap();
+            wb.save(input.path()).unwrap();
+        }
+        let output = tempfile::NamedTempFile::with_suffix(".xlsx").unwrap();
+
+        let mut results = HashMap::new();
+        let mut cells = HashMap::new();
+        cells
+            .insert((0u32, 0u16), CellResult { value: "1".into(), cell_type: XmlCellType::Number });
+        results.insert("NoSuchSheet".to_string(), cells);
+
+        let err = copy_and_replace(input.path(), output.path(), &results).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("NoSuchSheet"), "error must name the sheet: {msg}");
     }
 }
