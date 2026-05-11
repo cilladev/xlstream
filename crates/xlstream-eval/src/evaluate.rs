@@ -48,6 +48,9 @@ struct EvalPlan {
     row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
     self_referential_cols: HashSet<u32>,
+    col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
+    row_override_texts: HashMap<u32, HashMap<u32, String>>,
+    values_only: bool,
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
@@ -65,6 +68,20 @@ struct SheetEvalPlan {
     row_overrides: HashMap<u32, HashMap<u32, Ast>>,
     topo_order: Vec<u32>,
     self_referential_cols: HashSet<u32>,
+    col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
+    row_override_texts: HashMap<u32, HashMap<u32, String>>,
+}
+
+/// Output of [`build_eval_plan`]: topo order, ASTs, overrides, lookup keys,
+/// self-referential columns, formula templates, and override texts.
+struct BuildPlanResult {
+    topo_order: Vec<u32>,
+    col_asts: HashMap<u32, Ast>,
+    row_overrides: HashMap<u32, HashMap<u32, Ast>>,
+    lookup_keys: Vec<LookupKey>,
+    self_referential_cols: HashSet<u32>,
+    col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
+    row_override_texts: HashMap<u32, HashMap<u32, String>>,
 }
 
 /// Evaluate every formula in `input`, write results to `output`, and return
@@ -97,6 +114,7 @@ struct SheetEvalPlan {
 /// ).unwrap_err();
 /// assert!(matches!(err, xlstream_core::XlStreamError::Xlsx(_)));
 /// ```
+#[allow(clippy::too_many_lines)]
 #[must_use = "evaluation results must be inspected for errors"]
 pub fn evaluate(
     input: &Path,
@@ -108,6 +126,7 @@ pub fn evaluate(
     plan.iterative_calc = options.iterative_calc;
     plan.max_iterations = options.max_iterations;
     plan.max_change = options.max_change;
+    plan.values_only = options.values_only;
     let mut writer = Writer::create(output)?;
 
     let num_workers = options.workers.unwrap_or_else(num_cpus::get).max(1);
@@ -169,7 +188,17 @@ pub fn evaluate(
                                 &sec_options,
                             );
                         }
-                        sh.write_row(row_idx, &row_values)?;
+                        if plan.values_only || sp.col_templates.is_empty() {
+                            sh.write_row(row_idx, &row_values)?;
+                        } else {
+                            write_formula_cells(
+                                &mut sh,
+                                row_idx,
+                                &row_values,
+                                &sp.col_templates,
+                                &sp.row_override_texts,
+                            )?;
+                        }
                     }
                 } else {
                     while let Some((row_idx, row_values)) = stream.next_row()? {
@@ -186,12 +215,14 @@ pub fn evaluate(
             iterative_calc: plan.iterative_calc,
             max_iterations: plan.max_iterations,
             max_change: plan.max_change,
-            values_only: false,
+            values_only: plan.values_only,
         });
         let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
         let prelude = Arc::new(plan.prelude);
         let col_asts = Arc::new(plan.col_asts);
         let row_overrides_arc = Arc::new(plan.row_overrides);
+        let col_templates_arc = Arc::new(plan.col_templates);
+        let row_override_texts_arc = Arc::new(plan.row_override_texts);
 
         stream_parallel(
             input,
@@ -205,6 +236,8 @@ pub fn evaluate(
             &main_sheet_name,
             plan.total_data_rows,
             num_workers,
+            &col_templates_arc,
+            &row_override_texts_arc,
         )?
     } else {
         tracing::debug!("single-threaded evaluation");
@@ -256,27 +289,35 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         sheets_with_formulas.first().map(|(_, f)| f.clone()).unwrap_or_default();
 
     // Parse + classify formula columns; build topo order.
-    let (topo_order, col_asts, row_overrides, lookup_keys, self_referential_cols) =
-        if let Some(ref main) = main_sheet {
-            build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
-        } else {
-            (Vec::new(), HashMap::new(), HashMap::new(), Vec::new(), HashSet::new())
-        };
+    let main_result = if let Some(ref main) = main_sheet {
+        build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
+    } else {
+        BuildPlanResult {
+            topo_order: Vec::new(),
+            col_asts: HashMap::new(),
+            row_overrides: HashMap::new(),
+            lookup_keys: Vec::new(),
+            self_referential_cols: HashSet::new(),
+            col_templates: HashMap::new(),
+            row_override_texts: HashMap::new(),
+        }
+    };
 
     // Build eval plans for secondary formula-bearing sheets.
     let mut secondary_plans: HashMap<String, SheetEvalPlan> = HashMap::new();
     let mut secondary_lookup_keys: Vec<LookupKey> = Vec::new();
     for (sheet_name, formulas) in sheets_with_formulas.iter().skip(1) {
-        let (sec_topo, sec_asts, sec_overrides, lk, sec_self_ref_cols) =
+        let sec_result =
             build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges, &table_infos)?;
         // Detect cross-sheet cell references and add as lookup keys.
-        for ast in sec_asts.values() {
+        for ast in sec_result.col_asts.values() {
             let refs = extract_references(ast);
             for r in &refs.cells {
                 if let Reference::Cell { sheet: Some(ref s), .. } = r {
-                    let already =
-                        secondary_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s))
-                            || lk.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
+                    let already = secondary_lookup_keys
+                        .iter()
+                        .any(|k| k.sheet.eq_ignore_ascii_case(s))
+                        || sec_result.lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
                     if !already {
                         secondary_lookup_keys.push(LookupKey {
                             kind: xlstream_parse::LookupKind::VLookup,
@@ -288,14 +329,17 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 }
             }
         }
-        for per_row in sec_overrides.values() {
+        for per_row in sec_result.row_overrides.values() {
             for ast in per_row.values() {
                 let refs = extract_references(ast);
                 for r in &refs.cells {
                     if let Reference::Cell { sheet: Some(ref s), .. } = r {
                         let already =
                             secondary_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s))
-                                || lk.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
+                                || sec_result
+                                    .lookup_keys
+                                    .iter()
+                                    .any(|k| k.sheet.eq_ignore_ascii_case(s));
                         if !already {
                             secondary_lookup_keys.push(LookupKey {
                                 kind: xlstream_parse::LookupKind::VLookup,
@@ -308,14 +352,16 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 }
             }
         }
-        secondary_lookup_keys.extend(lk);
+        secondary_lookup_keys.extend(sec_result.lookup_keys);
         secondary_plans.insert(
             sheet_name.clone(),
             SheetEvalPlan {
-                col_asts: sec_asts,
-                row_overrides: sec_overrides,
-                topo_order: sec_topo,
-                self_referential_cols: sec_self_ref_cols,
+                col_asts: sec_result.col_asts,
+                row_overrides: sec_result.row_overrides,
+                topo_order: sec_result.topo_order,
+                self_referential_cols: sec_result.self_referential_cols,
+                col_templates: sec_result.col_templates,
+                row_override_texts: sec_result.row_override_texts,
             },
         );
     }
@@ -323,8 +369,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     // Collect main sheet aggregate keys and run prelude.
     let main_agg_keys: Vec<AggregateKey> = {
         let mut seen = HashSet::new();
-        let primary = col_asts.values();
-        let overrides = row_overrides.values().flat_map(HashMap::values);
+        let primary = main_result.col_asts.values();
+        let overrides = main_result.row_overrides.values().flat_map(HashMap::values);
         primary
             .chain(overrides)
             .flat_map(crate::prelude_plan::collect_aggregate_keys)
@@ -333,8 +379,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     };
     let main_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
         let mut seen = HashSet::new();
-        let primary = col_asts.values();
-        let overrides = row_overrides.values().flat_map(HashMap::values);
+        let primary = main_result.col_asts.values();
+        let overrides = main_result.row_overrides.values().flat_map(HashMap::values);
         primary
             .chain(overrides)
             .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
@@ -343,8 +389,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     };
     let main_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
         let mut seen = HashSet::new();
-        let primary = col_asts.values();
-        let overrides = row_overrides.values().flat_map(HashMap::values);
+        let primary = main_result.col_asts.values();
+        let overrides = main_result.row_overrides.values().flat_map(HashMap::values);
         primary
             .chain(overrides)
             .flat_map(crate::prelude_plan::collect_bounded_range_keys)
@@ -418,7 +464,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     // Cross-sheet bounded ranges in range-expanding functions (e.g.
     // NETWORKDAYS holidays) need the referenced sheet loaded as a lookup
     // sheet so expand_range can resolve them.
-    let mut extended_lookup_keys = lookup_keys;
+    let mut extended_lookup_keys = main_result.lookup_keys;
     for rk in &main_range_keys {
         if let Some(ref sheet_name) = rk.sheet {
             let already_present =
@@ -474,10 +520,13 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
 
     let plan = EvalPlan {
         prelude,
-        col_asts,
-        row_overrides,
-        topo_order,
-        self_referential_cols,
+        col_asts: main_result.col_asts,
+        row_overrides: main_result.row_overrides,
+        topo_order: main_result.topo_order,
+        self_referential_cols: main_result.self_referential_cols,
+        col_templates: main_result.col_templates,
+        row_override_texts: main_result.row_override_texts,
+        values_only: false,
         secondary_plans,
         main_sheet,
         sheet_names,
@@ -504,6 +553,59 @@ fn count_data_rows(reader: &mut Reader, main_sheet: &str) -> Result<u32, XlStrea
         count = count.saturating_add(1);
     }
     Ok(count)
+}
+
+/// Write a row with formula text for formula columns and plain values for
+/// data columns. Override texts take precedence over column templates.
+///
+/// `rust_xlsxwriter` infers cell type from the result string via
+/// `parse::<f64>`. Text results that look numeric and empty results would
+/// be mis-typed. For those cells, only the value is written (formula
+/// omitted) to preserve value correctness.
+fn write_formula_cells(
+    sh: &mut xlstream_io::SheetHandle<'_>,
+    row_idx: u32,
+    values: &[Value],
+    col_templates: &HashMap<u32, crate::formula_template::FormulaTemplate>,
+    row_override_texts: &HashMap<u32, HashMap<u32, String>>,
+) -> Result<(), XlStreamError> {
+    sh.enforce_row_order(row_idx)?;
+    for (col_idx, val) in values.iter().enumerate() {
+        let col = u16::try_from(col_idx).map_err(|_| {
+            XlStreamError::Internal(format!("column index {col_idx} exceeds u16::MAX"))
+        })?;
+        let col_u32 = u32::from(col);
+        let formula_text = row_override_texts
+            .get(&col_u32)
+            .and_then(|m| m.get(&row_idx))
+            .cloned()
+            .or_else(|| col_templates.get(&col_u32).map(|t| t.reconstruct(row_idx + 1)));
+        if let Some(text) = formula_text {
+            if result_cacheable(val) {
+                sh.write_formula(row_idx, col, &text, val)?;
+            } else {
+                sh.write_value(row_idx, col, val)?;
+            }
+        } else {
+            sh.write_value(row_idx, col, val)?;
+        }
+    }
+    Ok(())
+}
+
+/// Whether `rust_xlsxwriter` can cache this value type correctly in a
+/// formula cell. Numeric, boolean, error, and date results are fine.
+/// Text results that parse as f64 and empty results lose their type.
+fn result_cacheable(val: &Value) -> bool {
+    match val {
+        Value::Number(_)
+        | Value::Integer(_)
+        | Value::Date(_)
+        | Value::Bool(_)
+        | Value::Error(_) => true,
+        Value::Text(s) => s.parse::<f64>().is_err() && !s.is_empty(),
+        Value::Empty => false,
+    }
 }
 
 /// Stream all sheets single-threaded: evaluate formula columns on the main
@@ -591,7 +693,20 @@ fn stream_single_threaded(
                 }
             }
 
-            sh.write_row(row_idx, &row_values)?;
+            if plan.values_only || sheet_plan.is_none() {
+                sh.write_row(row_idx, &row_values)?;
+            } else {
+                let (templates, override_texts) = if is_main {
+                    (&plan.col_templates, &plan.row_override_texts)
+                } else if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
+                    (&sp.col_templates, &sp.row_override_texts)
+                } else {
+                    sh.write_row(row_idx, &row_values)?;
+                    rows_processed += 1;
+                    continue;
+                };
+                write_formula_cells(&mut sh, row_idx, &row_values, templates, override_texts)?;
+            }
             rows_processed += 1;
         }
 
@@ -606,7 +721,7 @@ fn stream_single_threaded(
 /// bounded channel; the caller drains them in row order.
 ///
 /// Non-main sheets must be written by the caller before calling this.
-#[allow(clippy::too_many_arguments)] // worker contract: all args logically required
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn stream_parallel(
     input: &Path,
     output: &mut Writer,
@@ -619,6 +734,8 @@ fn stream_parallel(
     main_sheet: &str,
     total_data_rows: u32,
     num_workers: usize,
+    col_templates: &Arc<HashMap<u32, crate::formula_template::FormulaTemplate>>,
+    row_override_texts: &Arc<HashMap<u32, HashMap<u32, String>>>,
 ) -> Result<(u64, u64), XlStreamError> {
     let chunk_size = (total_data_rows as usize).div_ceil(num_workers);
 
@@ -692,7 +809,17 @@ fn stream_parallel(
             Ok((row_idx, values, formulas_count)) => {
                 buffer.insert(row_idx, (values, formulas_count));
                 while let Some((vals, fc)) = buffer.remove(&expected_row) {
-                    sh.write_row(expected_row, &vals)?;
+                    if eval_options.values_only || col_templates.is_empty() {
+                        sh.write_row(expected_row, &vals)?;
+                    } else {
+                        write_formula_cells(
+                            &mut sh,
+                            expected_row,
+                            &vals,
+                            col_templates,
+                            row_override_texts,
+                        )?;
+                    }
                     rows_processed += 1;
                     formulas_evaluated += fc;
                     expected_row += 1;
@@ -710,7 +837,11 @@ fn stream_parallel(
         if first_error.is_some() {
             break;
         }
-        sh.write_row(row_idx, &vals)?;
+        if eval_options.values_only || col_templates.is_empty() {
+            sh.write_row(row_idx, &vals)?;
+        } else {
+            write_formula_cells(&mut sh, row_idx, &vals, col_templates, row_override_texts)?;
+        }
         rows_processed += 1;
         formulas_evaluated += fc;
     }
@@ -848,10 +979,7 @@ fn build_eval_plan(
     all_sheet_names: &[String],
     named_ranges: &HashMap<String, String>,
     table_infos: &HashMap<String, xlstream_parse::TableInfo>,
-) -> Result<
-    (Vec<u32>, HashMap<u32, Ast>, HashMap<u32, HashMap<u32, Ast>>, Vec<LookupKey>, HashSet<u32>),
-    XlStreamError,
-> {
+) -> Result<BuildPlanResult, XlStreamError> {
     let mut col_formulas: HashMap<u32, Vec<(u32, String)>> = HashMap::new();
     for (row, col, text) in all_formulas {
         col_formulas.entry(*col).or_default().push((*row, text.clone()));
@@ -860,6 +988,8 @@ fn build_eval_plan(
     let mut col_asts: HashMap<u32, Ast> = HashMap::new();
     let mut row_overrides: HashMap<u32, HashMap<u32, Ast>> = HashMap::new();
     let mut all_lookup_keys: Vec<LookupKey> = Vec::new();
+    let mut col_templates: HashMap<u32, crate::formula_template::FormulaTemplate> = HashMap::new();
+    let mut row_override_texts: HashMap<u32, HashMap<u32, String>> = HashMap::new();
 
     for (&col, formulas) in &col_formulas {
         let (first_row, first_text) = &formulas[0];
@@ -895,6 +1025,10 @@ fn build_eval_plan(
         let rewritten = rewrite(first_ast.clone(), &ctx, &verdict);
         all_lookup_keys.extend(collect_lookup_keys(&rewritten));
         col_asts.insert(col, rewritten);
+        col_templates.insert(
+            col,
+            crate::formula_template::FormulaTemplate::new(formula_str.clone(), first_row + 1),
+        );
 
         for (row, text) in &formulas[1..] {
             if text == first_text {
@@ -936,6 +1070,7 @@ fn build_eval_plan(
             let rewritten = rewrite(ast, &row_ctx, &row_verdict);
             all_lookup_keys.extend(collect_lookup_keys(&rewritten));
             row_overrides.entry(col).or_default().insert(*row, rewritten);
+            row_override_texts.entry(col).or_default().insert(*row, formula_str.to_string());
         }
     }
 
@@ -967,7 +1102,15 @@ fn build_eval_plan(
         .collect();
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
-    Ok((topo_order, col_asts, row_overrides, all_lookup_keys, self_referential_cols))
+    Ok(BuildPlanResult {
+        topo_order,
+        col_asts,
+        row_overrides,
+        lookup_keys: all_lookup_keys,
+        self_referential_cols,
+        col_templates,
+        row_override_texts,
+    })
 }
 
 /// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes that `rust_xlsxwriter`
