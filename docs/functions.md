@@ -311,14 +311,14 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 |---|---|---|---|---|---|---|
 | ADDRESS | . | yes | v0.3 | | | Builds A1 string |
 | CHOOSE | x | yes | v0.1 | x | | |
-| COLUMN | . | yes | v0.2 | | | |
-| COLUMNS | . | yes | v0.2 | | | |
+| COLUMN | . | yes | v0.3 | | | |
+| COLUMNS | . | yes | v0.3 | | | |
 | HLOOKUP | x | yes | v0.1 | x | | |
 | INDEX | x | yes | v0.1 | x | x | |
 | LOOKUP | . | yes | v0.3 | x | | Legacy |
 | MATCH | x | yes | v0.1 | x | x | |
 | ROW | . | yes | v0.3 | | | |
-| ROWS | . | yes | v0.2 | | | |
+| ROWS | . | yes | v0.3 | | | |
 | VLOOKUP | x | yes | v0.1 | x | x | |
 | XLOOKUP | x | yes | v0.1 | x | | |
 | XMATCH | x | yes | v0.1 | x | | |

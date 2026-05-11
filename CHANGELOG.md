@@ -3,28 +3,18 @@
 All notable changes to xlstream. Format: [Keep a Changelog](https://keepachangelog.com/).
 Semver.
 
-## [Unreleased]
+## [0.2.1] - 2026-05-11
 
 ### Added
-- Table reference support: `Table[Column]` and `[@Column]` structured references resolve to cell/range references at classification time
-- MINIFS and MAXIFS conditional aggregate functions
-- SUMPRODUCT: sum of element-wise products of bounded ranges
-- ROWS and COLUMNS: return row/column count from range references
-- Self-referential formula support via iterative calculation (e.g., `=IF(G2="Risk_KC",O2*-1,O2)` in cell O2)
-- `EvaluateOptions` with `iterative_calc`, `max_iterations`, `max_change` settings
-- CLI: `--max-iterations`, `--max-change`, `--no-iterative-calc`
-- Python: `iterative_calc`, `max_iterations`, `max_change` kwargs
-- Formula preservation: output now includes `<f>formula</f><v>cached</v>` for formula cells by default
-- `--values-only` CLI flag to write only cached values (old behavior)
-- `values_only` Python kwarg for the same
-
-### Changed
-- `evaluate()` signature now takes `&EvaluateOptions` instead of `Option<usize>`
-- Default output mode changed from values-only to formula-preserving
+- Table reference support (`Table[Column]`, `[@Column]`)
+- SUMPRODUCT, MINIFS, MAXIFS functions
+- Self-referential formula support via iterative calculation
+- Formula preservation: output includes `<f>` and `<v>` by default; `--values-only` for static output
+- Iterative calculation controls: `--max-iterations`, `--max-change`, `--no-iterative-calc`
 
 ### Fixed
-- Formulas on secondary sheets (not referenced by the main sheet) now evaluated instead of producing None (#42)
-- Mixed-column formulas: columns with structurally different formulas across rows now use per-row AST overrides
+- Formulas on secondary sheets now evaluated correctly (#42)
+- Mixed-column formulas with per-row variations now handled
 
 ## [0.2.0] - 2026-04-21
 

@@ -23,7 +23,7 @@ Each version gets its own folder with a checklist. When a version ships, its fol
 
 ### Where we are
 
-Excel has ~516 functions. xlstream implements 103 functions — covering all 15 functions that appear in 76% of real business spreadsheets (Enron Corpus, Hermans et al., IEEE ICSE 2015). See [functions.md](../functions.md) for the full cross-reference.
+Excel has ~516 functions. xlstream implements 106 functions — covering all 15 functions that appear in 76% of real business spreadsheets (Enron Corpus, Hermans et al., IEEE ICSE 2015). See [functions.md](../functions.md) for the full cross-reference.
 
 ### Where we're going
 
@@ -32,7 +32,7 @@ The goal is to support **every formula that fits the streaming model** — ~465 
 ### Version plan
 
 ```
-v0.1  ✓  Core engine (113 functions, streaming, Python bindings)
+v0.1  ✓  Core engine (103 functions, streaming, Python bindings)
 v0.2     Coverage + fidelity (named ranges, table refs, keep-formulas)
 v0.3     Statistical + engineering (STDEV, VAR, NORM.DIST, CONVERT, HEX2DEC)
 v0.4     LET + advanced financial (XNPV, XIRR, NPER, SLN, variable binding)
@@ -42,7 +42,7 @@ v1.0     API stability commitment — no breaking changes after this
 
 ### v0.2 — Coverage + fidelity
 
-Named ranges, table references, SUMPRODUCT, MINIFS/MAXIFS, ROWS/COLUMNS. Keep-formulas output mode. See [`v0.2/README.md`](v0.2/README.md).
+Named ranges, table references, SUMPRODUCT, MINIFS/MAXIFS. Keep-formulas output mode. Self-referential formula support. See [`v0.2/README.md`](v0.2/README.md).
 
 ### v0.3 — Statistical + engineering
 
@@ -96,8 +96,8 @@ These are architecturally incompatible with streaming. Users get a clear `Classi
 
 | Version | Functions | Operators | Total surfaces |
 |---|---|---|---|
-| v0.1 | 113 | 13 | 126 |
-| v0.2 | ~120 | 13 | ~133 |
+| v0.1 | 103 | 13 | 116 |
+| v0.2 | 106 | 13 | 119 |
 | v0.3 | ~265 | 13 | ~278 |
 | v0.4 | ~310 | 13 | ~323 |
 | v0.5 | ~360 | 13 | ~373 |
