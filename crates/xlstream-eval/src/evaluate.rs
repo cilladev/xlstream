@@ -72,8 +72,7 @@ struct SheetEvalPlan {
     row_override_texts: HashMap<u32, HashMap<u32, String>>,
 }
 
-/// Output of [`build_eval_plan`]: topo order, ASTs, overrides, lookup keys,
-/// self-referential columns, formula templates, and override texts.
+/// Output of [`build_eval_plan`].
 struct BuildPlanResult {
     topo_order: Vec<u32>,
     col_asts: HashMap<u32, Ast>,
@@ -162,7 +161,7 @@ pub fn evaluate(
                         iterative_calc: plan.iterative_calc,
                         max_iterations: plan.max_iterations,
                         max_change: plan.max_change,
-                        values_only: false,
+                        values_only: plan.values_only,
                     };
                     let mut header_pending = true;
                     while let Some((row_idx, mut row_values)) = stream.next_row()? {
@@ -584,6 +583,11 @@ fn write_formula_cells(
             if result_cacheable(val) {
                 sh.write_formula(row_idx, col, &text, val)?;
             } else {
+                tracing::debug!(
+                    row = row_idx,
+                    col = col_idx,
+                    "formula written as value-only: result type not cacheable by rust_xlsxwriter"
+                );
                 sh.write_value(row_idx, col, val)?;
             }
         } else {
@@ -623,7 +627,7 @@ fn stream_single_threaded(
         iterative_calc: plan.iterative_calc,
         max_iterations: plan.max_iterations,
         max_change: plan.max_change,
-        values_only: false,
+        values_only: plan.values_only,
     };
     let mut rows_processed: u64 = 0;
     let mut formulas_evaluated: u64 = 0;
@@ -1113,12 +1117,11 @@ fn build_eval_plan(
     })
 }
 
-/// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes that `rust_xlsxwriter`
-/// injects for "future" Excel functions (CONCAT, TEXTJOIN, IFS, etc.).
+/// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes from formula text.
 ///
-/// These prefixes are internal to the xlsx format and are not part of the
-/// canonical function name. Calamine preserves them verbatim, so we strip
-/// them here before parsing.
+/// These prefixes are part of the xlsx XML format for "future" Excel
+/// functions (CONCAT, TEXTJOIN, IFS, etc.). Calamine preserves them
+/// verbatim; we strip them before parsing.
 fn strip_xlfn_prefix(formula: &str) -> String {
     formula.replace("_xlfn._xlws.", "").replace("_xlfn.", "")
 }
@@ -1293,5 +1296,55 @@ mod tests {
         let a = parse("Sheet1!A2*2").unwrap();
         let b = parse("Sheet1!A3*2").unwrap();
         assert!(!super::ast_streaming_eq(a.root(), b.root()));
+    }
+
+    #[test]
+    fn result_cacheable_number() {
+        assert!(super::result_cacheable(&Value::Number(42.0)));
+    }
+
+    #[test]
+    fn result_cacheable_integer() {
+        assert!(super::result_cacheable(&Value::Integer(7)));
+    }
+
+    #[test]
+    fn result_cacheable_bool() {
+        assert!(super::result_cacheable(&Value::Bool(true)));
+        assert!(super::result_cacheable(&Value::Bool(false)));
+    }
+
+    #[test]
+    fn result_cacheable_error() {
+        assert!(super::result_cacheable(&Value::Error(xlstream_core::CellError::Div0)));
+        assert!(super::result_cacheable(&Value::Error(xlstream_core::CellError::Na)));
+    }
+
+    #[test]
+    fn result_cacheable_date() {
+        assert!(super::result_cacheable(&Value::Date(xlstream_core::ExcelDate {
+            serial: 44927.0,
+        })));
+    }
+
+    #[test]
+    fn result_cacheable_text_normal() {
+        assert!(super::result_cacheable(&Value::Text("hello".into())));
+    }
+
+    #[test]
+    fn result_cacheable_text_numeric_string_rejected() {
+        assert!(!super::result_cacheable(&Value::Text("123".into())));
+        assert!(!super::result_cacheable(&Value::Text("3.14".into())));
+    }
+
+    #[test]
+    fn result_cacheable_text_empty_string_rejected() {
+        assert!(!super::result_cacheable(&Value::Text("".into())));
+    }
+
+    #[test]
+    fn result_cacheable_empty_rejected() {
+        assert!(!super::result_cacheable(&Value::Empty));
     }
 }

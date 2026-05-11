@@ -1,5 +1,13 @@
 //! Formula template for reconstructing per-row formula text.
 
+/// Byte position of a relative row-number reference within formula text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RowRef {
+    byte_start: usize,
+    byte_end: usize,
+    row: u32,
+}
+
 /// A column-level formula template that reconstructs per-row formula text
 /// by substituting row numbers at known byte positions.
 ///
@@ -8,7 +16,7 @@
 /// byte positions of relative row-number references within it.
 pub(crate) struct FormulaTemplate {
     text: String,
-    row_refs: Vec<(usize, usize, u32)>,
+    row_refs: Vec<RowRef>,
     base_row: u32,
 }
 
@@ -32,11 +40,11 @@ impl FormulaTemplate {
         let mut result = String::with_capacity(self.text.len() + 8);
         let mut last_end = 0;
 
-        for &(start, end, base_ref_row) in &self.row_refs {
-            result.push_str(&self.text[last_end..start]);
-            let new_row = (i64::from(base_ref_row) + row_delta).clamp(1, max_row) as u32;
+        for r in &self.row_refs {
+            result.push_str(&self.text[last_end..r.byte_start]);
+            let new_row = (i64::from(r.row) + row_delta).clamp(1, max_row) as u32;
             result.push_str(&new_row.to_string());
-            last_end = end;
+            last_end = r.byte_end;
         }
         result.push_str(&self.text[last_end..]);
         result
@@ -50,7 +58,7 @@ impl FormulaTemplate {
 ///
 /// Calamine normalizes cell references to uppercase, so only uppercase
 /// column letters are matched.
-fn extract_row_refs(text: &str) -> Vec<(usize, usize, u32)> {
+fn extract_row_refs(text: &str) -> Vec<RowRef> {
     let bytes = text.as_bytes();
     let len = bytes.len();
     let mut refs = Vec::new();
@@ -75,14 +83,20 @@ fn extract_row_refs(text: &str) -> Vec<(usize, usize, u32)> {
             continue;
         }
 
-        // Skip single-quoted sheet names: 'Sheet Name'!
+        // Skip single-quoted sheet names (Excel escapes ' as '').
         if bytes[i] == b'\'' {
             i += 1;
-            while i < len && bytes[i] != b'\'' {
-                i += 1;
-            }
-            if i < len {
-                i += 1;
+            while i < len {
+                if bytes[i] == b'\'' {
+                    if i + 1 < len && bytes[i + 1] == b'\'' {
+                        i += 2;
+                    } else {
+                        i += 1;
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
             }
             if i < len && bytes[i] == b'!' {
                 i += 1;
@@ -147,7 +161,11 @@ fn extract_row_refs(text: &str) -> Vec<(usize, usize, u32)> {
         if !has_dollar {
             if let Ok(row_num) = text[digit_start..digit_end].parse::<u32>() {
                 if row_num > 0 {
-                    refs.push((digit_start, digit_end, row_num));
+                    refs.push(RowRef {
+                        byte_start: digit_start,
+                        byte_end: digit_end,
+                        row: row_num,
+                    });
                 }
             }
         }
@@ -164,25 +182,31 @@ mod tests {
     #[test]
     fn simple_refs_both_detected() {
         let refs = extract_row_refs("A2+B2");
-        assert_eq!(refs, vec![(1, 2, 2), (4, 5, 2)]);
+        assert_eq!(
+            refs,
+            vec![
+                RowRef { byte_start: 1, byte_end: 2, row: 2 },
+                RowRef { byte_start: 4, byte_end: 5, row: 2 },
+            ]
+        );
     }
 
     #[test]
     fn absolute_row_skipped() {
         let refs = extract_row_refs("$A$2+B2");
-        assert_eq!(refs, vec![(6, 7, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 6, byte_end: 7, row: 2 }]);
     }
 
     #[test]
     fn mixed_absolute_and_relative_in_range() {
         let refs = extract_row_refs("SUM($A$1:A2)");
-        assert_eq!(refs, vec![(10, 11, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 10, byte_end: 11, row: 2 }]);
     }
 
     #[test]
     fn cross_sheet_ref() {
         let refs = extract_row_refs("Sheet1!A2");
-        assert_eq!(refs, vec![(8, 9, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 8, byte_end: 9, row: 2 }]);
     }
 
     #[test]
@@ -194,7 +218,7 @@ mod tests {
     #[test]
     fn multi_digit_row() {
         let refs = extract_row_refs("A100");
-        assert_eq!(refs, vec![(1, 4, 100)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 1, byte_end: 4, row: 100 }]);
     }
 
     #[test]
@@ -206,53 +230,66 @@ mod tests {
     #[test]
     fn quoted_sheet_name_skipped() {
         let refs = extract_row_refs("'My Sheet'!A2");
-        assert_eq!(refs, vec![(12, 13, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 12, byte_end: 13, row: 2 }]);
     }
 
     #[test]
     fn function_name_not_matched() {
         let refs = extract_row_refs("SUM(A2)");
-        assert_eq!(refs, vec![(5, 6, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 5, byte_end: 6, row: 2 }]);
     }
 
     #[test]
     fn range_both_endpoints_detected() {
         let refs = extract_row_refs("A2:B10");
-        assert_eq!(refs, vec![(1, 2, 2), (4, 6, 10)]);
+        assert_eq!(
+            refs,
+            vec![
+                RowRef { byte_start: 1, byte_end: 2, row: 2 },
+                RowRef { byte_start: 4, byte_end: 6, row: 10 },
+            ]
+        );
     }
 
     #[test]
     fn absolute_col_relative_row() {
         let refs = extract_row_refs("$A2");
-        assert_eq!(refs, vec![(2, 3, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 2, byte_end: 3, row: 2 }]);
     }
 
     #[test]
     fn sheet_name_looks_like_cell_ref_skipped() {
         let refs = extract_row_refs("AB!C2");
-        assert_eq!(refs, vec![(4, 5, 2)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 4, byte_end: 5, row: 2 }]);
     }
 
     #[test]
     fn max_row_number() {
         let refs = extract_row_refs("A1048576");
-        assert_eq!(refs, vec![(1, 8, 1_048_576)]);
+        assert_eq!(refs, vec![RowRef { byte_start: 1, byte_end: 8, row: 1_048_576 }]);
     }
 
     #[test]
     fn string_literal_not_scanned() {
         let refs = extract_row_refs(r#"IF(A2="B3",C2,0)"#);
         assert_eq!(refs.len(), 2);
-        assert_eq!(refs[0].2, 2);
-        assert_eq!(refs[1].2, 2);
+        assert_eq!(refs[0].row, 2);
+        assert_eq!(refs[1].row, 2);
     }
 
     #[test]
     fn escaped_quotes_in_string_literal() {
         let refs = extract_row_refs(r#"IF(A2="""",C2,0)"#);
         assert_eq!(refs.len(), 2);
-        assert_eq!(refs[0].2, 2);
-        assert_eq!(refs[1].2, 2);
+        assert_eq!(refs[0].row, 2);
+        assert_eq!(refs[1].row, 2);
+    }
+
+    #[test]
+    fn escaped_single_quotes_in_sheet_name() {
+        // Excel escapes ' as '' inside single-quoted sheet names.
+        let refs = extract_row_refs("'It''s a sheet'!A2");
+        assert_eq!(refs, vec![RowRef { byte_start: 17, byte_end: 18, row: 2 }]);
     }
 
     #[test]
