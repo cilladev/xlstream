@@ -35,6 +35,8 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "::notice::No gh-pages baseline yet — skipping comparison. Baseline created on first merge to main."
           fi
+      - name: Reset Cargo.lock before gh-pages switch
+        run: git checkout -- Cargo.lock
       - name: Compare against baseline
         if: steps.check-baseline.outputs.exists == 'true'
         uses: benchmark-action/github-action-benchmark@v1
