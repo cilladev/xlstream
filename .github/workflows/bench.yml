@@ -63,6 +63,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run micro-benchmarks
         run: cargo bench --bench parse --bench arithmetic --bench lookup --bench string --bench math --bench conditional --bench info --bench date --bench financial -p xlstream-benchmarks -- --output-format bencher | tee output.txt
+      - name: Reset Cargo.lock before gh-pages switch
+        run: git checkout -- Cargo.lock
       - name: Update baseline
         uses: benchmark-action/github-action-benchmark@v1
         with:
