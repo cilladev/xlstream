@@ -8,7 +8,6 @@
 
 These didn't ship with v0.2:
 
-- [ ] **Keep formulas by default** — write `<f>formula</f><v>cached</v>` instead of just `<v>`. Add `--values-only` flag for static output. ~4 hours.
 - [ ] **MID empty string workaround** — `rust_xlsxwriter` drops empty string writes. Patch upstream or work around. ~1 hour.
 - [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 700k-row workbook (currently 734 MB).
 
