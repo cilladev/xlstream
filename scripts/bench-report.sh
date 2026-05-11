@@ -136,22 +136,6 @@ RSS_MEDIUM_4W=$(format_rss "$MEDIUM_4W_RSS")
 RSS_LARGE_1W=$(format_rss "$LARGE_1W_RSS")
 RSS_LARGE_8W=$(format_rss "$LARGE_8W_RSS")
 
-echo "-> running micro-benchmarks (criterion)..."
-MICRO_RAW=$(cargo bench --bench parse --bench arithmetic --bench lookup -p xlstream-benchmarks 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
-
-extract_bench() {
-    local name="$1"
-    echo "$MICRO_RAW" | grep "$name" -A3 | grep "time:" | head -1 | \
-        sed 's/.*\[\([^]]*\)\].*/\1/' | awk '{print $3, $4}'
-}
-
-PARSE=$(extract_bench "parse_30")
-ARITH_ADD=$(extract_bench "/add")
-ARITH_MUL=$(extract_bench "/mul")
-ARITH_DIV=$(extract_bench "/div")
-CONCAT=$(extract_bench "concat")
-VLOOKUP=$(extract_bench "vlookup")
-
 # --- Find previous report for comparison ---
 echo "-> looking for previous report..."
 PREV_REPORT=""
@@ -186,16 +170,6 @@ cat > "$REPORT_FILE" << EOF
 | Large | 1,000,000 | 1 | ${LARGE_1W:-n/a} | ${RSS_LARGE_1W:-—} |
 | Large | 1,000,000 | 8 | ${LARGE_8W:-n/a} | ${RSS_LARGE_8W:-—} |
 
-## Micro-benchmarks
-
-| Benchmark | Median |
-|---|---|
-| Parse 30 formulas | ${PARSE:-n/a} |
-| Arithmetic (add) | ${ARITH_ADD:-n/a} |
-| Arithmetic (mul) | ${ARITH_MUL:-n/a} |
-| Arithmetic (div) | ${ARITH_DIV:-n/a} |
-| String concat | ${CONCAT:-n/a} |
-| VLOOKUP exact (1k) | ${VLOOKUP:-n/a} |
 EOF
 
 # --- Auto-compare with previous report ---
