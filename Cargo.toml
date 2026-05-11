@@ -1,5 +1,4 @@
 # xlstream workspace root.
-# xlstream workspace root.
 
 [workspace]
 resolver = "2"
