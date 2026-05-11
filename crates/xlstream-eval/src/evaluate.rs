@@ -64,6 +64,17 @@ struct EvalPlan {
     max_change: f64,
 }
 
+/// Arc-wrapped fields from [`EvalPlan`] shared across parallel workers.
+struct SharedPlan {
+    prelude: Arc<Prelude>,
+    col_asts: Arc<HashMap<u32, Ast>>,
+    row_overrides: Arc<HashMap<u32, HashMap<u32, Ast>>>,
+    self_referential_cols: Arc<HashSet<u32>>,
+    col_templates: Arc<HashMap<u32, crate::formula_template::FormulaTemplate>>,
+    row_override_texts: Arc<HashMap<u32, HashMap<u32, String>>>,
+    eval_options: Arc<EvaluateOptions>,
+}
+
 /// Per-sheet formula evaluation data for secondary (non-main) sheets.
 struct SheetEvalPlan {
     col_asts: HashMap<u32, Ast>,
@@ -211,34 +222,30 @@ pub fn evaluate(
             }
         }
 
-        let eval_options = Arc::new(EvaluateOptions {
-            workers: options.workers,
-            iterative_calc: plan.iterative_calc,
-            max_iterations: plan.max_iterations,
-            max_change: plan.max_change,
-            output_mode: plan.output_mode,
-        });
-        let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
-        let prelude = Arc::new(plan.prelude);
-        let col_asts = Arc::new(plan.col_asts);
-        let row_overrides_arc = Arc::new(plan.row_overrides);
-        let col_templates_arc = Arc::new(plan.col_templates);
-        let row_override_texts_arc = Arc::new(plan.row_override_texts);
+        let shared = SharedPlan {
+            prelude: Arc::new(plan.prelude),
+            col_asts: Arc::new(plan.col_asts),
+            row_overrides: Arc::new(plan.row_overrides),
+            self_referential_cols: Arc::new(plan.self_referential_cols),
+            col_templates: Arc::new(plan.col_templates),
+            row_override_texts: Arc::new(plan.row_override_texts),
+            eval_options: Arc::new(EvaluateOptions {
+                workers: options.workers,
+                iterative_calc: plan.iterative_calc,
+                max_iterations: plan.max_iterations,
+                max_change: plan.max_change,
+                output_mode: plan.output_mode,
+            }),
+        };
 
         stream_parallel(
             input,
             &mut writer,
-            &prelude,
-            &col_asts,
-            &row_overrides_arc,
+            &shared,
             &plan.topo_order,
-            &self_referential_cols_arc,
-            &eval_options,
             &main_sheet_name,
             plan.total_data_rows,
             num_workers,
-            &col_templates_arc,
-            &row_override_texts_arc,
         )?
     } else {
         tracing::debug!("single-threaded evaluation");
@@ -727,21 +734,15 @@ fn stream_single_threaded(
 /// bounded channel; the caller drains them in row order.
 ///
 /// Non-main sheets must be written by the caller before calling this.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)]
 fn stream_parallel(
     input: &Path,
     output: &mut Writer,
-    prelude: &Arc<Prelude>,
-    col_asts: &Arc<HashMap<u32, Ast>>,
-    row_overrides: &Arc<HashMap<u32, HashMap<u32, Ast>>>,
+    shared: &SharedPlan,
     topo_order: &[u32],
-    self_referential_cols: &Arc<HashSet<u32>>,
-    eval_options: &Arc<EvaluateOptions>,
     main_sheet: &str,
     total_data_rows: u32,
     num_workers: usize,
-    col_templates: &Arc<HashMap<u32, crate::formula_template::FormulaTemplate>>,
-    row_override_texts: &Arc<HashMap<u32, HashMap<u32, String>>>,
 ) -> Result<(u64, u64), XlStreamError> {
     let chunk_size = (total_data_rows as usize).div_ceil(num_workers);
 
@@ -769,11 +770,11 @@ fn stream_parallel(
 
     for worker_id in 0..num_workers {
         let tx = tx.clone();
-        let prelude = Arc::clone(prelude);
-        let col_asts = Arc::clone(col_asts);
-        let row_overrides = Arc::clone(row_overrides);
-        let self_ref_cols = Arc::clone(self_referential_cols);
-        let opts = Arc::clone(eval_options);
+        let prelude = Arc::clone(&shared.prelude);
+        let col_asts = Arc::clone(&shared.col_asts);
+        let row_overrides = Arc::clone(&shared.row_overrides);
+        let self_ref_cols = Arc::clone(&shared.self_referential_cols);
+        let opts = Arc::clone(&shared.eval_options);
         let topo_order = topo_order.to_owned();
         let input_path = input_path.clone();
         let main_name = main_name.clone();
@@ -815,15 +816,17 @@ fn stream_parallel(
             Ok((row_idx, values, formulas_count)) => {
                 buffer.insert(row_idx, (values, formulas_count));
                 while let Some((vals, fc)) = buffer.remove(&expected_row) {
-                    if eval_options.output_mode.is_values_only() || col_templates.is_empty() {
+                    if shared.eval_options.output_mode.is_values_only()
+                        || shared.col_templates.is_empty()
+                    {
                         sh.write_row(expected_row, &vals)?;
                     } else {
                         write_formula_cells(
                             &mut sh,
                             expected_row,
                             &vals,
-                            col_templates,
-                            row_override_texts,
+                            &shared.col_templates,
+                            &shared.row_override_texts,
                         )?;
                     }
                     rows_processed += 1;
@@ -843,10 +846,16 @@ fn stream_parallel(
         if first_error.is_some() {
             break;
         }
-        if eval_options.output_mode.is_values_only() || col_templates.is_empty() {
+        if shared.eval_options.output_mode.is_values_only() || shared.col_templates.is_empty() {
             sh.write_row(row_idx, &vals)?;
         } else {
-            write_formula_cells(&mut sh, row_idx, &vals, col_templates, row_override_texts)?;
+            write_formula_cells(
+                &mut sh,
+                row_idx,
+                &vals,
+                &shared.col_templates,
+                &shared.row_override_texts,
+            )?;
         }
         rows_processed += 1;
         formulas_evaluated += fc;
