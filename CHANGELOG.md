@@ -14,9 +14,13 @@ Semver.
 - `EvaluateOptions` with `iterative_calc`, `max_iterations`, `max_change` settings
 - CLI: `--max-iterations`, `--max-change`, `--no-iterative-calc`
 - Python: `iterative_calc`, `max_iterations`, `max_change` kwargs
+- Formula preservation: output now includes `<f>formula</f><v>cached</v>` for formula cells by default
+- `--values-only` CLI flag to write only cached values (old behavior)
+- `values_only` Python kwarg for the same
 
 ### Changed
 - `evaluate()` signature now takes `&EvaluateOptions` instead of `Option<usize>`
+- Default output mode changed from values-only to formula-preserving
 
 ### Fixed
 - Formulas on secondary sheets (not referenced by the main sheet) now evaluated instead of producing None (#42)
