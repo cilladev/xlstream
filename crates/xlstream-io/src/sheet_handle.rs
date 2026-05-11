@@ -108,8 +108,30 @@ impl<'a> SheetHandle<'a> {
         Ok(())
     }
 
-    /// Enforce strictly-increasing row order.
-    fn enforce_row_order(&mut self, row_idx: u32) -> Result<(), XlStreamError> {
+    /// Advance the row cursor, enforcing strictly-increasing order.
+    ///
+    /// Call this once before writing individual cells via [`write_value`] or
+    /// [`write_formula`]. Not needed when using [`write_row`] (which calls
+    /// this internally).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XlStreamError::Internal`] if `row_idx` is not strictly
+    /// greater than the previous row written.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::Path;
+    /// use xlstream_core::Value;
+    /// use xlstream_io::Writer;
+    ///
+    /// let mut w = Writer::create(Path::new("out.xlsx")).unwrap();
+    /// let mut sh = w.add_sheet("Sheet1").unwrap();
+    /// sh.enforce_row_order(0).unwrap();
+    /// sh.write_value(0, 0, &Value::Number(1.0)).unwrap();
+    /// ```
+    pub fn enforce_row_order(&mut self, row_idx: u32) -> Result<(), XlStreamError> {
         if let Some(last) = self.last_row {
             if row_idx <= last {
                 return Err(XlStreamError::Internal(format!(
@@ -121,9 +143,30 @@ impl<'a> SheetHandle<'a> {
         Ok(())
     }
 
-    /// Dispatch a single [`Value`] to the appropriate `rust_xlsxwriter` write
-    /// method.
-    fn write_value(&mut self, row: u32, col: u16, val: &Value) -> Result<(), XlStreamError> {
+    /// Write a single data value at `(row, col)`.
+    ///
+    /// Call [`enforce_row_order`](Self::enforce_row_order) once for the row
+    /// before calling this. Not needed when using [`write_row`] (which
+    /// handles both steps).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`XlStreamError::XlsxWrite`] if the underlying write fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::Path;
+    /// use xlstream_core::Value;
+    /// use xlstream_io::Writer;
+    ///
+    /// let mut w = Writer::create(Path::new("out.xlsx")).unwrap();
+    /// let mut sh = w.add_sheet("Sheet1").unwrap();
+    /// sh.enforce_row_order(0).unwrap();
+    /// sh.write_value(0, 0, &Value::Number(42.0)).unwrap();
+    /// sh.write_formula(0, 1, "A1*2", &Value::Number(84.0)).unwrap();
+    /// ```
+    pub fn write_value(&mut self, row: u32, col: u16, val: &Value) -> Result<(), XlStreamError> {
         match val {
             Value::Number(n) => {
                 self.worksheet
