@@ -121,7 +121,11 @@ fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
                 max_iterations: max_iterations
                     .unwrap_or(xlstream_core::ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS),
                 max_change: max_change.unwrap_or(xlstream_core::ITERATIVE_CALC_DEFAULT_MAX_CHANGE),
-                values_only,
+                output_mode: if values_only {
+                    xlstream_core::OutputMode::ValuesOnly
+                } else {
+                    xlstream_core::OutputMode::Formulas
+                },
             };
             let summary = xlstream_eval::evaluate(&input, &output, &options)?;
             if verbose {

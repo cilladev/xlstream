@@ -5,15 +5,54 @@ pub const ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS: u32 = 100;
 /// Default convergence threshold for iterative calculation (matches Excel).
 pub const ITERATIVE_CALC_DEFAULT_MAX_CHANGE: f64 = 0.001;
 
+/// Controls what is written to formula cells in the output xlsx.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::OutputMode;
+/// assert_eq!(OutputMode::default(), OutputMode::Formulas);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputMode {
+    /// Write both formula text and cached values: `<f>formula</f><v>cached</v>`.
+    Formulas,
+    /// Write only cached values: `<v>cached</v>`.
+    ValuesOnly,
+}
+
+impl Default for OutputMode {
+    fn default() -> Self {
+        Self::Formulas
+    }
+}
+
+impl OutputMode {
+    /// Whether this mode omits formula text from the output.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_core::OutputMode;
+    /// assert!(!OutputMode::Formulas.is_values_only());
+    /// assert!(OutputMode::ValuesOnly.is_values_only());
+    /// ```
+    #[must_use]
+    pub fn is_values_only(self) -> bool {
+        matches!(self, Self::ValuesOnly)
+    }
+}
+
 /// Options controlling formula evaluation behavior.
 ///
 /// # Examples
 ///
 /// ```
-/// use xlstream_core::EvaluateOptions;
+/// use xlstream_core::{EvaluateOptions, OutputMode};
 /// let opts = EvaluateOptions::default();
 /// assert!(opts.iterative_calc);
 /// assert_eq!(opts.max_iterations, 100);
+/// assert_eq!(opts.output_mode, OutputMode::Formulas);
 /// ```
 #[derive(Debug, Clone)]
 pub struct EvaluateOptions {
@@ -25,9 +64,8 @@ pub struct EvaluateOptions {
     pub max_iterations: u32,
     /// Convergence threshold — stop when delta < this (only for numeric results).
     pub max_change: f64,
-    /// Write only cached values (`<v>`), omitting formula text (`<f>`).
-    /// When `false` (default), formula cells include both `<f>` and `<v>`.
-    pub values_only: bool,
+    /// What to write in formula cells.
+    pub output_mode: OutputMode,
 }
 
 impl Default for EvaluateOptions {
@@ -37,7 +75,7 @@ impl Default for EvaluateOptions {
             iterative_calc: true,
             max_iterations: ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS,
             max_change: ITERATIVE_CALC_DEFAULT_MAX_CHANGE,
-            values_only: false,
+            output_mode: OutputMode::default(),
         }
     }
 }
@@ -57,9 +95,15 @@ mod tests {
     }
 
     #[test]
-    fn default_values_only_is_false() {
+    fn default_output_mode_is_formulas() {
         let opts = EvaluateOptions::default();
-        assert!(!opts.values_only);
+        assert_eq!(opts.output_mode, OutputMode::Formulas);
+    }
+
+    #[test]
+    fn output_mode_is_values_only() {
+        assert!(!OutputMode::Formulas.is_values_only());
+        assert!(OutputMode::ValuesOnly.is_values_only());
     }
 
     #[test]
