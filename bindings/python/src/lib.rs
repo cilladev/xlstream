@@ -90,7 +90,11 @@ fn evaluate(
         iterative_calc,
         max_iterations,
         max_change,
-        values_only,
+        output_mode: if values_only {
+            xlstream_core::OutputMode::ValuesOnly
+        } else {
+            xlstream_core::OutputMode::Formulas
+        },
     };
 
     let summary =

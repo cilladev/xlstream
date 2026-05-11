@@ -5,7 +5,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use xlstream_core::{col_row_to_a1, EvaluateOptions, Value, XlStreamError, PARALLEL_ROW_THRESHOLD};
+use xlstream_core::{
+    col_row_to_a1, EvaluateOptions, OutputMode, Value, XlStreamError, PARALLEL_ROW_THRESHOLD,
+};
 use xlstream_io::{Reader, Writer};
 use xlstream_parse::{
     classify, collect_lookup_keys, extract_references, parse, resolve_named_ranges, rewrite,
@@ -50,7 +52,7 @@ struct EvalPlan {
     self_referential_cols: HashSet<u32>,
     col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
     row_override_texts: HashMap<u32, HashMap<u32, String>>,
-    values_only: bool,
+    output_mode: OutputMode,
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
     sheet_names: Vec<String>,
@@ -125,7 +127,7 @@ pub fn evaluate(
     plan.iterative_calc = options.iterative_calc;
     plan.max_iterations = options.max_iterations;
     plan.max_change = options.max_change;
-    plan.values_only = options.values_only;
+    plan.output_mode = options.output_mode;
     let mut writer = Writer::create(output)?;
 
     let num_workers = options.workers.unwrap_or_else(num_cpus::get).max(1);
@@ -161,7 +163,7 @@ pub fn evaluate(
                         iterative_calc: plan.iterative_calc,
                         max_iterations: plan.max_iterations,
                         max_change: plan.max_change,
-                        values_only: plan.values_only,
+                        output_mode: plan.output_mode,
                     };
                     let mut header_pending = true;
                     while let Some((row_idx, mut row_values)) = stream.next_row()? {
@@ -187,7 +189,7 @@ pub fn evaluate(
                                 &sec_options,
                             );
                         }
-                        if plan.values_only || sp.col_templates.is_empty() {
+                        if plan.output_mode.is_values_only() || sp.col_templates.is_empty() {
                             sh.write_row(row_idx, &row_values)?;
                         } else {
                             write_formula_cells(
@@ -214,7 +216,7 @@ pub fn evaluate(
             iterative_calc: plan.iterative_calc,
             max_iterations: plan.max_iterations,
             max_change: plan.max_change,
-            values_only: plan.values_only,
+            output_mode: plan.output_mode,
         });
         let self_referential_cols_arc = Arc::new(plan.self_referential_cols);
         let prelude = Arc::new(plan.prelude);
@@ -525,7 +527,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         self_referential_cols: main_result.self_referential_cols,
         col_templates: main_result.col_templates,
         row_override_texts: main_result.row_override_texts,
-        values_only: false,
+        output_mode: OutputMode::default(),
         secondary_plans,
         main_sheet,
         sheet_names,
@@ -627,7 +629,7 @@ fn stream_single_threaded(
         iterative_calc: plan.iterative_calc,
         max_iterations: plan.max_iterations,
         max_change: plan.max_change,
-        values_only: plan.values_only,
+        output_mode: plan.output_mode,
     };
     let mut rows_processed: u64 = 0;
     let mut formulas_evaluated: u64 = 0;
@@ -697,7 +699,7 @@ fn stream_single_threaded(
                 }
             }
 
-            if plan.values_only || sheet_plan.is_none() {
+            if plan.output_mode.is_values_only() || sheet_plan.is_none() {
                 sh.write_row(row_idx, &row_values)?;
             } else {
                 let (templates, override_texts) = if is_main {
@@ -813,7 +815,7 @@ fn stream_parallel(
             Ok((row_idx, values, formulas_count)) => {
                 buffer.insert(row_idx, (values, formulas_count));
                 while let Some((vals, fc)) = buffer.remove(&expected_row) {
-                    if eval_options.values_only || col_templates.is_empty() {
+                    if eval_options.output_mode.is_values_only() || col_templates.is_empty() {
                         sh.write_row(expected_row, &vals)?;
                     } else {
                         write_formula_cells(
@@ -841,7 +843,7 @@ fn stream_parallel(
         if first_error.is_some() {
             break;
         }
-        if eval_options.values_only || col_templates.is_empty() {
+        if eval_options.output_mode.is_values_only() || col_templates.is_empty() {
             sh.write_row(row_idx, &vals)?;
         } else {
             write_formula_cells(&mut sh, row_idx, &vals, col_templates, row_override_texts)?;

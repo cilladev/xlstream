@@ -94,7 +94,10 @@ fn default_mode_preserves_formulas() {
 #[test]
 fn values_only_omits_formulas() {
     let input = make_formula_workbook();
-    let opts = EvaluateOptions { values_only: true, ..Default::default() };
+    let opts = EvaluateOptions {
+        output_mode: xlstream_core::OutputMode::ValuesOnly,
+        ..Default::default()
+    };
     let output = eval_to_temp(input.path(), &opts);
 
     let mut wb: Xlsx<_> = open_workbook(output.path()).unwrap();

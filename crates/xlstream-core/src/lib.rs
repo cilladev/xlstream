@@ -34,7 +34,8 @@ pub use cell_error::CellError;
 pub use date::ExcelDate;
 pub use error::XlStreamError;
 pub use options::{
-    EvaluateOptions, ITERATIVE_CALC_DEFAULT_MAX_CHANGE, ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS,
+    EvaluateOptions, OutputMode, ITERATIVE_CALC_DEFAULT_MAX_CHANGE,
+    ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS,
 };
 pub use value::Value;
 
