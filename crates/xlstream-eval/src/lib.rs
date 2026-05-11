@@ -25,7 +25,6 @@
 pub mod builtins;
 pub mod criteria;
 mod evaluate;
-#[allow(dead_code)]
 mod formula_template;
 mod interp;
 pub mod lookup;
