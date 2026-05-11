@@ -32,7 +32,7 @@ authors = ["Priscilla Emasoga"]
 [workspace.dependencies]
 # xlsx I/O
 calamine = "0.34"
-rust_xlsxwriter = { version = "0.94", features = ["constant_memory", "zlib", "ryu"] }
+rust_xlsxwriter = { version = "0.95", features = ["constant_memory", "zlib", "ryu"] }
 
 # formula parser — pinned exactly per ADR docs/decisions/2026-04-18-phase-02-toolchain-bump.md.
 formualizer-parse = "=2.0.0"
