@@ -43,15 +43,10 @@ pub struct EvaluateSummary {
     pub duration: std::time::Duration,
 }
 
-/// Pre-computed evaluation plan: prelude, ASTs, topo order, and sheet metadata.
+/// Pre-computed evaluation plan: prelude, per-sheet formula data, and metadata.
 struct EvalPlan {
     prelude: Prelude,
-    col_asts: HashMap<u32, Ast>,
-    row_overrides: HashMap<u32, HashMap<u32, Ast>>,
-    topo_order: Vec<u32>,
-    self_referential_cols: HashSet<u32>,
-    col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
-    row_override_texts: HashMap<u32, HashMap<u32, String>>,
+    main_plan: Option<SheetEvalPlan>,
     output_mode: OutputMode,
     secondary_plans: HashMap<String, SheetEvalPlan>,
     main_sheet: Option<String>,
@@ -75,7 +70,7 @@ struct SharedPlan {
     eval_options: Arc<EvaluateOptions>,
 }
 
-/// Per-sheet formula evaluation data for secondary (non-main) sheets.
+/// Per-sheet formula evaluation data (used for both main and secondary sheets).
 struct SheetEvalPlan {
     col_asts: HashMap<u32, Ast>,
     row_overrides: HashMap<u32, HashMap<u32, Ast>>,
@@ -87,13 +82,8 @@ struct SheetEvalPlan {
 
 /// Output of [`build_eval_plan`].
 struct BuildPlanResult {
-    topo_order: Vec<u32>,
-    col_asts: HashMap<u32, Ast>,
-    row_overrides: HashMap<u32, HashMap<u32, Ast>>,
+    sheet_plan: SheetEvalPlan,
     lookup_keys: Vec<LookupKey>,
-    self_referential_cols: HashSet<u32>,
-    col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
-    row_override_texts: HashMap<u32, HashMap<u32, String>>,
 }
 
 /// Evaluate every formula in `input`, write results to `output`, and return
@@ -145,7 +135,7 @@ pub fn evaluate(
 
     let use_parallel = num_workers > 1
         && plan.main_sheet.is_some()
-        && !plan.col_asts.is_empty()
+        && plan.main_plan.as_ref().is_some_and(|p| !p.col_asts.is_empty())
         && plan.total_data_rows >= PARALLEL_ROW_THRESHOLD;
 
     let (rows_processed, formulas_evaluated) = if use_parallel {
@@ -222,13 +212,15 @@ pub fn evaluate(
             }
         }
 
+        let mp = plan.main_plan.ok_or_else(|| XlStreamError::Internal("no main plan".into()))?;
+
         let shared = SharedPlan {
             prelude: Arc::new(plan.prelude),
-            col_asts: Arc::new(plan.col_asts),
-            row_overrides: Arc::new(plan.row_overrides),
-            self_referential_cols: Arc::new(plan.self_referential_cols),
-            col_templates: Arc::new(plan.col_templates),
-            row_override_texts: Arc::new(plan.row_override_texts),
+            col_asts: Arc::new(mp.col_asts),
+            row_overrides: Arc::new(mp.row_overrides),
+            self_referential_cols: Arc::new(mp.self_referential_cols),
+            col_templates: Arc::new(mp.col_templates),
+            row_override_texts: Arc::new(mp.row_override_texts),
             eval_options: Arc::new(EvaluateOptions {
                 workers: options.workers,
                 iterative_calc: plan.iterative_calc,
@@ -242,7 +234,7 @@ pub fn evaluate(
             input,
             &mut writer,
             &shared,
-            &plan.topo_order,
+            &mp.topo_order,
             &main_sheet_name,
             plan.total_data_rows,
             num_workers,
@@ -301,13 +293,15 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
     } else {
         BuildPlanResult {
-            topo_order: Vec::new(),
-            col_asts: HashMap::new(),
-            row_overrides: HashMap::new(),
+            sheet_plan: SheetEvalPlan {
+                topo_order: Vec::new(),
+                col_asts: HashMap::new(),
+                row_overrides: HashMap::new(),
+                self_referential_cols: HashSet::new(),
+                col_templates: HashMap::new(),
+                row_override_texts: HashMap::new(),
+            },
             lookup_keys: Vec::new(),
-            self_referential_cols: HashSet::new(),
-            col_templates: HashMap::new(),
-            row_override_texts: HashMap::new(),
         }
     };
 
@@ -318,7 +312,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         let sec_result =
             build_eval_plan(sheet_name, formulas, &sheet_names, &named_ranges, &table_infos)?;
         // Detect cross-sheet cell references and add as lookup keys.
-        for ast in sec_result.col_asts.values() {
+        for ast in sec_result.sheet_plan.col_asts.values() {
             let refs = extract_references(ast);
             for r in &refs.cells {
                 if let Reference::Cell { sheet: Some(ref s), .. } = r {
@@ -337,7 +331,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 }
             }
         }
-        for per_row in sec_result.row_overrides.values() {
+        for per_row in sec_result.sheet_plan.row_overrides.values() {
             for ast in per_row.values() {
                 let refs = extract_references(ast);
                 for r in &refs.cells {
@@ -361,24 +355,14 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             }
         }
         secondary_lookup_keys.extend(sec_result.lookup_keys);
-        secondary_plans.insert(
-            sheet_name.clone(),
-            SheetEvalPlan {
-                col_asts: sec_result.col_asts,
-                row_overrides: sec_result.row_overrides,
-                topo_order: sec_result.topo_order,
-                self_referential_cols: sec_result.self_referential_cols,
-                col_templates: sec_result.col_templates,
-                row_override_texts: sec_result.row_override_texts,
-            },
-        );
+        secondary_plans.insert(sheet_name.clone(), sec_result.sheet_plan);
     }
 
     // Collect main sheet aggregate keys and run prelude.
     let main_agg_keys: Vec<AggregateKey> = {
         let mut seen = HashSet::new();
-        let primary = main_result.col_asts.values();
-        let overrides = main_result.row_overrides.values().flat_map(HashMap::values);
+        let primary = main_result.sheet_plan.col_asts.values();
+        let overrides = main_result.sheet_plan.row_overrides.values().flat_map(HashMap::values);
         primary
             .chain(overrides)
             .flat_map(crate::prelude_plan::collect_aggregate_keys)
@@ -387,8 +371,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     };
     let main_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
         let mut seen = HashSet::new();
-        let primary = main_result.col_asts.values();
-        let overrides = main_result.row_overrides.values().flat_map(HashMap::values);
+        let primary = main_result.sheet_plan.col_asts.values();
+        let overrides = main_result.sheet_plan.row_overrides.values().flat_map(HashMap::values);
         primary
             .chain(overrides)
             .flat_map(crate::prelude_plan::collect_multi_conditional_keys)
@@ -397,8 +381,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     };
     let main_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
         let mut seen = HashSet::new();
-        let primary = main_result.col_asts.values();
-        let overrides = main_result.row_overrides.values().flat_map(HashMap::values);
+        let primary = main_result.sheet_plan.col_asts.values();
+        let overrides = main_result.sheet_plan.row_overrides.values().flat_map(HashMap::values);
         primary
             .chain(overrides)
             .flat_map(crate::prelude_plan::collect_bounded_range_keys)
@@ -526,14 +510,15 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         merged_prelude.with_lookup_sheets(lookup_sheets)
     };
 
+    let main_plan = if main_result.sheet_plan.col_asts.is_empty() {
+        None
+    } else {
+        Some(main_result.sheet_plan)
+    };
+
     let plan = EvalPlan {
         prelude,
-        col_asts: main_result.col_asts,
-        row_overrides: main_result.row_overrides,
-        topo_order: main_result.topo_order,
-        self_referential_cols: main_result.self_referential_cols,
-        col_templates: main_result.col_templates,
-        row_override_texts: main_result.row_override_texts,
+        main_plan,
         output_mode: OutputMode::default(),
         secondary_plans,
         main_sheet,
@@ -646,33 +631,8 @@ fn stream_single_threaded(
         let mut stream = reader.cells(name)?;
 
         let is_main = plan.main_sheet.as_deref() == Some(name.as_str());
-        #[allow(clippy::type_complexity)]
-        let sheet_plan: Option<(
-            &HashMap<u32, Ast>,
-            &HashMap<u32, HashMap<u32, Ast>>,
-            &[u32],
-            &HashSet<u32>,
-        )> = if is_main {
-            if plan.col_asts.is_empty() {
-                None
-            } else {
-                Some((
-                    &plan.col_asts,
-                    &plan.row_overrides,
-                    &plan.topo_order,
-                    &plan.self_referential_cols,
-                ))
-            }
-        } else {
-            plan.secondary_plans.get(name.as_str()).map(|sp| {
-                (
-                    &sp.col_asts,
-                    &sp.row_overrides,
-                    sp.topo_order.as_slice(),
-                    &sp.self_referential_cols,
-                )
-            })
-        };
+        let sheet_plan: Option<&SheetEvalPlan> =
+            if is_main { plan.main_plan.as_ref() } else { plan.secondary_plans.get(name.as_str()) };
 
         let mut header_pending = sheet_plan.is_some();
 
@@ -684,12 +644,13 @@ fn stream_single_threaded(
                 continue;
             }
 
-            if let Some((col_asts, row_overrides, topo_order, self_ref_cols)) = &sheet_plan {
-                for &fcol in *topo_order {
-                    let ast = row_overrides
+            if let Some(sp) = sheet_plan {
+                for &fcol in &sp.topo_order {
+                    let ast = sp
+                        .row_overrides
                         .get(&fcol)
                         .and_then(|overrides| overrides.get(&row_idx))
-                        .or_else(|| col_asts.get(&fcol));
+                        .or_else(|| sp.col_asts.get(&fcol));
                     let Some(ast) = ast else {
                         continue;
                     };
@@ -699,7 +660,7 @@ fn stream_single_threaded(
                         &mut row_values,
                         row_idx,
                         fcol,
-                        self_ref_cols.contains(&fcol),
+                        sp.self_referential_cols.contains(&fcol),
                         &eval_options,
                     );
                     formulas_evaluated += 1;
@@ -708,17 +669,14 @@ fn stream_single_threaded(
 
             if plan.output_mode.is_values_only() || sheet_plan.is_none() {
                 sh.write_row(row_idx, &row_values)?;
-            } else {
-                let (templates, override_texts) = if is_main {
-                    (&plan.col_templates, &plan.row_override_texts)
-                } else if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
-                    (&sp.col_templates, &sp.row_override_texts)
-                } else {
-                    sh.write_row(row_idx, &row_values)?;
-                    rows_processed += 1;
-                    continue;
-                };
-                write_formula_cells(&mut sh, row_idx, &row_values, templates, override_texts)?;
+            } else if let Some(sp) = sheet_plan {
+                write_formula_cells(
+                    &mut sh,
+                    row_idx,
+                    &row_values,
+                    &sp.col_templates,
+                    &sp.row_override_texts,
+                )?;
             }
             rows_processed += 1;
         }
@@ -1118,13 +1076,15 @@ fn build_eval_plan(
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
     Ok(BuildPlanResult {
-        topo_order,
-        col_asts,
-        row_overrides,
+        sheet_plan: SheetEvalPlan {
+            col_asts,
+            row_overrides,
+            topo_order,
+            self_referential_cols,
+            col_templates,
+            row_override_texts,
+        },
         lookup_keys: all_lookup_keys,
-        self_referential_cols,
-        col_templates,
-        row_override_texts,
     })
 }
 
