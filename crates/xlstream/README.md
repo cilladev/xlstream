@@ -48,13 +48,14 @@ fn main() -> Result<(), xlstream::XlStreamError> {
 Parallelism is automatic — rows are sharded across cores when the sheet has >= 10k data rows. Control it explicitly:
 
 ```rust
+use std::path::Path;
 use xlstream::EvaluateOptions;
 
 let opts = EvaluateOptions { workers: Some(4), ..Default::default() };
 xlstream::evaluate(Path::new("in.xlsx"), Path::new("out.xlsx"), &opts)?;
 ```
 
-## 103 Excel-compatible functions
+## 106 Excel-compatible functions
 
 | Category   | Count | Examples                                          |
 | ---------- | ----- | ------------------------------------------------- |
@@ -73,6 +74,7 @@ xlstream::evaluate(Path::new("in.xlsx"), Path::new("out.xlsx"), &opts)?;
 ## Error handling
 
 ```rust
+use std::path::Path;
 use xlstream::{evaluate, XlStreamError};
 
 match evaluate(Path::new("in.xlsx"), Path::new("out.xlsx"), &Default::default()) {

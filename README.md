@@ -20,7 +20,7 @@ We are not building a general-purpose spreadsheet engine. We are building the *f
 
 ## Supported functions
 
-103 functions + 13 operators across 9 categories. [Full list with cross-reference](docs/functions.md).
+106 functions + 13 operators across 9 categories. [Full list with cross-reference](docs/functions.md).
 
 | Category   | Count | Examples                                          |
 | ---------- | ----- | ------------------------------------------------- |
