@@ -47,7 +47,7 @@ No new functions. v1.0 is the stability commitment — after this release, the p
 
 ## Out of scope (post v1.0)
 
-- New functions beyond the ~360 shipped in v0.1–v0.5
+- New functions beyond the ~434 shipped in v0.1–v0.5
 - `.xlsb`, `.xls`, `.ods` input formats
 - External workbook references
 - Cell formatting preservation

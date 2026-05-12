@@ -50,7 +50,7 @@ High-value functions that appear in real business workbooks.
 - [ ] **TBILLPRICE** — price per $100 face value of a T-bill. ~1 hour.
 - [ ] **TBILLYIELD** — yield for a T-bill. ~1 hour.
 
-## Financial — Other (~4)
+## Financial — Other (~6)
 
 - [ ] **DOLLARDE** — dollar price as decimal from fraction. ~1 hour.
 - [ ] **DOLLARFR** — dollar price as fraction from decimal. ~1 hour.
