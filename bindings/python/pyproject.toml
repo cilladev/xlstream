@@ -7,7 +7,7 @@ name = "xlstream"
 requires-python = ">=3.9"
 dynamic = ["version"]
 description = "Streaming Excel formula evaluation engine"
-readme = {file = "../../README.md", content-type = "text/markdown"}
+readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Priscilla Emasoga" }]
 classifiers = [
@@ -16,6 +16,14 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "License :: OSI Approved :: Apache Software License",
 ]
+
+[project.urls]
+Homepage = "https://github.com/cilladev/xlstream"
+Repository = "https://github.com/cilladev/xlstream"
+"Bug Tracker" = "https://github.com/cilladev/xlstream/issues"
+Documentation = "https://github.com/cilladev/xlstream/blob/main/docs/functions.md"
+Benchmarks = "https://github.com/cilladev/xlstream/tree/main/benchmarks/reports"
+Changelog = "https://github.com/cilladev/xlstream/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
