@@ -3,8 +3,8 @@
 //! Streaming Excel formula evaluation engine. Reads `.xlsx` files row-by-row,
 //! evaluates formulas in bounded memory, writes results to a new `.xlsx`.
 //!
-//! This crate re-exports the public API from [`xlstream_eval`] and
-//! [`xlstream_core`]. For direct access to internals, depend on those
+//! This crate re-exports the primary entry points from [`xlstream_eval`]
+//! and [`xlstream_core`]. For direct access to internals, depend on those
 //! crates instead.
 //!
 //! # Examples
@@ -35,5 +35,8 @@
 #![allow(clippy::module_name_repetitions, clippy::cargo_common_metadata)]
 #![allow(clippy::multiple_crate_versions)]
 
-pub use xlstream_core::{CellError, EvaluateOptions, Value, XlStreamError};
+pub use xlstream_core::{
+    CellError, EvaluateOptions, ExcelDate, OutputMode, Value, XlStreamError,
+    ITERATIVE_CALC_DEFAULT_MAX_CHANGE, ITERATIVE_CALC_DEFAULT_MAX_ITERATIONS,
+};
 pub use xlstream_eval::{evaluate, EvaluateSummary};
