@@ -11,6 +11,7 @@
     clippy::dbg_macro
 )]
 #![allow(clippy::module_name_repetitions, clippy::cargo_common_metadata)]
+#![allow(clippy::multiple_crate_versions)]
 
 use std::path::PathBuf;
 use std::process::ExitCode;

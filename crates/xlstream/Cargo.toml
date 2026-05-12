@@ -1,0 +1,22 @@
+[package]
+name = "xlstream"
+description = "Streaming Excel formula evaluation engine — evaluate .xlsx formulas in bounded memory"
+readme = "README.md"
+keywords = ["excel", "xlsx", "streaming", "formula", "evaluator"]
+categories = ["parser-implementations"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[dependencies]
+xlstream-eval = { path = "../xlstream-eval", version = "0.2.1" }
+xlstream-core = { path = "../xlstream-core", version = "0.2.1" }
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+cargo_common_metadata = "allow"

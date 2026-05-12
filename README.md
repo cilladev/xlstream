@@ -39,6 +39,12 @@ Excel has ~500 functions. ~465 are streaming-compatible. We're adding more each 
 
 ## Install
 
+**Rust:**
+```bash
+cargo add xlstream
+```
+
+**Python:**
 ```bash
 pip install xlstream
 ```
@@ -60,7 +66,13 @@ result = xlstream.evaluate("input.xlsx", "output.xlsx", workers=8)
 ### Rust
 
 ```rust
-let summary = xlstream_eval::evaluate(&input, &output, Some(8))?;
+use std::path::Path;
+
+let summary = xlstream::evaluate(
+    Path::new("input.xlsx"),
+    Path::new("output.xlsx"),
+    &xlstream::EvaluateOptions::default(),
+)?;
 ```
 
 ## Error handling
