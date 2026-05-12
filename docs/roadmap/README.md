@@ -35,9 +35,9 @@ The goal is to support **every formula that fits the streaming model** — ~465 
 v0.1  ✓  Core engine (103 functions, streaming, Python bindings)
 v0.2     Coverage + fidelity (named ranges, table refs, keep-formulas)
 v0.3     Statistical + engineering (STDEV, VAR, NORM.DIST, CONVERT, HEX2DEC)
-v0.4     LET + advanced financial (XNPV, XIRR, NPER, SLN, variable binding)
-v0.5     Compatibility layer (39 legacy function aliases) + database functions
-v1.0     API stability commitment — no breaking changes after this
+v0.4     LET + advanced financial (38 functions: XNPV, XIRR, NPER, SLN, bonds)
+v0.5     Compatibility aliases (39) + database functions (12)
+v1.0     API stability — no breaking changes after this
 ```
 
 ### v0.2 — Coverage + fidelity
@@ -56,25 +56,26 @@ All row-local (pure functions of their args). No streaming concerns. Mostly math
 
 ### v0.4 — LET + advanced financial
 
-**LET** is variable binding inside formulas: `=LET(x, A2*1.1, y, B2*0.9, IF(x>y, x, y))`. No spill, no closures, no recursion — just scoped name substitution. Compatible with streaming.
+**LET** is scoped variable binding: `=LET(x, A2*1.1, y, B2*0.9, IF(x>y, x, y))`. No spill, no closures, no recursion — just name substitution. Compatible with streaming.
 
-**Advanced financial (~20):** XNPV, XIRR, NPER, SLN, DDB, DB, EFFECT, NOMINAL, CUMIPMT, CUMPRINC, PPMT, IPMT, DISC, PRICE, YIELD, DURATION, MDURATION, ACCRINT, TBILLEQ, TBILLPRICE
-
-All row-local. Some iterative (XIRR uses Newton's method like IRR).
+**Financial (37 functions):** XNPV, XIRR, NPER, SLN, DDB, DB, EFFECT, NOMINAL, CUMIPMT, CUMPRINC, PPMT, IPMT, DISC, PRICE, YIELD, DURATION, MDURATION, ACCRINT, TBILLEQ, TBILLPRICE, VDB, MIRR, FVSCHEDULE, DOLLARDE, DOLLARFR, PDURATION, RRI, and more. All row-local. Some iterative (XIRR uses Newton's method). See [`v0.4/README.md`](v0.4/README.md).
 
 ### v0.5 — Compatibility + database
 
-**Compatibility (39 functions):** Old names that Excel keeps for backward compat. STDEV → STDEV.S, VAR → VAR.P, MODE → MODE.SNGL, PERCENTILE → PERCENTILE.INC, RANK → RANK.EQ, CONCATENATE → CONCAT, etc. Thin wrappers over v0.3/v0.4 implementations.
+**Compatibility (39 aliases):** Old function names Excel keeps for backward compat. STDEV → STDEV.S, VAR → VAR.P, MODE → MODE.SNGL, PERCENTILE → PERCENTILE.INC, RANK → RANK.EQ, etc. Thin dispatch aliases to v0.3 implementations. No new logic.
 
-**Database (12 functions):** DSUM, DAVERAGE, DCOUNT, DCOUNTA, DGET, DMAX, DMIN, DPRODUCT, DSTDEV, DSTDEVP, DVAR, DVARP. Range-based with criteria ranges — can be implemented as prelude aggregates with structured criteria parsing.
+**Database (12 functions):** DSUM, DAVERAGE, DCOUNT, DCOUNTA, DGET, DMAX, DMIN, DPRODUCT, DSTDEV, DSTDEVP, DVAR, DVARP. Prelude aggregates with structured criteria parsing. See [`v0.5/README.md`](v0.5/README.md).
 
 ### v1.0 — API stability
 
 No new functions. Focus:
-- API freeze — `evaluate()` signature, `EvalOptions`, Python bindings locked
-- Full documentation (mdBook site, per-crate READMEs)
-- Performance hardening (memory < 250 MB target for 700k rows)
+- API freeze — `evaluate()` signature, `EvaluateOptions`, `OutputMode`, Python bindings, CLI locked
+- Performance hardening — memory < 250 MB, wall-clock < 3 min for 700k rows
+- Documentation — mdBook site, migration guide, per-crate README audit
+- Quality — 100% conformance coverage, fuzz testing, property-based testing
 - 1-year semver stability commitment
+
+See [`v1.0/README.md`](v1.0/README.md).
 
 ### What we'll never support
 
@@ -90,15 +91,15 @@ These are architecturally incompatible with streaming. Users get a clear `Classi
 | **OLAP** | CUBE* family (7 functions) | Requires external OLAP connection |
 | **External refs** | `[Book.xlsx]Sheet1!A1` | Violates single-file model |
 
-**~51 functions permanently excluded.** ~465 are streaming-compatible. See [functions.md](../functions.md) for the complete breakdown.
+**~51 functions permanently excluded.** ~434 are streaming-compatible and planned through v0.5. See [functions.md](../functions.md) for the complete breakdown.
 
 ### Function count trajectory
 
-| Version | Functions | Operators | Total surfaces |
-|---|---|---|---|
-| v0.1 | 103 | 13 | 116 |
-| v0.2 | 106 | 13 | 119 |
-| v0.3 | ~265 | 13 | ~278 |
-| v0.4 | ~310 | 13 | ~323 |
-| v0.5 | ~360 | 13 | ~373 |
-| v1.0 | ~360 | 13 | ~373 (API frozen) |
+| Version | New | Cumulative | Operators | Total surfaces |
+|---|---|---|---|---|
+| v0.1 | 103 | 103 | 13 | 116 |
+| v0.2 | +3 | 106 | 13 | 119 |
+| v0.3 | +239 | 345 | 13 | 358 |
+| v0.4 | +38 | 383 | 13 | 396 |
+| v0.5 | +51 | 434 | 13 | 447 |
+| v1.0 | 0 | 434 | 13 | 447 (API frozen) |
