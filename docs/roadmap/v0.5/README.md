@@ -8,7 +8,7 @@
 
 Old function names that Excel keeps for backward compatibility. Each is a thin dispatch alias to the modern equivalent implemented in v0.3. No new logic — just match arms in `dispatch()`.
 
-### Statistical aliases (~30)
+### Statistical aliases (~39)
 
 - [ ] **STDEV** → STDEV.S
 - [ ] **STDEVP** → STDEV.P
