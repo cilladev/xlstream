@@ -8,6 +8,7 @@ members = [
     "crates/xlstream-parse",
     "crates/xlstream-io",
     "crates/xlstream-eval",
+    "crates/xlstream",
     "crates/xlstream-cli",
     "bindings/python",
     "benchmarks",
@@ -17,6 +18,7 @@ default-members = [
     "crates/xlstream-parse",
     "crates/xlstream-io",
     "crates/xlstream-eval",
+    "crates/xlstream",
     "crates/xlstream-cli",
 ]
 
