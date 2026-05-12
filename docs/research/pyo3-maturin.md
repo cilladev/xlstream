@@ -61,7 +61,7 @@ name = "myproject"
 requires-python = ">=3.9"
 dynamic = ["version"]
 description = "Short project description"
-readme = "../../README.md"
+readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Your Name" }]
 classifiers = [
