@@ -32,60 +32,6 @@ None of these requires a full dependency graph. They can all be evaluated in a t
 
 Peak memory: `file_shared_strings + lookup_sheets + one_row + writer_buffer` — bounded by the sum of input sizes, *not* by main-sheet row count. A 5M-row main sheet with a 10k-row lookup uses the same memory as a 50k-row main sheet with the same lookup.
 
-## Scope
-
-### In scope (v0.1)
-
-- `.xlsx` input and output (no `.xls`, `.xlsm`, `.ods` in v0.1).
-- Single- and multi-sheet workbooks.
-- Pre-computed whole-column aggregates: `SUM`, `COUNT`, `COUNTA`, `AVERAGE`, `MIN`, `MAX`, `SUMIF`, `COUNTIF`, `AVERAGEIF`.
-- Lookups via hash-indexed tables loaded into memory at prelude: `VLOOKUP` (exact), `XLOOKUP` (exact), `MATCH` (exact), `HLOOKUP` (exact), `XMATCH`, `INDEX`, `CHOOSE`. Multi-key lookups handled via concatenated keys (`VLOOKUP(A&B, ...)`) into lookup sheets that have pre-computed helper columns — pure Excel idiom.
-- Approximate-match lookups via sorted binary search.
-- Per-row eval: arithmetic, comparison, `&` concat, `IF`, `IFS`, `AND`, `OR`, `NOT`, `XOR`, `IFERROR`, `IFNA`.
-- String functions: `LEFT`, `RIGHT`, `MID`, `LEN`, `UPPER`, `LOWER`, `TRIM`, `CONCAT`, `CONCATENATE`, `FIND`, `SEARCH`, `SUBSTITUTE`, `REPLACE`, `TEXT`.
-- Math: `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `INT`, `MOD`, `ABS`, `POWER`, `SQRT`, `SIGN`.
-- Dates: Excel serial conversions, `TODAY`, `NOW` (evaluated once per run), `DATE`, `YEAR`, `MONTH`, `DAY`, `WEEKDAY`, `EDATE`, `EOMONTH`, `DATEDIF`.
-- Errors: `#DIV/0!`, `#VALUE!`, `#REF!`, `#NAME?`, `#N/A`, `#NUM!`, `#NULL!`, propagated per Excel semantics.
-- Python binding: `xlstream.evaluate(input_path, output_path=None)` + streaming API.
-- Peak RSS < 250 MB on 700k × 20 reference workload.
-- Wall-clock < 3 minutes on same workload, 8-core machine.
-
-### Explicitly out of scope for v0.1
-
-- Circular references / iterative calculation — refused with a clear error.
-- Full dynamic-array spills (`FILTER`, `UNIQUE`, `SORT`, `SORTBY`, `SEQUENCE`). `UNIQUE` over a pre-computed column aggregate may be revisited for v0.2.
-- Volatile re-evaluation across opens — `TODAY()`, `NOW()`, `RAND()` are evaluated **once per run**.
-- Formulas that reference cells from future rows (forward row refs). Refused with a clear error.
-- `.xlsm` macro execution.
-- Preserving original cell formatting with perfect fidelity — we preserve number formats where cheap, drop custom styles otherwise. Documented trade-off.
-- Excel's 1900-leap-year bug — we match Excel's output exactly for compatibility, not the calendar.
-- OLE / embedded objects / pivot tables / charts — read-through passthrough only (copied to output without modification where possible).
-
-### May land in v0.2
-
-- `.xlsb` input.
-- Streaming `UNIQUE` and `FILTER` with a row-hashing pass.
-- User-defined functions registered from Python.
-- Incremental re-evaluation (load previously evaluated xlsx, patch one row, write).
-
-## Non-goals
-
-- We are **not** competing with Excel or LibreOffice on feature coverage. Breadth is their advantage; speed and memory are ours.
-- We are **not** building a graph-based engine. Every request to "support circular refs" or "arbitrary backward-row refs" will be declined.
-- We are **not** building an authoring tool. We don't create formulas; we evaluate them.
-- We implement **only pure Excel functions**. No custom extensions (e.g., no `MLOOKUP` or other xlformula-style helpers). Users should use standard Excel idioms — e.g., helper columns in lookup sheets for multi-key joins.
-
-## Success criteria
-
-v0.1 ships when all of the following hold:
-
-1. Reference workload (700k × 20, 10 formula cols including 4 VLOOKUP into hash-indexed lookup sheets) evaluates correctly against Excel-computed ground truth in < 3 min wall-clock and < 250 MB peak RSS on a typical laptop (8-core M-series or x86 equivalent). For context: formualizer on the same workload takes 5h 40m at 3.3 GB peak.
-2. `pip install xlstream` on Linux, macOS, Windows across Python 3.9–3.14 works.
-3. Every public Rust API has rustdoc with a doctested example.
-4. All built-in functions have unit tests referencing Excel ground truth.
-5. `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`, and `pytest` pass in CI.
-6. Published to crates.io and PyPI with a changelog, an announcement, and a migration note from `formualizer`.
-
 ## Target users
 
 - Data / analytics engineers building ETL pipelines that touch Excel.
@@ -94,7 +40,7 @@ v0.1 ships when all of the following hold:
 
 ## Non-target users
 
-- Anyone who needs a full spreadsheet engine with circular refs, iterative calc, or live recalculation. Point them at LibreOffice or Excel.
+- Anyone who needs cross-row circular references or live recalculation. Point them at LibreOffice or Excel. (Self-referential and same-row circular refs are supported via iterative calc.)
 - Anyone writing new formulas interactively — use Excel.
 
 ## Guiding values
