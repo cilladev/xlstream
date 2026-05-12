@@ -50,7 +50,7 @@ name = "xlstream"
 requires-python = ">=3.9"
 dynamic = ["version"]
 description = "Streaming Excel formula evaluation engine"
-readme = "../../README.md"
+readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "Priscilla Emasoga" }]
 classifiers = [
