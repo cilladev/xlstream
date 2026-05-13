@@ -29,8 +29,8 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 - [x] **KURT** — kurtosis. ~2 hours.
 
 ### Ranking / percentiles
-- [ ] **PERCENTILE.INC / PERCENTILE.EXC** — percentile (inclusive/exclusive). ~0.5 day.
-- [ ] **QUARTILE.INC / QUARTILE.EXC** — quartile. ~2 hours.
+- [x] **PERCENTILE.INC / PERCENTILE.EXC** — percentile (inclusive/exclusive). ~0.5 day.
+- [x] **QUARTILE.INC / QUARTILE.EXC** — quartile. ~2 hours.
 - [ ] **RANK.EQ / RANK.AVG** — rank in a list. ~0.5 day.
 - [ ] **LARGE / SMALL** — k-th largest/smallest. ~2 hours.
 - [x] **MODE.SNGL** — most frequent value. ~2 hours.

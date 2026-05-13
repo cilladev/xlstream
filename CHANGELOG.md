@@ -11,6 +11,7 @@ Semver.
 - SKEW, SKEW.P, KURT higher-order moment statistics
 - AVEDEV average absolute deviation
 - MODE.SNGL most frequent value (tie-broken by first occurrence)
+- PERCENTILE.INC, PERCENTILE.EXC, QUARTILE.INC, QUARTILE.EXC
 
 ## [0.2.1] - 2026-05-11
 
