@@ -424,11 +424,11 @@ All row-local (pure math). No streaming concerns.
 | BIN2DEC | . | yes | v0.3 | | x | |
 | BIN2HEX | . | yes | v0.3 | | x | |
 | BIN2OCT | . | yes | v0.3 | | x | |
-| BITAND | . | yes | v0.3 | | | |
-| BITLSHIFT | . | yes | v0.3 | | | |
-| BITOR | . | yes | v0.3 | | | |
-| BITRSHIFT | . | yes | v0.3 | | | |
-| BITXOR | . | yes | v0.3 | | | |
+| BITAND | x | yes | v0.3 | | | |
+| BITLSHIFT | x | yes | v0.3 | | | |
+| BITOR | x | yes | v0.3 | | | |
+| BITRSHIFT | x | yes | v0.3 | | | |
+| BITXOR | x | yes | v0.3 | | | |
 | COMPLEX | x | yes | v0.3 | | | |
 | CONVERT | . | yes | v0.3 | | | |
 | DEC2BIN | . | yes | v0.3 | | x | |

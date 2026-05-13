@@ -308,6 +308,11 @@ pub(crate) fn dispatch(
         "COMPLEX" => Some(engineering::builtin_complex(&eval_args(args, interp, scope))),
         "IMREAL" => Some(engineering::builtin_imreal(&eval_args(args, interp, scope))),
         "IMAGINARY" => Some(engineering::builtin_imaginary(&eval_args(args, interp, scope))),
+        "BITAND" => Some(engineering::builtin_bitand(&eval_args(args, interp, scope))),
+        "BITOR" => Some(engineering::builtin_bitor(&eval_args(args, interp, scope))),
+        "BITXOR" => Some(engineering::builtin_bitxor(&eval_args(args, interp, scope))),
+        "BITLSHIFT" => Some(engineering::builtin_bitlshift(&eval_args(args, interp, scope))),
+        "BITRSHIFT" => Some(engineering::builtin_bitrshift(&eval_args(args, interp, scope))),
         _ => None,
     }
 }

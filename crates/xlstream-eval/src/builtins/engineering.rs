@@ -2,11 +2,15 @@
 
 use xlstream_core::{coerce, CellError, Value};
 
+use crate::builtins::math::num_arg_ce;
+
 const MAX_HEX_LEN: usize = 10;
 const TWO_POW_40: i64 = 1 << 40;
 const MAX_POSITIVE: i64 = TWO_POW_40 / 2 - 1;
 const MIN_NEGATIVE: i64 = -(TWO_POW_40 / 2);
 
+const MAX_BITWISE: u64 = (1_u64 << 48) - 1;
+const MAX_SHIFT: i32 = 53;
 // ---------------------------------------------------------------------------
 // Complex number helpers (pub(crate) for reuse by future IM* functions)
 // ---------------------------------------------------------------------------
@@ -350,6 +354,225 @@ pub(crate) fn builtin_dec2hex(args: &[Value]) -> Value {
     }
 
     Value::Text(hex.into())
+}
+
+/// Validate a bitwise argument: must be finite, non-negative, integer,
+/// and within [0, 2^48 - 1].
+fn validate_bit_arg(v: f64) -> Result<u64, CellError> {
+    if !v.is_finite() {
+        return Err(CellError::Num);
+    }
+    if v < 0.0 {
+        return Err(CellError::Num);
+    }
+    if v.fract() != 0.0 {
+        return Err(CellError::Num);
+    }
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    let n = v as u64;
+    if n > MAX_BITWISE {
+        return Err(CellError::Num);
+    }
+    Ok(n)
+}
+
+/// Validate a shift amount: must be finite, integer, and in [-53, 53].
+fn validate_shift(v: f64) -> Result<i32, CellError> {
+    if !v.is_finite() {
+        return Err(CellError::Num);
+    }
+    if v.fract() != 0.0 {
+        return Err(CellError::Num);
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let s = v as i32;
+    if !(-MAX_SHIFT..=MAX_SHIFT).contains(&s) {
+        return Err(CellError::Num);
+    }
+    Ok(s)
+}
+
+/// Apply a bitwise shift. Positive `shift` is left, negative is right.
+/// Returns `#NUM!` if the result exceeds 2^48 - 1.
+fn do_shift(number: u64, shift: i32) -> Result<u64, CellError> {
+    let result = if shift >= 0 {
+        #[allow(clippy::cast_sign_loss)]
+        let s = shift as u32;
+        number.checked_shl(s).unwrap_or(u64::MAX)
+    } else {
+        #[allow(clippy::cast_sign_loss)]
+        let s = shift.unsigned_abs();
+        number >> s
+    };
+    if result > MAX_BITWISE {
+        return Err(CellError::Num);
+    }
+    Ok(result)
+}
+
+/// `BITAND(number1, number2)` — bitwise AND of two non-negative integers.
+///
+/// Both arguments must be non-negative integers in [0, 2^48 - 1].
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or non-numeric input.
+/// Returns `#NUM!` for negative, non-integer, or out-of-range arguments.
+pub(crate) fn builtin_bitand(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let a = match num_arg_ce(args, 0) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    let b = match num_arg_ce(args, 1) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    #[allow(clippy::cast_precision_loss)]
+    Value::Number((a & b) as f64)
+}
+
+/// `BITOR(number1, number2)` — bitwise OR of two non-negative integers.
+///
+/// Both arguments must be non-negative integers in [0, 2^48 - 1].
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or non-numeric input.
+/// Returns `#NUM!` for negative, non-integer, or out-of-range arguments.
+pub(crate) fn builtin_bitor(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let a = match num_arg_ce(args, 0) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    let b = match num_arg_ce(args, 1) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    #[allow(clippy::cast_precision_loss)]
+    Value::Number((a | b) as f64)
+}
+
+/// `BITXOR(number1, number2)` — bitwise XOR of two non-negative integers.
+///
+/// Both arguments must be non-negative integers in [0, 2^48 - 1].
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or non-numeric input.
+/// Returns `#NUM!` for negative, non-integer, or out-of-range arguments.
+pub(crate) fn builtin_bitxor(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let a = match num_arg_ce(args, 0) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    let b = match num_arg_ce(args, 1) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    #[allow(clippy::cast_precision_loss)]
+    Value::Number((a ^ b) as f64)
+}
+
+/// `BITLSHIFT(number, shift_amount)` — bitwise left shift.
+///
+/// `number` must be a non-negative integer in [0, 2^48 - 1].
+/// `shift_amount` must be an integer in [-53, 53]. Negative shift = right shift.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or non-numeric input.
+/// Returns `#NUM!` for invalid arguments or if the result exceeds 2^48 - 1.
+pub(crate) fn builtin_bitlshift(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg_ce(args, 0) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    let shift = match num_arg_ce(args, 1) {
+        Ok(n) => match validate_shift(n) {
+            Ok(s) => s,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    match do_shift(number, shift) {
+        Ok(result) =>
+        {
+            #[allow(clippy::cast_precision_loss)]
+            Value::Number(result as f64)
+        }
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `BITRSHIFT(number, shift_amount)` — bitwise right shift.
+///
+/// `number` must be a non-negative integer in [0, 2^48 - 1].
+/// `shift_amount` must be an integer in [-53, 53]. Negative shift = left shift.
+/// Equivalent to `BITLSHIFT(number, -shift_amount)`.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or non-numeric input.
+/// Returns `#NUM!` for invalid arguments or if the result exceeds 2^48 - 1.
+pub(crate) fn builtin_bitrshift(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg_ce(args, 0) {
+        Ok(n) => match validate_bit_arg(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    let shift = match num_arg_ce(args, 1) {
+        Ok(n) => match validate_shift(n) {
+            Ok(s) => s,
+            Err(e) => return Value::Error(e),
+        },
+        Err(e) => return Value::Error(e),
+    };
+    match do_shift(number, -shift) {
+        Ok(result) =>
+        {
+            #[allow(clippy::cast_precision_loss)]
+            Value::Number(result as f64)
+        }
+        Err(e) => Value::Error(e),
+    }
 }
 
 #[cfg(test)]
@@ -1017,5 +1240,287 @@ mod tests {
     fn imaginary_bool_returns_value_error() {
         assert_eq!(builtin_imaginary(&[Value::Bool(true)]), Value::Error(CellError::Value));
         assert_eq!(builtin_imaginary(&[Value::Bool(false)]), Value::Error(CellError::Value));
+    }
+
+    // -- BITAND --
+
+    #[test]
+    fn bitand_happy_path() {
+        assert_eq!(builtin_bitand(&[Value::Number(13.0), Value::Number(25.0)]), Value::Number(9.0));
+        assert_eq!(builtin_bitand(&[Value::Number(1.0), Value::Number(1.0)]), Value::Number(1.0));
+        assert_eq!(builtin_bitand(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(
+            builtin_bitand(&[Value::Number(255.0), Value::Number(15.0)]),
+            Value::Number(15.0),
+        );
+        assert_eq!(
+            builtin_bitand(&[
+                Value::Number(281_474_976_710_655.0),
+                Value::Number(281_474_976_710_655.0),
+            ]),
+            Value::Number(281_474_976_710_655.0),
+        );
+    }
+
+    #[test]
+    fn bitand_negative_returns_num_error() {
+        assert_eq!(
+            builtin_bitand(&[Value::Number(-1.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_bitand(&[Value::Number(0.0), Value::Number(-1.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitand_non_integer_returns_num_error() {
+        assert_eq!(
+            builtin_bitand(&[Value::Number(13.5), Value::Number(25.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_bitand(&[Value::Number(13.0), Value::Number(25.1)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitand_exceeds_max_returns_num_error() {
+        assert_eq!(
+            builtin_bitand(&[Value::Number(281_474_976_710_656.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitand_wrong_arity() {
+        assert_eq!(builtin_bitand(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_bitand(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitand_type_error() {
+        assert_eq!(
+            builtin_bitand(&[Value::Text("abc".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitand_error_propagation() {
+        assert_eq!(
+            builtin_bitand(&[Value::Error(CellError::Na), Value::Number(1.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn bitand_coercion() {
+        assert_eq!(builtin_bitand(&[Value::Bool(true), Value::Number(1.0)]), Value::Number(1.0));
+        assert_eq!(
+            builtin_bitand(&[Value::Text("13".into()), Value::Number(25.0)]),
+            Value::Number(9.0),
+        );
+    }
+
+    // -- BITOR --
+
+    #[test]
+    fn bitor_happy_path() {
+        assert_eq!(builtin_bitor(&[Value::Number(13.0), Value::Number(25.0)]), Value::Number(29.0));
+        assert_eq!(builtin_bitor(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(
+            builtin_bitor(&[Value::Number(255.0), Value::Number(256.0)]),
+            Value::Number(511.0),
+        );
+        assert_eq!(
+            builtin_bitor(&[Value::Number(281_474_976_710_655.0), Value::Number(0.0)]),
+            Value::Number(281_474_976_710_655.0),
+        );
+    }
+
+    #[test]
+    fn bitor_negative_returns_num_error() {
+        assert_eq!(
+            builtin_bitor(&[Value::Number(-1.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitor_exceeds_max_returns_num_error() {
+        assert_eq!(
+            builtin_bitor(&[Value::Number(281_474_976_710_656.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    // -- BITXOR --
+
+    #[test]
+    fn bitxor_happy_path() {
+        assert_eq!(
+            builtin_bitxor(&[Value::Number(13.0), Value::Number(25.0)]),
+            Value::Number(20.0),
+        );
+        assert_eq!(builtin_bitxor(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(
+            builtin_bitxor(&[Value::Number(255.0), Value::Number(255.0)]),
+            Value::Number(0.0),
+        );
+        assert_eq!(
+            builtin_bitxor(&[Value::Number(255.0), Value::Number(0.0)]),
+            Value::Number(255.0),
+        );
+    }
+
+    #[test]
+    fn bitxor_non_integer_returns_num_error() {
+        assert_eq!(
+            builtin_bitxor(&[Value::Number(13.0), Value::Number(25.1)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    // -- BITLSHIFT --
+
+    #[test]
+    fn bitlshift_happy_path() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(4.0), Value::Number(2.0)]),
+            Value::Number(16.0),
+        );
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.0), Value::Number(0.0)]),
+            Value::Number(1.0),
+        );
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(0.0), Value::Number(10.0)]),
+            Value::Number(0.0),
+        );
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.0), Value::Number(47.0)]),
+            Value::Number(140_737_488_355_328.0),
+        );
+    }
+
+    #[test]
+    fn bitlshift_negative_shift_is_right_shift() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(16.0), Value::Number(-2.0)]),
+            Value::Number(4.0),
+        );
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(4.0), Value::Number(-2.0)]),
+            Value::Number(1.0),
+        );
+    }
+
+    #[test]
+    fn bitlshift_overflow_returns_num_error() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.0), Value::Number(48.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitlshift_shift_out_of_range_returns_num_error() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.0), Value::Number(54.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.0), Value::Number(-54.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitlshift_negative_number_returns_num_error() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(-1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitlshift_non_integer_number_returns_num_error() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.5), Value::Number(2.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitlshift_non_integer_shift_returns_num_error() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(1.0), Value::Number(2.5)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitlshift_wrong_arity() {
+        assert_eq!(builtin_bitlshift(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn bitlshift_error_propagation() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Error(CellError::Na), Value::Number(1.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn bitlshift_zero_shifted_max_is_zero() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Number(0.0), Value::Number(53.0)]),
+            Value::Number(0.0),
+        );
+    }
+
+    // -- BITRSHIFT --
+
+    #[test]
+    fn bitrshift_happy_path() {
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(16.0), Value::Number(2.0)]),
+            Value::Number(4.0),
+        );
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(1.0), Value::Number(0.0)]),
+            Value::Number(1.0),
+        );
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(1.0), Value::Number(1.0)]),
+            Value::Number(0.0),
+        );
+    }
+
+    #[test]
+    fn bitrshift_negative_shift_is_left_shift() {
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(4.0), Value::Number(-2.0)]),
+            Value::Number(16.0),
+        );
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(1.0), Value::Number(-3.0)]),
+            Value::Number(8.0),
+        );
+    }
+
+    #[test]
+    fn bitrshift_negative_number_returns_num_error() {
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(-1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num),
+        );
     }
 }

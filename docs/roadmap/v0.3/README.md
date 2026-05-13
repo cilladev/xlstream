@@ -70,7 +70,7 @@ All row-local. Implement in `builtins/engineering.rs`.
 - [ ] **DELTA / GESTEP** — Kronecker delta, unit step. ~1 hour.
 - [ ] **ERF / ERFC** — error function and complement. ~2 hours.
 - [ ] **CONVERT** — unit conversion (length, weight, temperature, etc.). ~1 day.
-- [ ] **BITAND / BITOR / BITXOR / BITLSHIFT / BITRSHIFT** — bitwise operations. ~2 hours.
+- [x] **BITAND / BITOR / BITXOR / BITLSHIFT / BITRSHIFT** — bitwise operations. ~2 hours.
 
 ## Math extras (~15)
 
