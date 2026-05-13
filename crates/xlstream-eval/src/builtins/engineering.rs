@@ -7,6 +7,242 @@ const TWO_POW_40: i64 = 1 << 40;
 const MAX_POSITIVE: i64 = TWO_POW_40 / 2 - 1;
 const MIN_NEGATIVE: i64 = -(TWO_POW_40 / 2);
 
+// ---------------------------------------------------------------------------
+// Complex number helpers (pub(crate) for reuse by future IM* functions)
+// ---------------------------------------------------------------------------
+
+/// Format a complex number as an Excel-canonical text string.
+///
+/// Omits zero parts, omits coefficient 1/-1 on the imaginary suffix.
+/// Used by `COMPLEX` and future IM* output functions.
+pub(crate) fn format_complex(real: f64, imag: f64, suffix: char) -> String {
+    if imag == 0.0 && real == 0.0 {
+        return "0".to_string();
+    }
+    if imag == 0.0 {
+        return format_number(real);
+    }
+    let imag_part = format_imag_part(imag, suffix);
+    if real == 0.0 {
+        return imag_part;
+    }
+    let real_str = format_number(real);
+    if imag > 0.0 {
+        format!("{real_str}+{imag_part}")
+    } else {
+        format!("{real_str}{imag_part}")
+    }
+}
+
+/// Format a number with no trailing ".0" for integers.
+fn format_number(n: f64) -> String {
+    if n.fract() == 0.0 && n.abs() < 1e15 {
+        #[allow(clippy::cast_possible_truncation)]
+        let i = n as i64;
+        format!("{i}")
+    } else {
+        format!("{n}")
+    }
+}
+
+/// Format the imaginary part with suffix, handling coefficient 1/-1.
+#[allow(clippy::float_cmp)] // Exact 1.0/-1.0 check is intentional (Excel convention)
+fn format_imag_part(imag: f64, suffix: char) -> String {
+    if imag == 1.0 {
+        return suffix.to_string();
+    }
+    if imag == -1.0 {
+        return format!("-{suffix}");
+    }
+    let coeff = format_number(imag);
+    format!("{coeff}{suffix}")
+}
+
+/// Parse an Excel complex number text string.
+///
+/// Returns `(real, imag, suffix)`. Suffix is `'i'` or `'j'`.
+/// For pure-real inputs, suffix defaults to `'i'`.
+///
+/// Handles: `"a+bi"`, `"a-bi"`, `"a"`, `"bi"`, `"i"`, `"-i"`,
+/// and the same with `'j'` suffix. Scientific notation is supported
+/// in number parts.
+///
+/// # Errors
+///
+/// Returns `CellError::Num` for invalid complex number format.
+pub(crate) fn parse_complex(s: &str) -> Result<(f64, f64, char), CellError> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err(CellError::Num);
+    }
+
+    let last = s.as_bytes()[s.len() - 1];
+    let suffix = if last == b'i' || last == b'j' {
+        last as char
+    } else {
+        // Pure real number — no suffix
+        let real: f64 = s.parse().map_err(|_| CellError::Num)?;
+        return Ok((real, 0.0, 'i'));
+    };
+
+    // Strip suffix
+    let body = &s[..s.len() - 1];
+
+    // Bare suffix: "i" or "j"
+    if body.is_empty() {
+        return Ok((0.0, 1.0, suffix));
+    }
+
+    // "-i" or "+i"
+    if body == "-" {
+        return Ok((0.0, -1.0, suffix));
+    }
+    if body == "+" {
+        return Ok((0.0, 1.0, suffix));
+    }
+
+    // Try pure imaginary: "4i", "-4i", "3.5i", "1E2i"
+    if let Ok(imag) = body.parse::<f64>() {
+        return Ok((0.0, imag, suffix));
+    }
+
+    // Full form: find the split point between real and imaginary parts.
+    // The imaginary part starts at the last '+' or '-' that is NOT
+    // inside a scientific notation exponent (i.e., not preceded by 'e'/'E').
+    let split = find_imag_split(body)?;
+    let real_str = &body[..split];
+    let imag_str = &body[split..];
+
+    let real: f64 = real_str.parse().map_err(|_| CellError::Num)?;
+    let imag: f64 = match imag_str {
+        "+" => 1.0,
+        "-" => -1.0,
+        _ => imag_str.parse().map_err(|_| CellError::Num)?,
+    };
+
+    Ok((real, imag, suffix))
+}
+
+/// Find the byte index where the imaginary part begins (at its sign).
+///
+/// Scans right-to-left for '+' or '-' that isn't part of a scientific
+/// notation exponent (preceded by 'e'/'E').
+fn find_imag_split(body: &str) -> Result<usize, CellError> {
+    let bytes = body.as_bytes();
+    let mut i = bytes.len();
+    while i > 0 {
+        i -= 1;
+        if (bytes[i] == b'+' || bytes[i] == b'-') && i > 0 {
+            let prev = bytes[i - 1];
+            if prev == b'e' || prev == b'E' {
+                // Part of scientific notation — skip
+                continue;
+            }
+            return Ok(i);
+        }
+    }
+    Err(CellError::Num)
+}
+
+// ---------------------------------------------------------------------------
+// COMPLEX / IMREAL / IMAGINARY builtins
+// ---------------------------------------------------------------------------
+
+/// `COMPLEX(real_num, i_num, [suffix])` — create complex number text.
+///
+/// Returns a text string like `"3+4i"` or `"3+4j"`.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (not 2-3 args), invalid suffix,
+/// or non-numeric arguments. Propagates errors from arguments.
+pub(crate) fn builtin_complex(args: &[Value]) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+
+    let real = match coerce::to_number(&args[0]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let imag = match coerce::to_number(&args[1]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+
+    let suffix = if args.len() == 3 {
+        let v = &args[2];
+        if let Value::Error(e) = v {
+            return Value::Error(*e);
+        }
+        let s = coerce::to_text(v);
+        match s.as_ref() {
+            "i" => 'i',
+            "j" => 'j',
+            _ => return Value::Error(CellError::Value),
+        }
+    } else {
+        'i'
+    };
+
+    Value::Text(format_complex(real, imag, suffix).into())
+}
+
+/// Extract the complex-number text argument for IMREAL/IMAGINARY.
+///
+/// Numbers are coerced to text (e.g. `5` -> `"5"` -> `5+0i`).
+/// Booleans return `#VALUE!` (Excel rejects `TRUE`/`FALSE`).
+/// Errors propagate.
+fn complex_text_arg(args: &[Value]) -> Result<std::borrow::Cow<'_, str>, Value> {
+    if args.len() != 1 {
+        return Err(Value::Error(CellError::Value));
+    }
+    let v = &args[0];
+    match v {
+        Value::Error(e) => Err(Value::Error(*e)),
+        Value::Bool(_) => Err(Value::Error(CellError::Value)),
+        _ => Ok(coerce::to_text(v)),
+    }
+}
+
+/// `IMREAL(inumber)` — extract real part from complex number text.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or boolean input. Returns `#NUM!`
+/// for invalid complex number format. Propagates errors from the argument.
+pub(crate) fn builtin_imreal(args: &[Value]) -> Value {
+    let text = match complex_text_arg(args) {
+        Ok(t) => t,
+        Err(e) => return e,
+    };
+    match parse_complex(text.as_ref()) {
+        Ok((real, _, _)) => Value::Number(real),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `IMAGINARY(inumber)` — extract imaginary part from complex number text.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity or boolean input. Returns `#NUM!`
+/// for invalid complex number format. Propagates errors from the argument.
+pub(crate) fn builtin_imaginary(args: &[Value]) -> Value {
+    let text = match complex_text_arg(args) {
+        Ok(t) => t,
+        Err(e) => return e,
+    };
+    match parse_complex(text.as_ref()) {
+        Ok((_, imag, _)) => Value::Number(imag),
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HEX2DEC / DEC2HEX
+// ---------------------------------------------------------------------------
+
 /// `HEX2DEC(number)` — convert hex string to decimal number.
 ///
 /// Accepts 1-10 hex digit strings. 10-digit values starting with
@@ -354,5 +590,408 @@ mod tests {
             builtin_dec2hex(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
             Value::Error(CellError::Value),
         );
+    }
+
+    // -- format_complex --
+
+    #[test]
+    fn format_complex_full_form() {
+        assert_eq!(format_complex(3.0, 4.0, 'i'), "3+4i");
+        assert_eq!(format_complex(3.0, -4.0, 'i'), "3-4i");
+        assert_eq!(format_complex(-3.0, 4.0, 'i'), "-3+4i");
+        assert_eq!(format_complex(-3.0, -4.0, 'i'), "-3-4i");
+    }
+
+    #[test]
+    fn format_complex_unit_coefficients() {
+        assert_eq!(format_complex(1.0, 1.0, 'i'), "1+i");
+        assert_eq!(format_complex(1.0, -1.0, 'i'), "1-i");
+        assert_eq!(format_complex(-1.0, 1.0, 'i'), "-1+i");
+        assert_eq!(format_complex(-1.0, -1.0, 'i'), "-1-i");
+    }
+
+    #[test]
+    fn format_complex_zero_parts() {
+        assert_eq!(format_complex(0.0, 0.0, 'i'), "0");
+        assert_eq!(format_complex(3.0, 0.0, 'i'), "3");
+        assert_eq!(format_complex(-3.0, 0.0, 'i'), "-3");
+        assert_eq!(format_complex(0.0, 4.0, 'i'), "4i");
+        assert_eq!(format_complex(0.0, -4.0, 'i'), "-4i");
+        assert_eq!(format_complex(0.0, 1.0, 'i'), "i");
+        assert_eq!(format_complex(0.0, -1.0, 'i'), "-i");
+    }
+
+    #[test]
+    fn format_complex_decimals() {
+        assert_eq!(format_complex(3.5, 2.7, 'i'), "3.5+2.7i");
+        assert_eq!(format_complex(0.5, 0.5, 'i'), "0.5+0.5i");
+    }
+
+    #[test]
+    fn format_complex_j_suffix() {
+        assert_eq!(format_complex(3.0, 4.0, 'j'), "3+4j");
+        assert_eq!(format_complex(0.0, 1.0, 'j'), "j");
+        assert_eq!(format_complex(0.0, -1.0, 'j'), "-j");
+    }
+
+    // -- parse_complex --
+
+    #[test]
+    fn parse_complex_full_form() {
+        let (r, i, s) = parse_complex("3+4i").unwrap();
+        assert!((r - 3.0).abs() < 1e-12);
+        assert!((i - 4.0).abs() < 1e-12);
+        assert_eq!(s, 'i');
+    }
+
+    #[test]
+    fn parse_complex_negative_imag() {
+        let (r, i, _) = parse_complex("3-4i").unwrap();
+        assert!((r - 3.0).abs() < 1e-12);
+        assert!((i - (-4.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_pure_real() {
+        let (r, i, s) = parse_complex("3").unwrap();
+        assert!((r - 3.0).abs() < 1e-12);
+        assert!((i).abs() < 1e-12);
+        assert_eq!(s, 'i');
+    }
+
+    #[test]
+    fn parse_complex_pure_imaginary() {
+        let (r, i, _) = parse_complex("4i").unwrap();
+        assert!((r).abs() < 1e-12);
+        assert!((i - 4.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_bare_suffix() {
+        let (r, i, _) = parse_complex("i").unwrap();
+        assert!((r).abs() < 1e-12);
+        assert!((i - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_negative_bare_suffix() {
+        let (r, i, _) = parse_complex("-i").unwrap();
+        assert!((r).abs() < 1e-12);
+        assert!((i - (-1.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_j_suffix() {
+        let (r, i, s) = parse_complex("3+4j").unwrap();
+        assert!((r - 3.0).abs() < 1e-12);
+        assert!((i - 4.0).abs() < 1e-12);
+        assert_eq!(s, 'j');
+    }
+
+    #[test]
+    fn parse_complex_negative_real_and_imag() {
+        let (r, i, _) = parse_complex("-2-3i").unwrap();
+        assert!((r - (-2.0)).abs() < 1e-12);
+        assert!((i - (-3.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_decimal_parts() {
+        let (r, i, _) = parse_complex("-3.5+2.7i").unwrap();
+        assert!((r - (-3.5)).abs() < 1e-12);
+        assert!((i - 2.7).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_scientific_notation() {
+        let (r, i, _) = parse_complex("1E2+3i").unwrap();
+        assert!((r - 100.0).abs() < 1e-12);
+        assert!((i - 3.0).abs() < 1e-12);
+
+        let (r2, i2, _) = parse_complex("1.5E-2+3i").unwrap();
+        assert!((r2 - 0.015).abs() < 1e-12);
+        assert!((i2 - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_leading_plus() {
+        let (r, i, _) = parse_complex("+3+4i").unwrap();
+        assert!((r - 3.0).abs() < 1e-12);
+        assert!((i - 4.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_zero_forms() {
+        let (r, i, _) = parse_complex("3+0i").unwrap();
+        assert!((r - 3.0).abs() < 1e-12);
+        assert!((i).abs() < 1e-12);
+
+        let (r2, i2, _) = parse_complex("0+0i").unwrap();
+        assert!((r2).abs() < 1e-12);
+        assert!((i2).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_negative_pure_imaginary() {
+        let (r, i, _) = parse_complex("-3i").unwrap();
+        assert!((r).abs() < 1e-12);
+        assert!((i - (-3.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn parse_complex_invalid_format() {
+        assert_eq!(parse_complex("abc"), Err(CellError::Num));
+        assert_eq!(parse_complex(""), Err(CellError::Num));
+        assert_eq!(parse_complex("3+4i+5"), Err(CellError::Num));
+        assert_eq!(parse_complex("3+4ij"), Err(CellError::Num));
+    }
+
+    // -- COMPLEX --
+
+    #[test]
+    fn complex_happy_path() {
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0)]),
+            Value::Text("3+4i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(-4.0)]),
+            Value::Text("3-4i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(1.0), Value::Number(1.0)]),
+            Value::Text("1+i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(1.0), Value::Number(-1.0)]),
+            Value::Text("1-i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(-3.0), Value::Number(4.0)]),
+            Value::Text("-3+4i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(-3.0), Value::Number(-4.0)]),
+            Value::Text("-3-4i".into()),
+        );
+    }
+
+    #[test]
+    fn complex_zero_handling() {
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(0.0)]),
+            Value::Text("0".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(0.0)]),
+            Value::Text("3".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(-3.0), Value::Number(0.0)]),
+            Value::Text("-3".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(4.0)]),
+            Value::Text("4i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(-4.0)]),
+            Value::Text("-4i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(1.0)]),
+            Value::Text("i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(-1.0)]),
+            Value::Text("-i".into()),
+        );
+    }
+
+    #[test]
+    fn complex_with_suffix() {
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Text("j".into())]),
+            Value::Text("3+4j".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(1.0), Value::Text("j".into())]),
+            Value::Text("j".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.0), Value::Number(-1.0), Value::Text("j".into())]),
+            Value::Text("-j".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Text("i".into())]),
+            Value::Text("3+4i".into()),
+        );
+    }
+
+    #[test]
+    fn complex_decimals() {
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.5), Value::Number(2.7)]),
+            Value::Text("3.5+2.7i".into()),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(0.5), Value::Number(0.5)]),
+            Value::Text("0.5+0.5i".into()),
+        );
+    }
+
+    #[test]
+    fn complex_coercion() {
+        // text "3" -> number 3
+        assert_eq!(
+            builtin_complex(&[Value::Text("3".into()), Value::Number(4.0)]),
+            Value::Text("3+4i".into()),
+        );
+        // bool true -> 1
+        assert_eq!(
+            builtin_complex(&[Value::Bool(true), Value::Number(4.0)]),
+            Value::Text("1+4i".into()),
+        );
+    }
+
+    #[test]
+    fn complex_error_invalid_suffix() {
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Text("k".into())]),
+            Value::Error(CellError::Value),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Text("I".into())]),
+            Value::Error(CellError::Value),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Text("J".into())]),
+            Value::Error(CellError::Value),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Text("".into())]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn complex_error_propagation() {
+        assert_eq!(
+            builtin_complex(&[Value::Error(CellError::Na), Value::Number(4.0)]),
+            Value::Error(CellError::Na),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn complex_wrong_arity() {
+        assert_eq!(builtin_complex(&[]), Value::Error(CellError::Value));
+        assert_eq!(builtin_complex(&[Value::Number(3.0)]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_complex(&[
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Text("i".into()),
+                Value::Number(4.0),
+            ]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn complex_type_mismatch() {
+        assert_eq!(
+            builtin_complex(&[Value::Text("abc".into()), Value::Number(4.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // -- IMREAL --
+
+    #[test]
+    fn imreal_happy_path() {
+        assert_eq!(builtin_imreal(&[Value::Text("3+4i".into())]), Value::Number(3.0));
+        assert_eq!(builtin_imreal(&[Value::Text("3-4i".into())]), Value::Number(3.0));
+        assert_eq!(builtin_imreal(&[Value::Text("3".into())]), Value::Number(3.0));
+        assert_eq!(builtin_imreal(&[Value::Text("4i".into())]), Value::Number(0.0));
+        assert_eq!(builtin_imreal(&[Value::Text("i".into())]), Value::Number(0.0));
+        assert_eq!(builtin_imreal(&[Value::Text("-i".into())]), Value::Number(0.0));
+        assert_eq!(builtin_imreal(&[Value::Text("0".into())]), Value::Number(0.0));
+        assert_eq!(builtin_imreal(&[Value::Text("-3.5+2.7i".into())]), Value::Number(-3.5));
+        assert_eq!(builtin_imreal(&[Value::Text("3+4j".into())]), Value::Number(3.0));
+    }
+
+    #[test]
+    fn imreal_coercion() {
+        assert_eq!(builtin_imreal(&[Value::Number(5.0)]), Value::Number(5.0));
+        assert_eq!(builtin_imreal(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn imreal_errors() {
+        assert_eq!(builtin_imreal(&[Value::Text("abc".into())]), Value::Error(CellError::Num));
+        assert_eq!(builtin_imreal(&[Value::Text("".into())]), Value::Error(CellError::Num));
+        assert_eq!(builtin_imreal(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn imreal_wrong_arity() {
+        assert_eq!(builtin_imreal(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_imreal(&[Value::Text("3+4i".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn imreal_bool_returns_value_error() {
+        assert_eq!(builtin_imreal(&[Value::Bool(true)]), Value::Error(CellError::Value));
+        assert_eq!(builtin_imreal(&[Value::Bool(false)]), Value::Error(CellError::Value));
+    }
+
+    // -- IMAGINARY --
+
+    #[test]
+    fn imaginary_happy_path() {
+        assert_eq!(builtin_imaginary(&[Value::Text("3+4i".into())]), Value::Number(4.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("3-4i".into())]), Value::Number(-4.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("3".into())]), Value::Number(0.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("4i".into())]), Value::Number(4.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("-4i".into())]), Value::Number(-4.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("i".into())]), Value::Number(1.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("-i".into())]), Value::Number(-1.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("0".into())]), Value::Number(0.0));
+        assert_eq!(builtin_imaginary(&[Value::Text("3.5+2.7j".into())]), Value::Number(2.7));
+    }
+
+    #[test]
+    fn imaginary_coercion() {
+        assert_eq!(builtin_imaginary(&[Value::Number(5.0)]), Value::Number(0.0));
+        assert_eq!(builtin_imaginary(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn imaginary_errors() {
+        assert_eq!(builtin_imaginary(&[Value::Text("abc".into())]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_imaginary(&[Value::Text("".into())]), Value::Error(CellError::Num));
+        assert_eq!(builtin_imaginary(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn imaginary_wrong_arity() {
+        assert_eq!(builtin_imaginary(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_imaginary(&[Value::Text("3+4i".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn imaginary_bool_returns_value_error() {
+        assert_eq!(builtin_imaginary(&[Value::Bool(true)]), Value::Error(CellError::Value));
+        assert_eq!(builtin_imaginary(&[Value::Bool(false)]), Value::Error(CellError::Value));
     }
 }
