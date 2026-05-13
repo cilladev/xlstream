@@ -204,12 +204,8 @@ pub fn skew(values: &[Value]) -> Result<f64, CellError> {
 
     let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
     let adjustment = nf / ((nf - 1.0) * (nf - 2.0));
-    let result = adjustment * m3;
 
-    if result.is_nan() || result.is_infinite() {
-        return Err(CellError::Num);
-    }
-    Ok(result)
+    finite_or_num(adjustment * m3)
 }
 
 /// `SKEW.P` — population skewness.
@@ -251,12 +247,8 @@ pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
     }
 
     let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
-    let result = m3 / nf;
 
-    if result.is_nan() || result.is_infinite() {
-        return Err(CellError::Num);
-    }
-    Ok(result)
+    finite_or_num(m3 / nf)
 }
 
 /// `KURT` — excess kurtosis (sample-adjusted).
@@ -301,12 +293,8 @@ pub fn kurt(values: &[Value]) -> Result<f64, CellError> {
     let m4: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(4)).sum();
     let term1 = (nf * (nf + 1.0)) / ((nf - 1.0) * (nf - 2.0) * (nf - 3.0));
     let term2 = (3.0 * (nf - 1.0).powi(2)) / ((nf - 2.0) * (nf - 3.0));
-    let result = term1 * m4 - term2;
 
-    if result.is_nan() || result.is_infinite() {
-        return Err(CellError::Num);
-    }
-    Ok(result)
+    finite_or_num(term1 * m4 - term2)
 }
 
 #[cfg(test)]
@@ -748,5 +736,41 @@ mod tests {
             Value::Number(7.0),
         ];
         assert_eq!(kurt(&vals).unwrap_err(), CellError::Na);
+    }
+
+    // ===== Overflow / NaN guards =====
+
+    #[test]
+    fn skew_infinity_returns_num() {
+        let vals = [Value::Number(f64::INFINITY), Value::Number(1.0), Value::Number(2.0)];
+        assert_eq!(skew(&vals).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn skew_p_overflow_returns_num() {
+        let vals = [Value::Number(f64::MAX), Value::Number(f64::MAX), Value::Number(1.0)];
+        assert_eq!(skew_p(&vals).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn kurt_infinity_returns_num() {
+        let vals = [
+            Value::Number(f64::INFINITY),
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ];
+        assert_eq!(kurt(&vals).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn kurt_max_values_returns_num() {
+        let vals = [
+            Value::Number(f64::MAX),
+            Value::Number(f64::MAX),
+            Value::Number(1.0),
+            Value::Number(2.0),
+        ];
+        assert_eq!(kurt(&vals).unwrap_err(), CellError::Num);
     }
 }
