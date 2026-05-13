@@ -289,6 +289,7 @@ pub(crate) fn dispatch(
             statistical::builtin_norm_s_inv(&eval_args(args, interp, scope))
                 .map_or_else(Value::Error, Value::Number),
         ),
+        "CORREL" => Some(builtin_correl(args, interp, scope)),
         _ => None,
     }
 }
@@ -560,4 +561,14 @@ fn builtin_expon_dist(
         Err(e) => return Value::Error(e),
     };
     statistical::expon_dist(x, lambda, cumulative).map_or_else(Value::Error, Value::Number)
+}
+
+/// `CORREL(array1, array2)` — Pearson correlation coefficient. Two-arg range-expanding.
+fn builtin_correl(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let xs = expand_range(args[0], interp, scope);
+    let ys = expand_range(args[1], interp, scope);
+    statistical::correl(&xs, &ys).map_or_else(Value::Error, Value::Number)
 }
