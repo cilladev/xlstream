@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use xlstream_core::{coerce, CellError, Value};
+use xlstream_core::{CellError, Value};
 
 fn finite_or_num(v: f64) -> Result<f64, CellError> {
     if v.is_finite() {
@@ -650,61 +650,36 @@ pub fn rank_avg(number: f64, nums: &[f64], ascending: bool) -> Result<f64, CellE
     Ok(eq_rank + (dup_count - 1.0) / 2.0)
 }
 
-/// `EXPON.DIST(x, lambda, cumulative)` — exponential distribution.
+/// `EXPON.DIST` — exponential distribution (pure math).
 ///
 /// Returns the PDF or CDF of the exponential distribution.
 ///
-/// - **CDF** (`cumulative = TRUE`): `1 − e^(−λx)`
-/// - **PDF** (`cumulative = FALSE`): `λ · e^(−λx)`
+/// - **CDF** (`cumulative = true`): `1 − e^(−λx)`
+/// - **PDF** (`cumulative = false`): `λ · e^(−λx)`
 ///
 /// # Errors
 ///
-/// Returns `CellError::Value` (as `Value::Error`) if arg count ≠ 3 or
-/// coercion fails.
-/// Returns `CellError::Num` if `x < 0` or `lambda ≤ 0`, or if the
-/// result is non-finite.
+/// Returns `Err(CellError::Num)` if `x < 0`, `lambda ≤ 0`, any input
+/// is non-finite, or the result is non-finite.
 ///
 /// # Examples
 ///
 /// ```
-/// use xlstream_core::Value;
-/// use xlstream_eval::builtins::statistical::builtin_expon_dist;
-/// let args = [Value::Number(1.0), Value::Number(1.5), Value::Bool(true)];
-/// let result = builtin_expon_dist(&args);
-/// match result {
-///     Value::Number(n) => assert!((n - 0.776_869_839_851_570_2).abs() < 1e-9),
-///     _ => panic!("expected number"),
-/// }
+/// use xlstream_eval::builtins::statistical::expon_dist;
+/// let result = expon_dist(1.0, 1.5, true).unwrap();
+/// assert!((result - 0.776_869_839_851_570_2).abs() < 1e-9);
 /// ```
-#[must_use]
-pub fn builtin_expon_dist(args: &[Value]) -> Value {
-    if args.len() != 3 {
-        return Value::Error(CellError::Value);
+pub fn expon_dist(x: f64, lambda: f64, cumulative: bool) -> Result<f64, CellError> {
+    if !x.is_finite() || !lambda.is_finite() {
+        return Err(CellError::Num);
     }
-
-    let x = match coerce::to_number(&args[0]) {
-        Ok(n) => n,
-        Err(e) => return Value::Error(e),
-    };
-    let lambda = match coerce::to_number(&args[1]) {
-        Ok(n) => n,
-        Err(e) => return Value::Error(e),
-    };
-    let cumulative = match coerce::to_bool(&args[2]) {
-        Ok(b) => b,
-        Err(e) => return Value::Error(e),
-    };
-
     if x < 0.0 || lambda <= 0.0 {
-        return Value::Error(CellError::Num);
+        return Err(CellError::Num);
     }
 
     let result = if cumulative { 1.0 - (-lambda * x).exp() } else { lambda * (-lambda * x).exp() };
 
-    match finite_or_num(result) {
-        Ok(v) => Value::Number(v),
-        Err(e) => Value::Error(e),
-    }
+    finite_or_num(result)
 }
 #[cfg(test)]
 mod tests {
@@ -1867,77 +1842,73 @@ mod tests {
 
     // ===== EXPON.DIST =====
 
-    fn expon(x: f64, lambda: f64, cumulative: bool) -> Value {
-        builtin_expon_dist(&[Value::Number(x), Value::Number(lambda), Value::Bool(cumulative)])
-    }
-
-    fn assert_expon_close(actual: Value, expected: f64) {
-        match actual {
-            Value::Number(n) => assert_close(n, expected),
-            other => panic!("expected Number, got {other:?}"),
-        }
-    }
-
     #[test]
     fn expon_cdf_typical() {
-        assert_expon_close(expon(1.0, 1.5, true), 0.776_869_839_851_570_2);
+        assert_close(expon_dist(1.0, 1.5, true).unwrap(), 0.776_869_839_851_570_2);
     }
 
     #[test]
     fn expon_pdf_typical() {
-        assert_expon_close(expon(1.0, 1.5, false), 0.334_695_240_222_645_3);
+        assert_close(expon_dist(1.0, 1.5, false).unwrap(), 0.334_695_240_222_645_3);
     }
 
     #[test]
     fn expon_cdf_at_zero() {
-        assert_expon_close(expon(0.0, 1.5, true), 0.0);
+        assert_close(expon_dist(0.0, 1.5, true).unwrap(), 0.0);
     }
 
     #[test]
     fn expon_pdf_at_zero() {
-        assert_expon_close(expon(0.0, 1.5, false), 1.5);
+        assert_close(expon_dist(0.0, 1.5, false).unwrap(), 1.5);
     }
 
     #[test]
     fn expon_cdf_large_x() {
-        assert_expon_close(expon(10.0, 1.0, true), 0.999_954_600_070_238);
+        assert_close(expon_dist(10.0, 1.0, true).unwrap(), 0.999_954_600_070_238);
     }
 
     #[test]
     fn expon_x_negative_returns_num() {
-        assert_eq!(expon(-1.0, 1.5, true), Value::Error(CellError::Num));
+        assert_eq!(expon_dist(-1.0, 1.5, true).unwrap_err(), CellError::Num);
     }
 
     #[test]
     fn expon_lambda_zero_returns_num() {
-        assert_eq!(expon(1.0, 0.0, true), Value::Error(CellError::Num));
+        assert_eq!(expon_dist(1.0, 0.0, true).unwrap_err(), CellError::Num);
     }
 
     #[test]
     fn expon_lambda_negative_returns_num() {
-        assert_eq!(expon(1.0, -1.0, true), Value::Error(CellError::Num));
+        assert_eq!(expon_dist(1.0, -1.0, true).unwrap_err(), CellError::Num);
     }
 
     #[test]
     fn expon_very_large_lambda() {
-        assert_expon_close(expon(1.0, 1000.0, true), 1.0);
+        assert_close(expon_dist(1.0, 1000.0, true).unwrap(), 1.0);
     }
 
     #[test]
     fn expon_very_small_lambda() {
-        assert_expon_close(expon(1.0, 0.001, true), 0.000_999_500_166_625_0);
+        assert_close(expon_dist(1.0, 0.001, true).unwrap(), 0.000_999_500_166_625_0);
     }
 
     #[test]
-    fn expon_propagates_error() {
-        let args = [Value::Error(CellError::Na), Value::Number(1.5), Value::Bool(true)];
-        assert_eq!(builtin_expon_dist(&args), Value::Error(CellError::Na));
+    fn expon_nan_x_returns_num() {
+        assert_eq!(expon_dist(f64::NAN, 1.5, true).unwrap_err(), CellError::Num);
     }
 
     #[test]
-    fn expon_wrong_arg_count() {
-        let args = [Value::Number(1.0), Value::Number(1.5)];
-        assert_eq!(builtin_expon_dist(&args), Value::Error(CellError::Value));
-        assert_eq!(builtin_expon_dist(&[]), Value::Error(CellError::Value));
+    fn expon_nan_lambda_returns_num() {
+        assert_eq!(expon_dist(1.0, f64::NAN, true).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn expon_infinity_x_returns_num() {
+        assert_eq!(expon_dist(f64::INFINITY, 1.5, true).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn expon_infinity_lambda_returns_num() {
+        assert_eq!(expon_dist(1.0, f64::INFINITY, true).unwrap_err(), CellError::Num);
     }
 }

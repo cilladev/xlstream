@@ -254,7 +254,7 @@ pub(crate) fn dispatch(
         "QUARTILE.EXC" => Some(builtin_quartile_exc(args, interp, scope)),
         "RANK.EQ" => Some(builtin_rank_eq(args, interp, scope)),
         "RANK.AVG" => Some(builtin_rank_avg(args, interp, scope)),
-        "EXPON.DIST" => Some(statistical::builtin_expon_dist(&eval_args(args, interp, scope))),
+        "EXPON.DIST" => Some(builtin_expon_dist(args, interp, scope)),
         _ => None,
     }
 }
@@ -501,4 +501,29 @@ fn builtin_rank_avg(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowS
         false
     };
     statistical::rank_avg(number, &nums, ascending).map_or_else(Value::Error, Value::Number)
+}
+
+/// `EXPON.DIST(x, lambda, cumulative)` — exponential distribution.
+fn builtin_expon_dist(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    let evaled = eval_args(args, interp, scope);
+    if evaled.len() != 3 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match coerce::to_number(&evaled[0]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let lambda = match coerce::to_number(&evaled[1]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let cumulative = match coerce::to_bool(&evaled[2]) {
+        Ok(b) => b,
+        Err(e) => return Value::Error(e),
+    };
+    statistical::expon_dist(x, lambda, cumulative).map_or_else(Value::Error, Value::Number)
 }
