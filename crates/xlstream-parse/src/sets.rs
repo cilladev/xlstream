@@ -143,6 +143,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "MODE.SNGL",
     "PERCENTILE.INC", "PERCENTILE.EXC", "QUARTILE.INC", "QUARTILE.EXC",
     "LARGE", "SMALL",
+    "RANK.EQ", "RANK.AVG",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
@@ -275,6 +276,8 @@ mod tests {
         assert!(is_range_expanding("PERCENTILE.EXC"));
         assert!(is_range_expanding("QUARTILE.INC"));
         assert!(is_range_expanding("QUARTILE.EXC"));
+        assert!(is_range_expanding("RANK.EQ"));
+        assert!(is_range_expanding("RANK.AVG"));
         assert!(!is_range_expanding("SUM"));
     }
 

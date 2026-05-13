@@ -18,7 +18,7 @@ mod multi_conditional;
 pub mod statistical;
 pub(crate) mod string;
 
-use xlstream_core::{CellError, Value};
+use xlstream_core::{coerce, CellError, Value};
 use xlstream_parse::{NodeRef, NodeView};
 
 use crate::interp::Interpreter;
@@ -252,6 +252,8 @@ pub(crate) fn dispatch(
         "PERCENTILE.EXC" => Some(builtin_percentile_exc(args, interp, scope)),
         "QUARTILE.INC" => Some(builtin_quartile_inc(args, interp, scope)),
         "QUARTILE.EXC" => Some(builtin_quartile_exc(args, interp, scope)),
+        "RANK.EQ" => Some(builtin_rank_eq(args, interp, scope)),
+        "RANK.AVG" => Some(builtin_rank_avg(args, interp, scope)),
         _ => None,
     }
 }
@@ -448,4 +450,54 @@ fn builtin_large_small(
     let k_val = interp.eval(args[1], scope);
     let f = if descending { statistical::large } else { statistical::small };
     f(&values, &k_val).map_or_else(Value::Error, Value::Number)
+}
+
+/// `RANK.EQ(number, ref, [order])` — rank with ties getting top rank.
+fn builtin_rank_eq(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match coerce::to_number(&interp.eval(args[0], scope)) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let range_values = expand_range(args[1], interp, scope);
+    let nums = match statistical::collect_numerics(&range_values) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let ascending = if args.len() == 3 {
+        match coerce::to_number(&interp.eval(args[2], scope)) {
+            Ok(o) => o != 0.0,
+            Err(e) => return Value::Error(e),
+        }
+    } else {
+        false
+    };
+    statistical::rank_eq(number, &nums, ascending).map_or_else(Value::Error, Value::Number)
+}
+
+/// `RANK.AVG(number, ref, [order])` — rank with ties getting average rank.
+fn builtin_rank_avg(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match coerce::to_number(&interp.eval(args[0], scope)) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let range_values = expand_range(args[1], interp, scope);
+    let nums = match statistical::collect_numerics(&range_values) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let ascending = if args.len() == 3 {
+        match coerce::to_number(&interp.eval(args[2], scope)) {
+            Ok(o) => o != 0.0,
+            Err(e) => return Value::Error(e),
+        }
+    } else {
+        false
+    };
+    statistical::rank_avg(number, &nums, ascending).map_or_else(Value::Error, Value::Number)
 }
