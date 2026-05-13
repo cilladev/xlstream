@@ -24,3 +24,18 @@ fn ln_log_exp() {
 fn trigonometry() {
     run_conformance("math/trigonometry.xlsx");
 }
+
+#[test]
+fn permut_permutationa() {
+    run_conformance("math/permut.xlsx");
+}
+
+#[test]
+fn combin_combina() {
+    run_conformance("math/combin.xlsx");
+}
+
+#[test]
+fn fact_factdouble() {
+    run_conformance("math/fact.xlsx");
+}

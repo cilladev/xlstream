@@ -50,15 +50,7 @@ fn ln_gamma(x: f64) -> f64 {
     HALF_LN_2PI + (z + 0.5) * t.ln() - t + sum.ln()
 }
 
-use crate::builtins::math::{bool_arg_ce, num_arg_ce};
-
-fn finite_or_num(v: f64) -> Result<f64, CellError> {
-    if v.is_finite() {
-        Ok(v)
-    } else {
-        Err(CellError::Num)
-    }
-}
+use crate::builtins::math::{bool_arg_ce, finite_or_num, num_arg_ce};
 
 /// Approximation of the error function erf(x).
 ///

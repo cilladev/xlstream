@@ -54,8 +54,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | CEILING | x | yes | v0.1 | x | x | |
 | CEILING.MATH | . | yes | v0.3 | | | |
 | CEILING.PRECISE | . | yes | v0.3 | | | |
-| COMBIN | . | yes | v0.3 | | | |
-| COMBINA | . | yes | v0.3 | | | |
+| COMBIN | x | yes | v0.3 | | | |
+| COMBINA | x | yes | v0.3 | | | |
 | COS | x | yes | v0.1 | x | | |
 | COSH | . | yes | v0.3 | x | | |
 | COT | . | yes | v0.3 | | | |
@@ -66,8 +66,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | DEGREES | . | yes | v0.3 | x | | |
 | EVEN | . | yes | v0.3 | x | | |
 | EXP | x | yes | v0.1 | x | | |
-| FACT | . | yes | v0.3 | | | |
-| FACTDOUBLE | . | yes | v0.3 | | | |
+| FACT | x | yes | v0.3 | | | |
+| FACTDOUBLE | x | yes | v0.3 | | | |
 | FLOOR | x | yes | v0.1 | x | x | |
 | FLOOR.MATH | . | yes | v0.3 | | | |
 | FLOOR.PRECISE | . | yes | v0.3 | | | |
@@ -196,8 +196,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | PERCENTILE.INC | x | yes | v0.3 | | | |
 | PERCENTRANK.EXC | . | yes | v0.3 | | | |
 | PERCENTRANK.INC | . | yes | v0.3 | | | |
-| PERMUT | . | yes | v0.3 | | | |
-| PERMUTATIONA | . | yes | v0.3 | | | |
+| PERMUT | x | yes | v0.3 | | | |
+| PERMUTATIONA | x | yes | v0.3 | | | |
 | PHI | . | yes | v0.3 | | | |
 | POISSON.DIST | x | yes | v0.3 | | | |
 | PROB | . | yes | v0.3 | | | |
