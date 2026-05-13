@@ -10,7 +10,43 @@
 
 use std::collections::HashMap;
 
-use xlstream_core::{CellError, Value};
+use xlstream_core::{coerce, CellError, Value};
+
+/// Lanczos approximation of ln(Γ(x)) for x > 0.
+///
+/// g=7, 9 coefficients. Accurate to ~15 digits for x ≥ 0.5.
+/// For x in (0, 0.5), uses reflection: Γ(x)·Γ(1−x) = π / sin(πx).
+fn ln_gamma(x: f64) -> f64 {
+    #[allow(clippy::excessive_precision)]
+    const COEFFICIENTS: [f64; 9] = [
+        0.999_999_999_999_809_93,
+        676.520_368_121_885_1,
+        -1_259.139_216_722_402_9,
+        771.323_428_777_653_1,
+        -176.615_029_162_140_6,
+        12.507_343_278_686_905,
+        -0.138_571_095_265_720_12,
+        9.984_369_578_019_572e-6,
+        1.505_632_735_149_311_6e-7,
+    ];
+    const G: f64 = 7.0;
+    const HALF_LN_2PI: f64 = 0.918_938_533_204_672_8;
+
+    if x < 0.5 {
+        let reflection = std::f64::consts::PI / (std::f64::consts::PI * x).sin();
+        return reflection.ln() - ln_gamma(1.0 - x);
+    }
+
+    let z = x - 1.0;
+    let mut sum = COEFFICIENTS[0];
+    for (i, &c) in COEFFICIENTS[1..].iter().enumerate() {
+        #[allow(clippy::cast_precision_loss)]
+        let denom = z + (i as f64) + 1.0;
+        sum += c / denom;
+    }
+    let t = z + G + 0.5;
+    HALF_LN_2PI + (z + 0.5) * t.ln() - t + sum.ln()
+}
 
 fn finite_or_num(v: f64) -> Result<f64, CellError> {
     if v.is_finite() {
@@ -681,6 +717,91 @@ pub fn expon_dist(x: f64, lambda: f64, cumulative: bool) -> Result<f64, CellErro
 
     finite_or_num(result)
 }
+
+/// `POISSON.DIST(x, mean, cumulative)` — Poisson distribution.
+///
+/// Returns PMF `P(X=k)` when `cumulative` is false, CDF `P(X≤k)` when true.
+/// Uses log-space arithmetic via `ln_gamma` to avoid overflow.
+///
+/// `x` is truncated to a non-negative integer. `mean` must be ≥ 0.
+/// When `mean` = 0: returns 1.0 if `x` = 0, 0.0 otherwise (degenerate).
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Value)` if arg count ≠ 3.
+/// Returns `Err(CellError::Num)` if `x` < 0, `mean` < 0, or either is
+/// non-finite (NaN/Infinity).
+/// Returns `Err(CellError)` if any input is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_poisson_dist;
+/// let args = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
+/// let result = builtin_poisson_dist(&args).unwrap();
+/// assert!((result - 0.140374).abs() < 1e-5);
+/// ```
+pub fn builtin_poisson_dist(args: &[Value]) -> Result<f64, CellError> {
+    if args.len() != 3 {
+        return Err(CellError::Value);
+    }
+    let x_raw = coerce::to_number(&args[0])?;
+    let mean = coerce::to_number(&args[1])?;
+    let cumulative = coerce::to_bool(&args[2])?;
+
+    if !x_raw.is_finite() || !mean.is_finite() {
+        return Err(CellError::Num);
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    let k = x_raw.trunc() as i64;
+    if k < 0 || mean < 0.0 {
+        return Err(CellError::Num);
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    let kf = k as f64;
+
+    if mean == 0.0 {
+        return if k == 0 { Ok(1.0) } else { Ok(0.0) };
+    }
+
+    if cumulative {
+        poisson_cdf(kf, mean)
+    } else {
+        poisson_pmf(kf, mean)
+    }
+}
+
+/// PMF: `P(X=k) = exp(−λ + k·ln(λ) − ln_gamma(k+1))`
+fn poisson_pmf(k: f64, lambda: f64) -> Result<f64, CellError> {
+    let ln_pmf = -lambda + k * lambda.ln() - ln_gamma(k + 1.0);
+    finite_or_num(ln_pmf.exp())
+}
+
+/// CDF: `P(X≤k) = Σ PMF(i, λ)` for i in 0..=k
+///
+/// Caps k at [`POISSON_CDF_MAX_K`] to prevent runaway loops on extreme
+/// inputs. Exits early once the cumulative sum reaches 1.0 within f64
+/// precision.
+fn poisson_cdf(k: f64, lambda: f64) -> Result<f64, CellError> {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let ki = (k as u64).min(POISSON_CDF_MAX_K);
+    let mut sum = 0.0_f64;
+    for i in 0..=ki {
+        #[allow(clippy::cast_precision_loss)]
+        let fi = i as f64;
+        let ln_pmf = -lambda + fi * lambda.ln() - ln_gamma(fi + 1.0);
+        sum += ln_pmf.exp();
+        if sum >= 1.0 {
+            return Ok(1.0);
+        }
+    }
+    finite_or_num(sum)
+}
+
+const POISSON_CDF_MAX_K: u64 = 1_000_000;
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -1910,5 +2031,125 @@ mod tests {
     #[test]
     fn expon_infinity_lambda_returns_num() {
         assert_eq!(expon_dist(1.0, f64::INFINITY, true).unwrap_err(), CellError::Num);
+    }
+
+    // ===== POISSON.DIST =====
+
+    #[test]
+    fn poisson_pmf_typical() {
+        let args = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), 0.140_373_895_814_280_5);
+    }
+
+    #[test]
+    fn poisson_cdf_typical() {
+        let args = [Value::Number(3.0), Value::Number(5.0), Value::Bool(true)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), 0.265_025_915_297_842_7);
+    }
+
+    #[test]
+    fn poisson_pmf_zero() {
+        let args = [Value::Number(0.0), Value::Number(5.0), Value::Bool(false)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), (-5.0_f64).exp());
+    }
+
+    #[test]
+    fn poisson_cdf_zero() {
+        let args = [Value::Number(0.0), Value::Number(5.0), Value::Bool(true)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), (-5.0_f64).exp());
+    }
+
+    #[test]
+    fn poisson_pmf_equals_mean() {
+        let args = [Value::Number(5.0), Value::Number(5.0), Value::Bool(false)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), 0.175_467_369_767_850_74);
+    }
+
+    #[test]
+    fn poisson_mean_zero_x_zero() {
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Bool(false)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn poisson_mean_zero_x_zero_cdf() {
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Bool(true)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn poisson_x_negative_returns_num() {
+        let args = [Value::Number(-1.0), Value::Number(5.0), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn poisson_mean_negative_returns_num() {
+        let args = [Value::Number(3.0), Value::Number(-1.0), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn poisson_non_integer_x_truncates() {
+        let args_frac = [Value::Number(3.7), Value::Number(5.0), Value::Bool(false)];
+        let args_int = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
+        assert_close(
+            builtin_poisson_dist(&args_frac).unwrap(),
+            builtin_poisson_dist(&args_int).unwrap(),
+        );
+    }
+
+    #[test]
+    fn poisson_large_mean() {
+        let args = [Value::Number(100.0), Value::Number(100.0), Value::Bool(true)];
+        let result = builtin_poisson_dist(&args).unwrap();
+        assert!(result > 0.0 && result <= 1.0);
+    }
+
+    #[test]
+    fn poisson_large_x() {
+        let args = [Value::Number(200.0), Value::Number(100.0), Value::Bool(true)];
+        let result = builtin_poisson_dist(&args).unwrap();
+        assert!((result - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn poisson_propagates_error() {
+        let args = [Value::Error(CellError::Na), Value::Number(5.0), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn poisson_wrong_arg_count() {
+        let args = [Value::Number(3.0), Value::Number(5.0)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Value);
+    }
+
+    // ===== ln_gamma =====
+
+    #[test]
+    fn ln_gamma_of_1_is_zero() {
+        assert_close(ln_gamma(1.0), 0.0);
+    }
+
+    #[test]
+    fn ln_gamma_of_2_is_zero() {
+        assert_close(ln_gamma(2.0), 0.0);
+    }
+
+    #[test]
+    fn ln_gamma_of_6_is_ln_120() {
+        assert_close(ln_gamma(6.0), 120.0_f64.ln());
+    }
+
+    #[test]
+    fn ln_gamma_half_is_ln_sqrt_pi() {
+        assert_close(ln_gamma(0.5), std::f64::consts::PI.sqrt().ln());
+    }
+
+    #[test]
+    fn ln_gamma_large_value() {
+        let expected: f64 = (1..=100).map(|i: i32| f64::from(i).ln()).sum();
+        assert!((ln_gamma(101.0) - expected).abs() < 1e-8);
     }
 }
