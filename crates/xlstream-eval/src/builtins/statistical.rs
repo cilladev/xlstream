@@ -1,22 +1,20 @@
 //! Statistical builtin functions.
 //!
-//! AVEDEV, VAR.S/P, STDEV.S/P, SKEW, SKEW.P, KURT, MODE.SNGL,
-//! PERCENTILE.INC/EXC, QUARTILE.INC/EXC, RANK.EQ, RANK.AVG,
-//! EXPON.DIST, POISSON.DIST.
-//! Common helpers: [`collect_numerics`] extracts `f64` values from a
-//! `&[Value]` slice, [`mean_and_variance`] computes mean and variance,
-//! and [`sorted_numerics`] collects, rejects non-finite, and sorts for
-//! percentile/quartile functions. Distribution functions use `ln_gamma`
-//! (Lanczos approximation) for log-space arithmetic.
+//! Aggregate stats (AVEDEV, VAR, STDEV, SKEW, KURT, MODE, PERCENTILE,
+//! QUARTILE, RANK) use [`collect_numerics`] and [`mean_and_variance`].
+//! Distribution functions (T.DIST, EXPON.DIST, POISSON.DIST) use
+//! [`num_arg`] + `specfn` primitives.
 
 use std::collections::HashMap;
 
 use xlstream_core::{coerce, CellError, Value};
 
-/// Lanczos approximation of ln(Γ(x)) for x > 0.
+use super::specfn;
+
+/// Lanczos approximation of ln(Gamma(x)) for x > 0.
 ///
-/// g=7, 9 coefficients. Accurate to ~15 digits for x ≥ 0.5.
-/// For x in (0, 0.5), uses reflection: Γ(x)·Γ(1−x) = π / sin(πx).
+/// g=7, 9 coefficients. Accurate to ~15 digits for x >= 0.5.
+/// For x in (0, 0.5), uses reflection: Gamma(x)*Gamma(1-x) = pi / sin(pi*x).
 fn ln_gamma(x: f64) -> f64 {
     #[allow(clippy::excessive_precision)]
     const COEFFICIENTS: [f64; 9] = [
@@ -803,6 +801,267 @@ fn poisson_cdf(k: f64, lambda: f64) -> Result<f64, CellError> {
 }
 
 const POISSON_CDF_MAX_K: u64 = 1_000_000;
+
+fn num_arg(args: &[Value], idx: usize) -> Result<f64, Value> {
+    coerce::to_number(args.get(idx).unwrap_or(&Value::Empty)).map_err(Value::Error)
+}
+
+/// `T.DIST(x, deg_freedom, cumulative)` — Student's t-distribution.
+///
+/// When `cumulative` is TRUE, returns the left-tail CDF P(T <= x).
+/// When FALSE, returns the PDF (probability density).
+/// Non-integer `deg_freedom` is truncated to integer (Excel behavior).
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arg count or non-numeric args.
+/// Returns `#NUM!` for df < 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_t_dist;
+/// let args = [Value::Number(1.0), Value::Number(10.0), Value::Bool(true)];
+/// match builtin_t_dist(&args) {
+///     Value::Number(n) => assert!((n - 0.82955).abs() < 1e-4),
+///     other => panic!("expected Number, got {other:?}"),
+/// }
+/// ```
+#[must_use]
+pub fn builtin_t_dist(args: &[Value]) -> Value {
+    if args.len() != 3 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let df_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let cumulative = match &args[2] {
+        Value::Error(e) => return Value::Error(*e),
+        Value::Bool(b) => *b,
+        Value::Number(n) => *n != 0.0,
+        Value::Integer(i) => *i != 0,
+        Value::Empty => false,
+        _ => return Value::Error(CellError::Value),
+    };
+
+    let df = df_raw.trunc();
+    if df < 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let result = if cumulative { specfn::t_dist_cdf(x, df) } else { specfn::t_dist_pdf(x, df) };
+
+    if result.is_finite() {
+        Value::Number(result)
+    } else {
+        Value::Error(CellError::Num)
+    }
+}
+
+/// `T.DIST.RT(x, deg_freedom)` — right-tail CDF of Student's t.
+///
+/// Returns P(T >= x) = 1 - T.DIST(x, df, TRUE).
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arg count. Returns `#NUM!` for df < 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_t_dist_rt;
+/// let args = [Value::Number(1.0), Value::Number(10.0)];
+/// match builtin_t_dist_rt(&args) {
+///     Value::Number(n) => assert!((n - 0.17045).abs() < 1e-4),
+///     other => panic!("expected Number, got {other:?}"),
+/// }
+/// ```
+#[must_use]
+pub fn builtin_t_dist_rt(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let df_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    let df = df_raw.trunc();
+    if df < 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let result = 1.0 - specfn::t_dist_cdf(x, df);
+    if result.is_finite() {
+        Value::Number(result)
+    } else {
+        Value::Error(CellError::Num)
+    }
+}
+
+/// `T.DIST.2T(x, deg_freedom)` — two-tail CDF of Student's t.
+///
+/// Returns P(|T| >= x). Requires x >= 0.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arg count. Returns `#NUM!` for x < 0 or df < 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_t_dist_2t;
+/// let args = [Value::Number(1.0), Value::Number(10.0)];
+/// match builtin_t_dist_2t(&args) {
+///     Value::Number(n) => assert!((n - 0.34090).abs() < 1e-4),
+///     other => panic!("expected Number, got {other:?}"),
+/// }
+/// ```
+#[must_use]
+pub fn builtin_t_dist_2t(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let df_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    if x < 0.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let df = df_raw.trunc();
+    if df < 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let result = 2.0 * (1.0 - specfn::t_dist_cdf(x, df));
+    if result.is_finite() {
+        Value::Number(result)
+    } else {
+        Value::Error(CellError::Num)
+    }
+}
+
+/// `T.INV(probability, deg_freedom)` — left-tail inverse of Student's t.
+///
+/// Returns the value t such that P(T <= t) = probability.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arg count. Returns `#NUM!` for p outside (0,1) or df < 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_t_inv;
+/// let args = [Value::Number(0.5), Value::Number(10.0)];
+/// match builtin_t_inv(&args) {
+///     Value::Number(n) => assert!(n.abs() < 1e-10),
+///     other => panic!("expected Number, got {other:?}"),
+/// }
+/// ```
+#[must_use]
+pub fn builtin_t_inv(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let p = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let df_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    if p <= 0.0 || p >= 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let df = df_raw.trunc();
+    if df < 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let result = specfn::t_inv(p, df);
+    if result.is_finite() {
+        Value::Number(result)
+    } else {
+        Value::Error(CellError::Num)
+    }
+}
+
+/// `T.INV.2T(probability, deg_freedom)` — two-tail inverse of Student's t.
+///
+/// Returns the positive value t such that P(|T| >= t) = probability.
+/// Equivalent to `T.INV(1 - probability/2, df)`.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arg count. Returns `#NUM!` for p outside (0,1] or df < 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_t_inv_2t;
+/// let args = [Value::Number(0.05), Value::Number(10.0)];
+/// match builtin_t_inv_2t(&args) {
+///     Value::Number(n) => assert!((n - 2.22814).abs() < 1e-4),
+///     other => panic!("expected Number, got {other:?}"),
+/// }
+/// ```
+#[must_use]
+pub fn builtin_t_inv_2t(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let p = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let df_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+
+    if p <= 0.0 || p > 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let df = df_raw.trunc();
+    if df < 1.0 {
+        return Value::Error(CellError::Num);
+    }
+
+    let left_p = 1.0 - p / 2.0;
+    let result = specfn::t_inv(left_p, df);
+    if result.is_finite() {
+        Value::Number(result)
+    } else {
+        Value::Error(CellError::Num)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -2218,5 +2477,262 @@ mod tests {
     fn ln_gamma_large_value() {
         let expected: f64 = (1..=100).map(|i: i32| f64::from(i).ln()).sum();
         assert!((ln_gamma(101.0) - expected).abs() < 1e-8);
+    }
+
+    // ===== T.DIST =====
+
+    fn assert_approx(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1e-4,
+            "expected {expected}, got {actual} (diff {})",
+            (actual - expected).abs()
+        );
+    }
+
+    #[test]
+    fn t_dist_cdf_positive() {
+        match builtin_t_dist(&[Value::Number(1.0), Value::Number(10.0), Value::Bool(true)]) {
+            Value::Number(n) => assert_approx(n, 0.82955),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_cdf_at_zero_is_half() {
+        match builtin_t_dist(&[Value::Number(0.0), Value::Number(10.0), Value::Bool(true)]) {
+            Value::Number(n) => assert_close(n, 0.5),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_pdf_at_zero() {
+        match builtin_t_dist(&[Value::Number(0.0), Value::Number(10.0), Value::Bool(false)]) {
+            Value::Number(n) => assert_approx(n, 0.38909),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_df_one_is_cauchy() {
+        match builtin_t_dist(&[Value::Number(1.0), Value::Number(1.0), Value::Bool(true)]) {
+            Value::Number(n) => assert_approx(n, 0.75),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_non_integer_df_truncates() {
+        let full = builtin_t_dist(&[Value::Number(1.0), Value::Number(10.0), Value::Bool(true)]);
+        let trunc = builtin_t_dist(&[Value::Number(1.0), Value::Number(10.7), Value::Bool(true)]);
+        assert_eq!(full, trunc);
+    }
+
+    #[test]
+    fn t_dist_df_zero_returns_num() {
+        assert_eq!(
+            builtin_t_dist(&[Value::Number(1.0), Value::Number(0.0), Value::Bool(true)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn t_dist_propagates_error() {
+        assert_eq!(
+            builtin_t_dist(&[Value::Error(CellError::Na), Value::Number(10.0), Value::Bool(true)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn t_dist_wrong_arg_count() {
+        assert_eq!(
+            builtin_t_dist(&[Value::Number(1.0), Value::Number(10.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // ===== T.DIST.RT =====
+
+    #[test]
+    fn t_dist_rt_positive() {
+        match builtin_t_dist_rt(&[Value::Number(1.0), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, 0.17045),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_rt_at_zero() {
+        match builtin_t_dist_rt(&[Value::Number(0.0), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, 0.5),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_rt_wrong_arg_count() {
+        assert_eq!(builtin_t_dist_rt(&[Value::Number(1.0)]), Value::Error(CellError::Value),);
+    }
+
+    #[test]
+    fn t_dist_rt_propagates_error() {
+        assert_eq!(
+            builtin_t_dist_rt(&[Value::Error(CellError::Na), Value::Number(10.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    // ===== T.DIST.2T =====
+
+    #[test]
+    fn t_dist_2t_positive() {
+        match builtin_t_dist_2t(&[Value::Number(1.0), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, 0.34090),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_2t_at_zero_is_one() {
+        match builtin_t_dist_2t(&[Value::Number(0.0), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, 1.0),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_2t_x_negative_returns_num() {
+        assert_eq!(
+            builtin_t_dist_2t(&[Value::Number(-1.0), Value::Number(10.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn t_dist_2t_wrong_arg_count() {
+        assert_eq!(builtin_t_dist_2t(&[Value::Number(1.0)]), Value::Error(CellError::Value),);
+    }
+
+    #[test]
+    fn t_dist_2t_propagates_error() {
+        assert_eq!(
+            builtin_t_dist_2t(&[Value::Number(1.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    // ===== T.INV =====
+
+    #[test]
+    fn t_inv_median_is_zero() {
+        match builtin_t_inv(&[Value::Number(0.5), Value::Number(10.0)]) {
+            Value::Number(n) => assert!((n).abs() < 1e-8, "expected ~0, got {n}"),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_inv_ninety_five_pct() {
+        match builtin_t_inv(&[Value::Number(0.95), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, 1.81246),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_inv_left_tail() {
+        match builtin_t_inv(&[Value::Number(0.025), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, -2.22814),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_inv_p_zero_returns_num() {
+        assert_eq!(
+            builtin_t_inv(&[Value::Number(0.0), Value::Number(10.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn t_inv_p_one_returns_num() {
+        assert_eq!(
+            builtin_t_inv(&[Value::Number(1.0), Value::Number(10.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn t_inv_wrong_arg_count() {
+        assert_eq!(builtin_t_inv(&[Value::Number(0.5)]), Value::Error(CellError::Value),);
+    }
+
+    #[test]
+    fn t_inv_propagates_error() {
+        assert_eq!(
+            builtin_t_inv(&[Value::Error(CellError::Na), Value::Number(10.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    // ===== T.INV.2T =====
+
+    #[test]
+    fn t_inv_2t_five_pct() {
+        match builtin_t_inv_2t(&[Value::Number(0.05), Value::Number(10.0)]) {
+            Value::Number(n) => assert_approx(n, 2.22814),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_inv_2t_at_one_is_zero() {
+        match builtin_t_inv_2t(&[Value::Number(1.0), Value::Number(10.0)]) {
+            Value::Number(n) => assert!(n.abs() < 1e-10, "expected 0, got {n}"),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_inv_2t_symmetric_with_t_inv() {
+        let p = 0.05;
+        let df = 10.0;
+        let inv_2t = builtin_t_inv_2t(&[Value::Number(p), Value::Number(df)]);
+        let inv_left = builtin_t_inv(&[Value::Number(p / 2.0), Value::Number(df)]);
+        match (inv_2t, inv_left) {
+            (Value::Number(a), Value::Number(b)) => assert_approx(a, -b),
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_inv_2t_p_zero_returns_num() {
+        assert_eq!(
+            builtin_t_inv_2t(&[Value::Number(0.0), Value::Number(10.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn t_inv_2t_p_above_one_returns_num() {
+        assert_eq!(
+            builtin_t_inv_2t(&[Value::Number(1.1), Value::Number(10.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn t_inv_2t_wrong_arg_count() {
+        assert_eq!(builtin_t_inv_2t(&[Value::Number(0.5)]), Value::Error(CellError::Value),);
+    }
+
+    #[test]
+    fn t_inv_2t_propagates_error() {
+        assert_eq!(
+            builtin_t_inv_2t(&[Value::Number(0.5), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
     }
 }
