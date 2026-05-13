@@ -265,6 +265,14 @@ pub(crate) fn dispatch(
         "T.DIST.2T" => Some(statistical::builtin_t_dist_2t(&eval_args(args, interp, scope))),
         "T.INV" => Some(statistical::builtin_t_inv(&eval_args(args, interp, scope))),
         "T.INV.2T" => Some(statistical::builtin_t_inv_2t(&eval_args(args, interp, scope))),
+        "BINOM.DIST" => Some(
+            statistical::builtin_binom_dist(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
+        "BINOM.INV" => Some(
+            statistical::builtin_binom_inv(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
         _ => None,
     }
 }
