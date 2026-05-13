@@ -37,8 +37,7 @@ Current behavior: no dispatch entry — returns `#VALUE!` from the fallback.
 ## What already exists
 
 - `crates/xlstream-eval/src/builtins/engineering.rs` — module home. Specs 23-29 (base conversion, BASE, COMPLEX/IMREAL/IMAGINARY, DELTA/GESTEP) will have landed here, establishing the engineering dispatch pattern.
-- `crates/xlstream-eval/src/builtins/statistical.rs:62-86` — `erf_approx` private function already exists. Chebyshev fitting, ~1.2e-7 accuracy. Used by NORM.DIST. **This needs to be moved to a shared location** (either `engineering.rs` re-exported, or a shared utility like `specfn.rs`) so both statistical and engineering modules can call it.
-- `crates/xlstream-eval/src/builtins/specfn.rs` — special function primitives (ln_gamma, regularized_incomplete_beta, t-distribution). Natural home for `erf_approx` if relocated.
+- `crates/xlstream-eval/src/builtins/specfn.rs:233-257` — `erf_approx` function (relocated from `statistical.rs` in this PR). `pub(super)`, shared by both `statistical.rs` and `engineering.rs`.
 - `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). Engineering dispatch arms already present from specs 23-29.
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper for pure eager-eval builtins
 - `crates/xlstream-eval/src/builtins/math.rs:27-29` — `num_arg_ce` helper
@@ -48,8 +47,7 @@ Current behavior: no dispatch entry — returns `#VALUE!` from the fallback.
 ## Where to look
 
 - `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (base conversion + comparison functions from specs 23-29 already present)
-- `crates/xlstream-eval/src/builtins/statistical.rs:62-86` — existing `erf_approx` (must be relocated or re-exported)
-- `crates/xlstream-eval/src/builtins/specfn.rs` — candidate location for shared `erf_approx`
+- `crates/xlstream-eval/src/builtins/specfn.rs:233-257` — `erf_approx` (shared, relocated from statistical.rs)
 - `crates/xlstream-eval/src/builtins/mod.rs:12` — `mod engineering;` declaration
 - `crates/xlstream-eval/src/builtins/mod.rs:159-175` — math builtins dispatch pattern (pure, eager eval)
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper
@@ -66,7 +64,7 @@ All four functions are pure scalar functions — row-local, no streaming concern
 
 **Row eval:** Eager-eval dispatch. All args evaluated via `eval_args`, passed as `&[Value]` to the builtin function. Same pattern as math builtins.
 
-**Prerequisite refactor:** Move `erf_approx` from `statistical.rs` to `specfn.rs` (or another shared location within `builtins`). Make it `pub(crate)` or `pub(super)`. Update `statistical.rs` to import from the new location. This is a mechanical move with no behavior change — include in the same PR.
+**Prerequisite refactor:** Done — `erf_approx` relocated to `specfn.rs` as `pub(super)`. Both `statistical.rs` and `engineering.rs` import it.
 
 **ERF(lower_limit, [upper_limit]):**
 1. Arity check: 1-2 args. Otherwise `#VALUE!`

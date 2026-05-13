@@ -1076,6 +1076,7 @@ pub fn builtin_gestep(args: &[Value]) -> Value {
 /// # Errors
 ///
 /// Returns `#VALUE!` for wrong arity (0 or >2 args) or non-numeric input.
+/// Returns `#NUM!` for NaN input.
 /// Propagates errors from arguments.
 ///
 /// # Examples
@@ -1096,6 +1097,9 @@ pub fn builtin_erf(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
+    if lower.is_nan() {
+        return Value::Error(CellError::Num);
+    }
     if args.len() == 1 {
         return Value::Number(erf_approx(lower));
     }
@@ -1103,6 +1107,9 @@ pub fn builtin_erf(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
+    if upper.is_nan() {
+        return Value::Error(CellError::Num);
+    }
     Value::Number(erf_approx(upper) - erf_approx(lower))
 }
 
@@ -1111,6 +1118,7 @@ pub fn builtin_erf(args: &[Value]) -> Value {
 /// # Errors
 ///
 /// Returns `#VALUE!` for wrong arity (!=1 arg) or non-numeric input.
+/// Returns `#NUM!` for NaN input.
 /// Propagates errors from arguments.
 ///
 /// # Examples
@@ -1131,6 +1139,9 @@ pub fn builtin_erfc(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
+    if x.is_nan() {
+        return Value::Error(CellError::Num);
+    }
     Value::Number(1.0 - erf_approx(x))
 }
 
@@ -1139,6 +1150,8 @@ pub fn builtin_erfc(args: &[Value]) -> Value {
 /// # Errors
 ///
 /// Returns `#VALUE!` for wrong arity (!=1 arg) or non-numeric input.
+/// Returns `#NUM!` for NaN input.
+/// Propagates errors from arguments.
 ///
 /// # Examples
 ///
@@ -1158,6 +1171,9 @@ pub fn builtin_erf_precise(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
+    if x.is_nan() {
+        return Value::Error(CellError::Num);
+    }
     Value::Number(erf_approx(x))
 }
 
@@ -1166,6 +1182,8 @@ pub fn builtin_erf_precise(args: &[Value]) -> Value {
 /// # Errors
 ///
 /// Returns `#VALUE!` for wrong arity (!=1 arg) or non-numeric input.
+/// Returns `#NUM!` for NaN input.
+/// Propagates errors from arguments.
 ///
 /// # Examples
 ///
@@ -3610,6 +3628,19 @@ mod tests {
     }
 
     #[test]
+    fn erf_nan_returns_num_error() {
+        assert_eq!(builtin_erf(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+        assert_eq!(
+            builtin_erf(&[Value::Number(0.0), Value::Number(f64::NAN)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_erf(&[Value::Number(f64::NAN), Value::Number(1.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
     fn erf_non_numeric_text_returns_value_error() {
         assert_eq!(builtin_erf(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
@@ -3652,8 +3683,23 @@ mod tests {
     }
 
     #[test]
+    fn erfc_nan_returns_num_error() {
+        assert_eq!(builtin_erfc(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
     fn erfc_non_numeric_text_returns_value_error() {
         assert_eq!(builtin_erfc(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn erfc_coercion_bool_and_text() {
+        assert_close(unwrap_number(builtin_erfc(&[Value::Bool(true)])), 0.157_299_207, 1e-6);
+        assert_close(
+            unwrap_number(builtin_erfc(&[Value::Text("0.5".into())])),
+            1.0 - 0.520_499_878,
+            1e-6,
+        );
     }
 
     // -- ERF.PRECISE / ERFC.PRECISE --
@@ -3677,6 +3723,37 @@ mod tests {
     }
 
     #[test]
+    fn erf_precise_error_propagation() {
+        assert_eq!(
+            builtin_erf_precise(&[Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn erf_precise_nan_returns_num_error() {
+        assert_eq!(builtin_erf_precise(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn erf_precise_non_numeric_text_returns_value_error() {
+        assert_eq!(
+            builtin_erf_precise(&[Value::Text("abc".into())]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn erf_precise_coercion() {
+        assert_close(unwrap_number(builtin_erf_precise(&[Value::Bool(true)])), 0.842_700_793, 1e-6);
+        assert_close(
+            unwrap_number(builtin_erf_precise(&[Value::Text("0.5".into())])),
+            0.520_499_878,
+            1e-6,
+        );
+    }
+
+    #[test]
     fn erfc_precise_matches_erfc() {
         assert_close(
             unwrap_number(builtin_erfc_precise(&[Value::Number(1.0)])),
@@ -3689,5 +3766,35 @@ mod tests {
     #[test]
     fn erfc_precise_wrong_arity() {
         assert_eq!(builtin_erfc_precise(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn erfc_precise_error_propagation() {
+        assert_eq!(
+            builtin_erfc_precise(&[Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn erfc_precise_nan_returns_num_error() {
+        assert_eq!(builtin_erfc_precise(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn erfc_precise_non_numeric_text_returns_value_error() {
+        assert_eq!(
+            builtin_erfc_precise(&[Value::Text("abc".into())]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn erfc_precise_coercion() {
+        assert_close(
+            unwrap_number(builtin_erfc_precise(&[Value::Bool(true)])),
+            0.157_299_207,
+            1e-6,
+        );
     }
 }
