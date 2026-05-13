@@ -145,6 +145,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "LARGE", "SMALL",
     "RANK.EQ", "RANK.AVG",
     "CORREL",
+    "COVARIANCE.P", "COVARIANCE.S",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
@@ -281,6 +282,8 @@ mod tests {
         assert!(is_range_expanding("RANK.AVG"));
         assert!(is_range_expanding("CORREL"));
         assert!(is_range_expanding("correl"));
+        assert!(is_range_expanding("COVARIANCE.P"));
+        assert!(is_range_expanding("COVARIANCE.S"));
         assert!(!is_range_expanding("SUM"));
     }
 
