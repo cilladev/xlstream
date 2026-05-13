@@ -14,3 +14,23 @@ fn complex() {
 fn bitwise() {
     run_conformance("engineering/bitwise.xlsx");
 }
+
+#[test]
+fn bin2dec_dec2bin() {
+    run_conformance("engineering/bin2dec_dec2bin.xlsx");
+}
+
+#[test]
+fn oct2dec_dec2oct() {
+    run_conformance("engineering/oct2dec_dec2oct.xlsx");
+}
+
+#[test]
+fn cross_base() {
+    run_conformance("engineering/cross_base.xlsx");
+}
+
+#[test]
+fn base() {
+    run_conformance("engineering/base.xlsx");
+}
