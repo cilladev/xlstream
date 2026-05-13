@@ -23,6 +23,16 @@ fn num_arg(args: &[Value], idx: usize) -> Result<f64, Value> {
     }
 }
 
+/// Like [`num_arg`] but returns `CellError` directly.
+pub(crate) fn num_arg_ce(args: &[Value], idx: usize) -> Result<f64, CellError> {
+    coerce::to_number(args.get(idx).unwrap_or(&Value::Empty))
+}
+
+/// Like [`num_arg_ce`] for booleans — returns `CellError` directly.
+pub(crate) fn bool_arg_ce(args: &[Value], idx: usize) -> Result<bool, CellError> {
+    coerce::to_bool(args.get(idx).unwrap_or(&Value::Empty))
+}
+
 /// Convert f64 to Decimal via shortest-roundtrip string to preserve
 /// the user-visible decimal representation (avoids IEEE 754 artifacts
 /// like 2.345 becoming 2.3449999...).
