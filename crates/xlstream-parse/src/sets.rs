@@ -263,6 +263,9 @@ mod tests {
         assert!(is_range_expanding("STDEV.S"));
         assert!(is_range_expanding("STDEV.P"));
         assert!(is_range_expanding("var.s"));
+        assert!(is_range_expanding("SKEW"));
+        assert!(is_range_expanding("SKEW.P"));
+        assert!(is_range_expanding("KURT"));
         assert!(!is_range_expanding("SUM"));
     }
 
