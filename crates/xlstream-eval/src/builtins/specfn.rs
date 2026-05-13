@@ -230,6 +230,31 @@ fn initial_guess(p: f64, df: f64) -> f64 {
     z + g1 + g2
 }
 
+/// Approximation of the error function erf(x).
+///
+/// Uses the Chebyshev fitting from Numerical Recipes. Max absolute error
+/// ~1.2e-7 — sufficient for Excel-compatible results at 1e-6 conformance
+/// tolerance.
+pub(super) fn erf_approx(x: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.5 * x.abs());
+    let tau = t
+        * (-x * x - 1.265_512_23
+            + t * (1.000_023_68
+                + t * (0.374_091_96
+                    + t * (0.096_784_18
+                        + t * (-0.186_288_06
+                            + t * (0.278_868_07
+                                + t * (-1.135_203_98
+                                    + t * (1.488_515_87
+                                        + t * (-0.822_152_23 + t * 0.170_872_77)))))))))
+            .exp();
+    if x >= 0.0 {
+        1.0 - tau
+    } else {
+        tau - 1.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
