@@ -28,19 +28,18 @@ Current behavior: no dispatch entry — returns `#VALUE!` from the fallback.
 
 ## What already exists
 
-- `crates/xlstream-eval/src/builtins/engineering.rs` — empty module (module doc only, lines 1-5). CONVERT will land here.
-- `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). No dispatch arms yet for engineering functions.
+- `crates/xlstream-eval/src/builtins/engineering.rs` — module home. Specs 23-30 (base conversion, BASE, COMPLEX/IMREAL/IMAGINARY, DELTA/GESTEP, ERF/ERFC) will have landed here. CONVERT is standalone but follows the same dispatch pattern.
+- `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). Engineering dispatch arms already present from specs 23-30.
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper for pure eager-eval builtins
 - `crates/xlstream-eval/src/builtins/math.rs:27-29` — `num_arg_ce` helper
 - `crates/xlstream-eval/src/builtins/string.rs:19-25` — `text_arg` helper (extracts string from args)
 - `xlstream_core::coerce::to_text` — value-to-text coercion
 - Not in `UNSUPPORTED_FUNCTIONS` or `RANGE_EXPANDING_FUNCTIONS`
-- Not in dispatch
 - `docs/functions.md` lists CONVERT as `.` (planned) for v0.3
 
 ## Where to look
 
-- `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (currently empty)
+- `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (base conversion + comparison + erf functions from specs 23-30 already present)
 - `crates/xlstream-eval/src/builtins/mod.rs:12` — `mod engineering;` declaration
 - `crates/xlstream-eval/src/builtins/mod.rs:140-157` — string builtins dispatch pattern (text-handling builtins)
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper
