@@ -245,6 +245,7 @@ pub(crate) fn dispatch(
         "SKEW" => Some(builtin_skew(args, interp, scope)),
         "SKEW.P" => Some(builtin_skew_p(args, interp, scope)),
         "KURT" => Some(builtin_kurt(args, interp, scope)),
+        "MODE.SNGL" => Some(builtin_mode_sngl(args, interp, scope)),
         _ => None,
     }
 }
@@ -328,6 +329,19 @@ fn builtin_kurt(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope
     }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::kurt(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `MODE.SNGL(range, ...)` — most frequent value. Range-expanding.
+fn builtin_mode_sngl(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::mode_sngl(&values).map_or_else(Value::Error, Value::Number)
 }
 
 /// `AVEDEV(range, ...)` — average absolute deviation. Range-expanding.

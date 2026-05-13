@@ -184,7 +184,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | MIN | x | yes | v0.1 | x | x | |
 | MINA | . | yes | v0.3 | | | |
 | MINIFS | x | yes | v0.2 | x | x | |
-| MODE.SNGL | . | yes | v0.3 | | | |
+| MODE.SNGL | x | yes | v0.3 | x | x | |
 | MODE.MULT | . | yes | v0.3 | | | |
 | NEGBINOM.DIST | . | yes | v0.3 | | | |
 | NORM.DIST | . | yes | v0.3 | | | |
