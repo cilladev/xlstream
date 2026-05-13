@@ -15,7 +15,7 @@ pub mod info;
 mod lookup;
 pub(crate) mod math;
 mod multi_conditional;
-mod statistical;
+pub mod statistical;
 pub(crate) mod string;
 
 use xlstream_core::{CellError, Value};
