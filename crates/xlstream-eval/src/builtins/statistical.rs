@@ -1,8 +1,9 @@
 //! Statistical builtin functions.
 //!
-//! STDEV.S, STDEV.P, VAR.S, VAR.P and future functions (SKEW, KURT,
-//! AVEDEV, etc.) share a common [`collect_numerics`] helper that
-//! extracts `f64` values from a `&[Value]` slice using range semantics.
+//! VAR.S, VAR.P, STDEV.S, STDEV.P, SKEW, SKEW.P, KURT and future
+//! functions (AVEDEV, etc.) share a common [`collect_numerics`] helper
+//! that extracts `f64` values from a `&[Value]` slice using range
+//! semantics.
 
 use xlstream_core::{CellError, Value};
 
@@ -171,6 +172,8 @@ pub fn stdev_p(values: &[Value]) -> Result<f64, CellError> {
 ///
 /// Returns `Err(CellError::Div0)` if fewer than 3 numeric values,
 /// if standard deviation is zero, or if any input is an error.
+/// Returns `Err(CellError::Num)` if the result overflows to
+/// infinity or NaN.
 ///
 /// # Examples
 ///
@@ -201,8 +204,12 @@ pub fn skew(values: &[Value]) -> Result<f64, CellError> {
 
     let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
     let adjustment = nf / ((nf - 1.0) * (nf - 2.0));
+    let result = adjustment * m3;
 
-    Ok(adjustment * m3)
+    if result.is_nan() || result.is_infinite() {
+        return Err(CellError::Num);
+    }
+    Ok(result)
 }
 
 /// `SKEW.P` — population skewness.
@@ -213,6 +220,8 @@ pub fn skew(values: &[Value]) -> Result<f64, CellError> {
 ///
 /// Returns `Err(CellError::Div0)` if no numeric values, if standard
 /// deviation is zero, or if any input is an error.
+/// Returns `Err(CellError::Num)` if the result overflows to
+/// infinity or NaN.
 ///
 /// # Examples
 ///
@@ -242,8 +251,12 @@ pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
     }
 
     let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
+    let result = m3 / nf;
 
-    Ok(m3 / nf)
+    if result.is_nan() || result.is_infinite() {
+        return Err(CellError::Num);
+    }
+    Ok(result)
 }
 
 /// `KURT` — excess kurtosis (sample-adjusted).
@@ -255,6 +268,8 @@ pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
 ///
 /// Returns `Err(CellError::Div0)` if fewer than 4 numeric values,
 /// if standard deviation is zero, or if any input is an error.
+/// Returns `Err(CellError::Num)` if the result overflows to
+/// infinity or NaN.
 ///
 /// # Examples
 ///
@@ -286,8 +301,12 @@ pub fn kurt(values: &[Value]) -> Result<f64, CellError> {
     let m4: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(4)).sum();
     let term1 = (nf * (nf + 1.0)) / ((nf - 1.0) * (nf - 2.0) * (nf - 3.0));
     let term2 = (3.0 * (nf - 1.0).powi(2)) / ((nf - 2.0) * (nf - 3.0));
+    let result = term1 * m4 - term2;
 
-    Ok(term1 * m4 - term2)
+    if result.is_nan() || result.is_infinite() {
+        return Err(CellError::Num);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -547,9 +566,9 @@ mod tests {
     }
 
     #[test]
-    fn skew_minimum_n_three() {
+    fn skew_minimum_n_three_symmetric_is_zero() {
         let vals: Vec<Value> = [10.0, 20.0, 30.0].iter().map(|&n| Value::Number(n)).collect();
-        skew(&vals).unwrap();
+        assert_close(skew(&vals).unwrap(), 0.0);
     }
 
     #[test]
@@ -614,9 +633,9 @@ mod tests {
     }
 
     #[test]
-    fn skew_p_with_two_values() {
+    fn skew_p_two_symmetric_values_is_zero() {
         let vals = [Value::Number(1.0), Value::Number(3.0)];
-        skew_p(&vals).unwrap();
+        assert_close(skew_p(&vals).unwrap(), 0.0);
     }
 
     #[test]
@@ -634,6 +653,29 @@ mod tests {
     fn skew_p_all_same_returns_div0() {
         let vals: Vec<Value> = [5.0, 5.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
         assert_eq!(skew_p(&vals).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn skew_p_propagates_error() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Error(CellError::Na),
+            Value::Number(3.0),
+            Value::Number(5.0),
+        ];
+        assert_eq!(skew_p(&vals).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn skew_p_skips_text_and_bool() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Text("text".into()),
+            Value::Number(3.0),
+            Value::Bool(true),
+            Value::Number(5.0),
+        ];
+        assert_close(skew_p(&vals).unwrap(), 0.0);
     }
 
     // ===== KURT =====
@@ -662,9 +704,9 @@ mod tests {
     }
 
     #[test]
-    fn kurt_minimum_n_four() {
+    fn kurt_minimum_n_four_uniform_is_negative_1_2() {
         let vals: Vec<Value> = [1.0, 2.0, 3.0, 4.0].iter().map(|&n| Value::Number(n)).collect();
-        kurt(&vals).unwrap();
+        assert_close(kurt(&vals).unwrap(), -1.2);
     }
 
     #[test]
