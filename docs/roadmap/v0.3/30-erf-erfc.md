@@ -36,19 +36,18 @@ Current behavior: no dispatch entry — returns `#VALUE!` from the fallback.
 
 ## What already exists
 
-- `crates/xlstream-eval/src/builtins/engineering.rs` — empty module (module doc only, lines 1-5). ERF/ERFC functions will land here.
+- `crates/xlstream-eval/src/builtins/engineering.rs` — module home. Specs 23-29 (base conversion, BASE, COMPLEX/IMREAL/IMAGINARY, DELTA/GESTEP) will have landed here, establishing the engineering dispatch pattern.
 - `crates/xlstream-eval/src/builtins/statistical.rs:62-86` — `erf_approx` private function already exists. Chebyshev fitting, ~1.2e-7 accuracy. Used by NORM.DIST. **This needs to be moved to a shared location** (either `engineering.rs` re-exported, or a shared utility like `specfn.rs`) so both statistical and engineering modules can call it.
 - `crates/xlstream-eval/src/builtins/specfn.rs` — special function primitives (ln_gamma, regularized_incomplete_beta, t-distribution). Natural home for `erf_approx` if relocated.
-- `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). No dispatch arms yet for engineering functions.
+- `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). Engineering dispatch arms already present from specs 23-29.
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper for pure eager-eval builtins
 - `crates/xlstream-eval/src/builtins/math.rs:27-29` — `num_arg_ce` helper
 - Not in `UNSUPPORTED_FUNCTIONS` or `RANGE_EXPANDING_FUNCTIONS`
-- Not in dispatch
 - `docs/functions.md` lists ERF, ERFC, ERF.PRECISE, ERFC.PRECISE as `.` (planned) for v0.3
 
 ## Where to look
 
-- `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (currently empty)
+- `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (base conversion + comparison functions from specs 23-29 already present)
 - `crates/xlstream-eval/src/builtins/statistical.rs:62-86` — existing `erf_approx` (must be relocated or re-exported)
 - `crates/xlstream-eval/src/builtins/specfn.rs` — candidate location for shared `erf_approx`
 - `crates/xlstream-eval/src/builtins/mod.rs:12` — `mod engineering;` declaration

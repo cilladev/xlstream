@@ -33,17 +33,16 @@ Current behavior: no dispatch entry — returns `#VALUE!` from the fallback.
 
 ## What already exists
 
-- `crates/xlstream-eval/src/builtins/engineering.rs` — empty module (module doc only, lines 1-5). Bitwise functions will land here.
-- `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). No dispatch arms yet for engineering functions.
+- `crates/xlstream-eval/src/builtins/engineering.rs` — module home. Specs 23-31 (base conversion, BASE, COMPLEX/IMREAL/IMAGINARY, DELTA/GESTEP, ERF/ERFC, CONVERT) will have landed here. Bitwise functions follow the same dispatch pattern.
+- `crates/xlstream-eval/src/builtins/mod.rs` — `mod engineering;` declared (line 12). Engineering dispatch arms already present from specs 23-31.
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper for pure eager-eval builtins
 - `crates/xlstream-eval/src/builtins/math.rs:27-29` — `num_arg_ce` helper
 - Not in `UNSUPPORTED_FUNCTIONS` or `RANGE_EXPANDING_FUNCTIONS`
-- Not in dispatch
 - `docs/functions.md` lists all five as `.` (planned) for v0.3
 
 ## Where to look
 
-- `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (currently empty)
+- `crates/xlstream-eval/src/builtins/engineering.rs` — implementation home (base conversion + complex + comparison + erf + CONVERT from specs 23-31 already present)
 - `crates/xlstream-eval/src/builtins/mod.rs:12` — `mod engineering;` declaration
 - `crates/xlstream-eval/src/builtins/mod.rs:159-175` — math builtins dispatch pattern (pure, eager eval)
 - `crates/xlstream-eval/src/builtins/mod.rs:30-36` — `eval_args` helper
