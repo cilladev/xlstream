@@ -14,7 +14,6 @@ fn skew_kurt() {
 fn avedev() {
     run_conformance("statistical/avedev.xlsx");
 }
-<<<<<<< HEAD
 
 #[test]
 fn mode_sngl() {

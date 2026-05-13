@@ -1,10 +1,10 @@
 //! Statistical builtin functions.
 //!
 //! AVEDEV, VAR.S/P, STDEV.S/P, SKEW, SKEW.P, KURT, MODE.SNGL,
-//! PERCENTILE.INC/EXC, QUARTILE.INC/EXC. Common helpers:
-//! [`collect_numerics`] extracts `f64` values from a `&[Value]` slice,
-//! [`mean_and_variance`] computes mean and variance, and
-//! [`sorted_numerics`] collects, rejects non-finite, and sorts for
+//! PERCENTILE.INC/EXC, QUARTILE.INC/EXC, RANK.EQ, RANK.AVG.
+//! Common helpers: [`collect_numerics`] extracts `f64` values from a
+//! `&[Value]` slice, [`mean_and_variance`] computes mean and variance,
+//! and [`sorted_numerics`] collects, rejects non-finite, and sorts for
 //! percentile/quartile functions.
 
 use std::collections::HashMap;
@@ -1800,5 +1800,10 @@ mod tests {
     #[test]
     fn rank_avg_not_found() {
         assert_eq!(rank_avg(4.0, &[1.0, 2.0, 3.0], false).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rank_avg_empty_returns_na() {
+        assert_eq!(rank_avg(1.0, &[], false).unwrap_err(), CellError::Na);
     }
 }
