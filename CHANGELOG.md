@@ -19,6 +19,7 @@ Semver.
 - T.DIST, T.DIST.RT, T.DIST.2T, T.INV, T.INV.2T Student's t-distribution functions
 - BINOM.DIST, BINOM.INV binomial distribution PMF/CDF and inverse
 - NORM.DIST, NORM.INV normal distribution (CDF, PDF, inverse CDF)
+- NORM.S.DIST, NORM.S.INV standard normal distribution and inverse
 
 ## [0.2.1] - 2026-05-11
 

@@ -189,8 +189,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | NEGBINOM.DIST | . | yes | v0.3 | | | |
 | NORM.DIST | x | yes | v0.3 | x | x | |
 | NORM.INV | x | yes | v0.3 | x | x | |
-| NORM.S.DIST | . | yes | v0.3 | | | |
-| NORM.S.INV | . | yes | v0.3 | | | |
+| NORM.S.DIST | x | yes | v0.3 | | | |
+| NORM.S.INV | x | yes | v0.3 | | | |
 | PEARSON | . | yes | v0.3 | | | |
 | PERCENTILE.EXC | x | yes | v0.3 | | | |
 | PERCENTILE.INC | x | yes | v0.3 | | | |
