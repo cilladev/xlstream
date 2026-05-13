@@ -2,7 +2,7 @@
 //!
 //! Aggregate stats (AVEDEV, VAR, STDEV, SKEW, KURT, MODE, PERCENTILE,
 //! QUARTILE, RANK) use [`collect_numerics`] and [`mean_and_variance`].
-//! Distribution functions (T.DIST, EXPON.DIST, POISSON.DIST) use
+//! Distribution functions (T.DIST, EXPON.DIST, POISSON.DIST, BINOM.DIST) use
 //! [`num_arg`] + `specfn` primitives.
 
 use std::collections::HashMap;
@@ -1060,6 +1060,156 @@ pub fn builtin_t_inv_2t(args: &[Value]) -> Value {
     } else {
         Value::Error(CellError::Num)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Binomial distribution
+// ---------------------------------------------------------------------------
+
+const MAX_BINOM_TRIALS: f64 = 1_000_000.0;
+
+/// Binomial PMF: P(X = k) for X ~ Binomial(n, p).
+///
+/// Uses log-space to avoid overflow on large n. Special-cases p=0 and
+/// p=1 to avoid ln(0).
+///
+/// Caller must ensure k in [0, n], p in [0, 1], and all args finite.
+#[allow(clippy::float_cmp, clippy::manual_range_contains)]
+fn binom_pmf(k: f64, n: f64, p: f64) -> f64 {
+    debug_assert!(k >= 0.0 && k <= n && p >= 0.0 && p <= 1.0);
+    if p == 0.0 {
+        return if k == 0.0 { 1.0 } else { 0.0 };
+    }
+    if p == 1.0 {
+        return if k == n { 1.0 } else { 0.0 };
+    }
+    let ln_coeff = ln_gamma(n + 1.0) - ln_gamma(k + 1.0) - ln_gamma(n - k + 1.0);
+    let ln_pmf = ln_coeff + k * p.ln() + (n - k) * (1.0 - p).ln();
+    ln_pmf.exp()
+}
+
+/// `BINOM.DIST(number_s, trials, probability_s, cumulative)` — binomial
+/// distribution PMF or CDF.
+///
+/// `number_s` and `trials` are truncated to integers.
+///
+/// # Errors
+///
+/// Propagates any `CellError` from input `Value::Error` variants.
+/// Returns `Err(CellError::Value)` if arg count != 4 or text is
+/// non-numeric.
+/// Returns `Err(CellError::Num)` if any numeric arg is NaN/Infinity,
+/// `trials` < 0 or > 1 000 000, `number_s` not in `[0, trials]`,
+/// `probability_s` not in `[0, 1]`, or result is non-finite.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_binom_dist;
+/// let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+/// let result = builtin_binom_dist(&args).unwrap();
+/// assert!((result - 0.246_093_75).abs() < 1e-9);
+/// ```
+pub fn builtin_binom_dist(args: &[Value]) -> Result<f64, CellError> {
+    if args.len() != 4 {
+        return Err(CellError::Value);
+    }
+    let k = coerce::to_number(&args[0])?;
+    let n = coerce::to_number(&args[1])?;
+    let p = coerce::to_number(&args[2])?;
+    let cumulative = coerce::to_bool(&args[3])?;
+
+    if !k.is_finite() || !n.is_finite() || !p.is_finite() {
+        return Err(CellError::Num);
+    }
+
+    let k = k.trunc();
+    let n = n.trunc();
+
+    if !(0.0..=MAX_BINOM_TRIALS).contains(&n) || k < 0.0 || k > n {
+        return Err(CellError::Num);
+    }
+    if !(0.0..=1.0).contains(&p) {
+        return Err(CellError::Num);
+    }
+
+    if cumulative {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let k_int = k as u64;
+        let mut cdf = 0.0;
+        for i in 0..=k_int {
+            #[allow(clippy::cast_precision_loss)]
+            let fi = i as f64;
+            cdf += binom_pmf(fi, n, p);
+        }
+        // Guard floating-point accumulation drift past 1.0
+        finite_or_num(cdf.min(1.0))
+    } else {
+        finite_or_num(binom_pmf(k, n, p))
+    }
+}
+
+/// `BINOM.INV(trials, probability_s, alpha)` — inverse binomial distribution.
+///
+/// Returns the smallest `k` where
+/// `BINOM.DIST(k, trials, probability_s, TRUE) >= alpha`.
+/// `trials` is truncated to an integer.
+///
+/// # Errors
+///
+/// Propagates any `CellError` from input `Value::Error` variants.
+/// Returns `Err(CellError::Value)` if arg count != 3 or text is
+/// non-numeric.
+/// Returns `Err(CellError::Num)` if any numeric arg is NaN/Infinity,
+/// `trials` < 0 or > 1 000 000, `probability_s` not in `[0, 1]`, or
+/// `alpha` not in `(0, 1]`.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_binom_inv;
+/// let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5)];
+/// let result = builtin_binom_inv(&args).unwrap();
+/// assert!((result - 5.0).abs() < f64::EPSILON);
+/// ```
+pub fn builtin_binom_inv(args: &[Value]) -> Result<f64, CellError> {
+    if args.len() != 3 {
+        return Err(CellError::Value);
+    }
+    let n = coerce::to_number(&args[0])?;
+    let p = coerce::to_number(&args[1])?;
+    let alpha = coerce::to_number(&args[2])?;
+
+    if !n.is_finite() || !p.is_finite() || !alpha.is_finite() {
+        return Err(CellError::Num);
+    }
+
+    let n = n.trunc();
+
+    if !(0.0..=MAX_BINOM_TRIALS).contains(&n) {
+        return Err(CellError::Num);
+    }
+    if !(0.0..=1.0).contains(&p) {
+        return Err(CellError::Num);
+    }
+    if alpha <= 0.0 || alpha > 1.0 {
+        return Err(CellError::Num);
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let n_int = n as u64;
+    let mut cdf = 0.0;
+    for k in 0..=n_int {
+        #[allow(clippy::cast_precision_loss)]
+        let fk = k as f64;
+        cdf += binom_pmf(fk, n, p);
+        if cdf >= alpha {
+            return finite_or_num(fk);
+        }
+    }
+    finite_or_num(n)
 }
 
 #[cfg(test)]
@@ -2816,5 +2966,410 @@ mod tests {
             ]),
             Value::Error(CellError::Div0),
         );
+    }
+
+    // ===== BINOM.DIST — happy path =====
+
+    #[test]
+    fn binom_dist_pmf_fair_coin() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.246_093_75);
+    }
+
+    #[test]
+    fn binom_dist_cdf_fair_coin() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(true)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.623_046_875);
+    }
+
+    #[test]
+    fn binom_dist_pmf_zero_successes() {
+        let args =
+            [Value::Number(0.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.000_976_562_5);
+    }
+
+    #[test]
+    fn binom_dist_pmf_all_successes() {
+        let args =
+            [Value::Number(10.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.000_976_562_5);
+    }
+
+    #[test]
+    fn binom_dist_pmf_different_probability() {
+        let args =
+            [Value::Number(3.0), Value::Number(10.0), Value::Number(0.3), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.266_827_932);
+    }
+
+    // ===== BINOM.DIST — edge cases =====
+
+    #[test]
+    fn binom_dist_p_zero_pmf_at_zero() {
+        let args =
+            [Value::Number(0.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn binom_dist_p_zero_pmf_at_nonzero() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn binom_dist_p_zero_cdf() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(true)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn binom_dist_p_one_pmf_at_n() {
+        let args =
+            [Value::Number(10.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn binom_dist_p_one_pmf_below_n() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn binom_dist_p_one_cdf_below_n() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(true)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn binom_dist_p_one_cdf_at_n() {
+        let args =
+            [Value::Number(10.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(true)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn binom_dist_trials_zero() {
+        let args =
+            [Value::Number(0.0), Value::Number(0.0), Value::Number(0.5), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn binom_dist_non_integer_truncates() {
+        let args =
+            [Value::Number(3.7), Value::Number(10.0), Value::Number(0.3), Value::Bool(false)];
+        let args_trunc =
+            [Value::Number(3.0), Value::Number(10.0), Value::Number(0.3), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), builtin_binom_dist(&args_trunc).unwrap());
+    }
+
+    // ===== BINOM.DIST — error cases =====
+
+    #[test]
+    fn binom_dist_k_negative_returns_num() {
+        let args =
+            [Value::Number(-1.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_k_exceeds_n_returns_num() {
+        let args =
+            [Value::Number(11.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_p_negative_returns_num() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(-0.1), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_p_above_one_returns_num() {
+        let args =
+            [Value::Number(5.0), Value::Number(10.0), Value::Number(1.1), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_n_negative_returns_num() {
+        let args =
+            [Value::Number(0.0), Value::Number(-1.0), Value::Number(0.5), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_n_exceeds_max_returns_num() {
+        let args = [
+            Value::Number(0.0),
+            Value::Number(MAX_BINOM_TRIALS + 1.0),
+            Value::Number(0.5),
+            Value::Bool(false),
+        ];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    // ===== BINOM.DIST — NaN/Infinity =====
+
+    #[test]
+    fn binom_dist_nan_k_returns_num() {
+        let args =
+            [Value::Number(f64::NAN), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_nan_n_returns_num() {
+        let args =
+            [Value::Number(0.0), Value::Number(f64::NAN), Value::Number(0.5), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_nan_p_returns_num() {
+        let args =
+            [Value::Number(0.0), Value::Number(10.0), Value::Number(f64::NAN), Value::Bool(false)];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_dist_infinity_n_returns_num() {
+        let args = [
+            Value::Number(0.0),
+            Value::Number(f64::INFINITY),
+            Value::Number(0.5),
+            Value::Bool(false),
+        ];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    // ===== BINOM.DIST — coercion =====
+
+    #[test]
+    fn binom_dist_text_numeric_coerces() {
+        let args = [
+            Value::Text("5".into()),
+            Value::Number(10.0),
+            Value::Number(0.5),
+            Value::Bool(false),
+        ];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.246_093_75);
+    }
+
+    #[test]
+    fn binom_dist_bool_coerces() {
+        let args =
+            [Value::Bool(true), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.009_765_625);
+    }
+
+    #[test]
+    fn binom_dist_empty_coerces_to_zero() {
+        let args = [Value::Empty, Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        assert_close(builtin_binom_dist(&args).unwrap(), 0.000_976_562_5);
+    }
+
+    // ===== BINOM.DIST — type mismatch =====
+
+    #[test]
+    fn binom_dist_non_numeric_text_returns_value() {
+        let args = [
+            Value::Text("abc".into()),
+            Value::Number(10.0),
+            Value::Number(0.5),
+            Value::Bool(false),
+        ];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Value);
+    }
+
+    // ===== BINOM.DIST — error propagation =====
+
+    #[test]
+    fn binom_dist_propagates_error() {
+        let args = [
+            Value::Error(CellError::Na),
+            Value::Number(10.0),
+            Value::Number(0.5),
+            Value::Bool(false),
+        ];
+        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Na);
+    }
+
+    // ===== BINOM.DIST — arg count =====
+
+    #[test]
+    fn binom_dist_wrong_arg_count() {
+        let too_few = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5)];
+        assert_eq!(builtin_binom_dist(&too_few).unwrap_err(), CellError::Value);
+
+        let too_many = [
+            Value::Number(5.0),
+            Value::Number(10.0),
+            Value::Number(0.5),
+            Value::Bool(false),
+            Value::Number(1.0),
+        ];
+        assert_eq!(builtin_binom_dist(&too_many).unwrap_err(), CellError::Value);
+    }
+
+    // ===== BINOM.INV — happy path =====
+
+    #[test]
+    fn binom_inv_fair_coin() {
+        let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn binom_inv_alpha_near_zero() {
+        let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.000_5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn binom_inv_different_probability() {
+        let args = [Value::Number(10.0), Value::Number(0.3), Value::Number(0.5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn binom_inv_alpha_one_returns_n() {
+        let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(1.0)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 10.0);
+    }
+
+    // ===== BINOM.INV — edge cases =====
+
+    #[test]
+    fn binom_inv_p_zero() {
+        let args = [Value::Number(10.0), Value::Number(0.0), Value::Number(0.5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn binom_inv_p_one() {
+        let args = [Value::Number(10.0), Value::Number(1.0), Value::Number(0.5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 10.0);
+    }
+
+    #[test]
+    fn binom_inv_n_zero() {
+        let args = [Value::Number(0.0), Value::Number(0.5), Value::Number(0.5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 0.0);
+    }
+
+    // ===== BINOM.INV — error cases =====
+
+    #[test]
+    fn binom_inv_alpha_zero_returns_num() {
+        let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.0)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_alpha_above_one_returns_num() {
+        let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(1.1)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_n_negative_returns_num() {
+        let args = [Value::Number(-1.0), Value::Number(0.5), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_p_negative_returns_num() {
+        let args = [Value::Number(10.0), Value::Number(-0.1), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_p_above_one_returns_num() {
+        let args = [Value::Number(10.0), Value::Number(1.1), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_n_exceeds_max_returns_num() {
+        let args = [
+            Value::Number(MAX_BINOM_TRIALS + 1.0),
+            Value::Number(0.5),
+            Value::Number(0.5),
+        ];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    // ===== BINOM.INV — NaN/Infinity =====
+
+    #[test]
+    fn binom_inv_nan_n_returns_num() {
+        let args = [Value::Number(f64::NAN), Value::Number(0.5), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_nan_p_returns_num() {
+        let args = [Value::Number(10.0), Value::Number(f64::NAN), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_nan_alpha_returns_num() {
+        let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(f64::NAN)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn binom_inv_infinity_n_returns_num() {
+        let args = [Value::Number(f64::INFINITY), Value::Number(0.5), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+    }
+
+    // ===== BINOM.INV — coercion =====
+
+    #[test]
+    fn binom_inv_text_numeric_coerces() {
+        let args = [Value::Text("10".into()), Value::Number(0.5), Value::Number(0.5)];
+        assert_close(builtin_binom_inv(&args).unwrap(), 5.0);
+    }
+
+    // ===== BINOM.INV — type mismatch =====
+
+    #[test]
+    fn binom_inv_non_numeric_text_returns_value() {
+        let args = [Value::Text("abc".into()), Value::Number(0.5), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Value);
+    }
+
+    // ===== BINOM.INV — error propagation =====
+
+    #[test]
+    fn binom_inv_propagates_error() {
+        let args = [Value::Error(CellError::Na), Value::Number(0.5), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Na);
+    }
+
+    // ===== BINOM.INV — arg count =====
+
+    #[test]
+    fn binom_inv_wrong_arg_count() {
+        let too_few = [Value::Number(10.0), Value::Number(0.5)];
+        assert_eq!(builtin_binom_inv(&too_few).unwrap_err(), CellError::Value);
+
+        let too_many =
+            [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5), Value::Number(1.0)];
+        assert_eq!(builtin_binom_inv(&too_many).unwrap_err(), CellError::Value);
     }
 }
