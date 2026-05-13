@@ -371,6 +371,58 @@ fn to_numeric_opt(v: &Value) -> Option<f64> {
     }
 }
 
+/// `CORREL(array1, array2)` — Pearson product-moment correlation coefficient.
+///
+/// Collects numeric pairs from two equal-length arrays (skipping pairs
+/// where either element is text/bool/empty), then computes:
+/// `r = sum((xi-mx)(yi-my)) / sqrt(sum((xi-mx)^2) * sum((yi-my)^2))`
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length or have
+/// fewer than 1 numeric pair.
+/// Returns `Err(CellError::Div0)` if either array has zero variance
+/// (constant values).
+/// Returns `Err(CellError)` if any element is an error value.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::correl;
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let r = correl(&xs, &ys).unwrap();
+/// assert!((r - 1.0).abs() < 1e-9);
+/// ```
+pub fn correl(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(xs, ys)?;
+    if pairs.is_empty() {
+        return Err(CellError::Na);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let n = pairs.len() as f64;
+    let mean_x = pairs.iter().map(|(x, _)| x).sum::<f64>() / n;
+    let mean_y = pairs.iter().map(|(_, y)| y).sum::<f64>() / n;
+
+    let mut sum_cross = 0.0_f64;
+    let mut sum_sq_x = 0.0_f64;
+    let mut sum_sq_y = 0.0_f64;
+    for &(x, y) in &pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        sum_cross += dx * dy;
+        sum_sq_x += dx * dx;
+        sum_sq_y += dy * dy;
+    }
+
+    let denom = (sum_sq_x * sum_sq_y).sqrt();
+    if denom <= 0.0 {
+        return Err(CellError::Div0);
+    }
+    finite_or_num(sum_cross / denom)
+}
+
 /// Compute the mean and variance of a `&[f64]` slice.
 ///
 /// `ddof` is the delta degrees of freedom: 0 for population, 1 for sample.
@@ -4123,5 +4175,134 @@ mod tests {
         let ys = [Value::Number(1.0), Value::Number(2.0)];
         let pairs = collect_paired_numerics(&xs, &ys).unwrap();
         assert_eq!(pairs, vec![(10.0, 1.0), (45000.0, 2.0)]);
+    }
+
+    // ===== CORREL =====
+
+    #[test]
+    fn correl_perfect_positive() {
+        let xs = [
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+            Value::Number(5.0),
+        ];
+        let ys = [
+            Value::Number(2.0),
+            Value::Number(4.0),
+            Value::Number(6.0),
+            Value::Number(8.0),
+            Value::Number(10.0),
+        ];
+        assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn correl_perfect_negative() {
+        let xs = [
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+            Value::Number(5.0),
+        ];
+        let ys = [
+            Value::Number(10.0),
+            Value::Number(8.0),
+            Value::Number(6.0),
+            Value::Number(4.0),
+            Value::Number(2.0),
+        ];
+        assert_close(correl(&xs, &ys).unwrap(), -1.0);
+    }
+
+    #[test]
+    fn correl_partial() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(1.0), Value::Number(3.0), Value::Number(2.0)];
+        assert_close(correl(&xs, &ys).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn correl_two_pairs() {
+        let xs = [Value::Number(1.0), Value::Number(2.0)];
+        let ys = [Value::Number(3.0), Value::Number(4.0)];
+        assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn correl_different_length_returns_na() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(1.0), Value::Number(2.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn correl_single_pair_returns_div0() {
+        let xs = [Value::Number(1.0)];
+        let ys = [Value::Number(2.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn correl_zero_stdev_y_returns_div0() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(5.0), Value::Number(5.0), Value::Number(5.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn correl_zero_stdev_x_returns_div0() {
+        let xs = [Value::Number(5.0), Value::Number(5.0), Value::Number(5.0)];
+        let ys = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn correl_empty_arrays_returns_na() {
+        assert_eq!(correl(&[], &[]).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn correl_all_text_no_pairs_returns_na() {
+        let xs = [Value::Text("a".into()), Value::Text("b".into()), Value::Text("c".into())];
+        let ys = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn correl_text_skipped_pairwise() {
+        let xs = [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Text("y".into()), Value::Number(4.0)];
+        assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn correl_bool_skipped_in_range() {
+        let xs = [Value::Number(1.0), Value::Bool(true), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Bool(false), Value::Number(4.0)];
+        assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn correl_error_propagation_array1() {
+        let xs = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn correl_error_propagation_array2() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Error(CellError::Na), Value::Number(6.0)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn correl_large_values_stability() {
+        let xs = [Value::Number(1e10), Value::Number(1e10 + 1.0), Value::Number(1e10 + 2.0)];
+        let ys = [Value::Number(1e10), Value::Number(1e10 + 1.0), Value::Number(1e10 + 2.0)];
+        assert_close(correl(&xs, &ys).unwrap(), 1.0);
     }
 }
