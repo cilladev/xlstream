@@ -15,6 +15,7 @@ Semver.
 - LARGE, SMALL k-th largest/smallest value
 - RANK.EQ, RANK.AVG rank functions
 - EXPON.DIST exponential distribution (PDF and CDF)
+- POISSON.DIST Poisson probability distribution (PMF and CDF)
 
 ## [0.2.1] - 2026-05-11
 

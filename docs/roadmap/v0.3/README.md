@@ -40,7 +40,7 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 - [ ] **NORM.S.DIST / NORM.S.INV** — standard normal. ~2 hours.
 - [ ] **T.DIST / T.INV / T.DIST.2T / T.DIST.RT / T.INV.2T** — Student's t-distribution. ~0.5 day.
 - [ ] **BINOM.DIST / BINOM.INV** — binomial distribution. ~0.5 day.
-- [ ] **POISSON.DIST** — Poisson distribution. ~2 hours.
+- [x] **POISSON.DIST** — Poisson distribution. ~2 hours.
 - [x] **EXPON.DIST** — exponential distribution. ~2 hours.
 
 ### Regression / correlation
