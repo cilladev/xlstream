@@ -55,6 +55,10 @@ name = "financial"
 harness = false
 
 [[bench]]
+name = "statistical"
+harness = false
+
+[[bench]]
 name = "end_to_end"
 harness = false
 
