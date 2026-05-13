@@ -8,6 +8,8 @@ Semver.
 ### Added
 - ROW, COLUMN, ROWS, COLUMNS: return positional metadata from cell/range references (lazy dispatch, no cell reads)
 - STDEV.S, STDEV.P, VAR.S, VAR.P statistical functions
+- SKEW, SKEW.P, KURT higher-order moment statistics
+
 ## [0.2.1] - 2026-05-11
 
 ### Added
