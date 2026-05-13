@@ -50,7 +50,7 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 - [x] **FORECAST.LINEAR** — predict Y from X via linear regression. ~2 hours.
 
 ### Combinatorics
-- [x] **PERMUT / PERMUTA** — permutations. ~2 hours.
+- [x] **PERMUT / PERMUTATIONA** — permutations. ~2 hours.
 
 ## Engineering functions (~15)
 
