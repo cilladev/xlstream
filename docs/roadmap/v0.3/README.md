@@ -39,7 +39,7 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 - [ ] **NORM.DIST / NORM.INV** — normal distribution CDF and inverse. ~0.5 day.
 - [ ] **NORM.S.DIST / NORM.S.INV** — standard normal. ~2 hours.
 - [x] **T.DIST / T.INV / T.DIST.2T / T.DIST.RT / T.INV.2T** — Student's t-distribution. ~0.5 day.
-- [ ] **BINOM.DIST / BINOM.INV** — binomial distribution. ~0.5 day.
+- [x] **BINOM.DIST / BINOM.INV** — binomial distribution. ~0.5 day.
 - [x] **POISSON.DIST** — Poisson distribution. ~2 hours.
 - [x] **EXPON.DIST** — exponential distribution. ~2 hours.
 
