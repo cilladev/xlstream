@@ -60,7 +60,7 @@ All row-local. Implement in `builtins/engineering.rs`.
 - [ ] **HEX2DEC / DEC2HEX** — hex to decimal and back. ~2 hours.
 - [ ] **BIN2DEC / DEC2BIN** — binary to decimal and back. ~2 hours.
 - [ ] **OCT2DEC / DEC2OCT** — octal to decimal and back. ~2 hours.
-- [ ] **HEX2BIN / BIN2HEX / HEX2OCT / OCT2HEX** — cross-base conversions. ~2 hours.
+- [ ] **HEX2BIN / BIN2HEX / HEX2OCT / OCT2HEX / BIN2OCT / OCT2BIN** — cross-base conversions. ~2 hours.
 - [ ] **BASE** — convert number to text in given base. ~2 hours.
 
 ### Complex numbers
