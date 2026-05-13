@@ -24,6 +24,7 @@ pub(crate) fn builtin_hex2dec(args: &[Value]) -> Value {
     if let Value::Error(e) = v {
         return Value::Error(*e);
     }
+    // Must check Error above: to_text on Error produces "#DIV/0!" etc.
     let hex_str = coerce::to_text(v);
     let hex_str = hex_str.as_ref();
 
@@ -158,8 +159,18 @@ mod tests {
     }
 
     #[test]
+    fn hex2dec_nine_digit_high_value_stays_positive() {
+        // 9 F's = 68,719,476,735 — must NOT trigger two's complement (requires exactly 10 digits)
+        assert_eq!(
+            builtin_hex2dec(&[Value::Text("FFFFFFFFF".into())]),
+            Value::Number(68_719_476_735.0),
+        );
+    }
+
+    #[test]
     fn hex2dec_numeric_input_coerced_to_text() {
-        assert_eq!(builtin_hex2dec(&[Value::Number(1.0)]), Value::Number(1.0));
+        // 10.0 → text "10" → hex 0x10 → 16 (proves hex interpretation, not decimal passthrough)
+        assert_eq!(builtin_hex2dec(&[Value::Number(10.0)]), Value::Number(16.0));
     }
 
     #[test]
@@ -321,6 +332,19 @@ mod tests {
     #[test]
     fn dec2hex_error_propagation() {
         assert_eq!(builtin_dec2hex(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn dec2hex_error_propagation_in_places() {
+        assert_eq!(
+            builtin_dec2hex(&[Value::Number(255.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn dec2hex_non_numeric_text_returns_value_error() {
+        assert_eq!(builtin_dec2hex(&[Value::Text("abc".into())]), Value::Error(CellError::Value),);
     }
 
     #[test]
