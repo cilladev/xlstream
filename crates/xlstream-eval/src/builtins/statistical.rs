@@ -18,6 +18,7 @@ fn finite_or_num(v: f64) -> Result<f64, CellError> {
 ///
 /// Includes `Number`, `Integer` (cast to f64), and `Date` (serial).
 /// Skips `Text`, `Bool`, and `Empty`. Propagates errors immediately.
+/// NaN/Infinity values pass through — callers must guard their output.
 ///
 /// Reused by variance, standard deviation, skewness, kurtosis, etc.
 ///
@@ -122,6 +123,7 @@ pub fn var_p(values: &[Value]) -> Result<f64, CellError> {
 /// # Errors
 ///
 /// Returns `Err(CellError::Div0)` if fewer than 2 numeric values.
+/// Returns `Err(CellError::Num)` if the underlying variance overflows.
 /// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
@@ -145,6 +147,7 @@ pub fn stdev_s(values: &[Value]) -> Result<f64, CellError> {
 /// # Errors
 ///
 /// Returns `Err(CellError::Div0)` if no numeric values.
+/// Returns `Err(CellError::Num)` if the underlying variance overflows.
 /// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
