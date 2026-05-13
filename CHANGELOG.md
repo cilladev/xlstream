@@ -24,6 +24,9 @@ Semver.
 - COVARIANCE.P, COVARIANCE.S covariance (population and sample)
 - SLOPE, INTERCEPT, RSQ linear regression statistics
 - FORECAST.LINEAR linear prediction via regression
+- FACT, FACTDOUBLE factorial functions
+- PERMUT, PERMUTATIONA permutation functions
+- COMBIN, COMBINA combination functions
 
 ## [0.2.1] - 2026-05-11
 

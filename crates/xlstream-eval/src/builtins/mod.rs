@@ -180,6 +180,12 @@ pub(crate) fn dispatch(
         "ACOS" => Some(math::builtin_acos(&eval_args(args, interp, scope))),
         "ATAN" => Some(math::builtin_atan(&eval_args(args, interp, scope))),
         "ATAN2" => Some(math::builtin_atan2(&eval_args(args, interp, scope))),
+        "FACT" => Some(math::builtin_fact(&eval_args(args, interp, scope))),
+        "FACTDOUBLE" => Some(math::builtin_factdouble(&eval_args(args, interp, scope))),
+        "PERMUT" => Some(math::builtin_permut(&eval_args(args, interp, scope))),
+        "PERMUTATIONA" => Some(math::builtin_permutationa(&eval_args(args, interp, scope))),
+        "COMBIN" => Some(math::builtin_combin(&eval_args(args, interp, scope))),
+        "COMBINA" => Some(math::builtin_combina(&eval_args(args, interp, scope))),
         // -- info builtins (pure, eager eval) --
         "ISBLANK" => Some(info::builtin_isblank(&eval_args(args, interp, scope))),
         "ISNUMBER" => Some(info::builtin_isnumber(&eval_args(args, interp, scope))),

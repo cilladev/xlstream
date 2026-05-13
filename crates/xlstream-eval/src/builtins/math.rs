@@ -33,6 +33,15 @@ pub(crate) fn bool_arg_ce(args: &[Value], idx: usize) -> Result<bool, CellError>
     coerce::to_bool(args.get(idx).unwrap_or(&Value::Empty))
 }
 
+/// Guard against NaN/Infinity results — returns `#NUM!` for non-finite values.
+pub(crate) fn finite_or_num(v: f64) -> Result<f64, CellError> {
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(CellError::Num)
+    }
+}
+
 /// Convert f64 to Decimal via shortest-roundtrip string to preserve
 /// the user-visible decimal representation (avoids IEEE 754 artifacts
 /// like 2.345 becoming 2.3449999...).
@@ -483,6 +492,226 @@ pub(crate) fn builtin_atan2(args: &[Value]) -> Value {
         return Value::Error(CellError::Div0);
     }
     Value::Number(y.atan2(x))
+}
+
+// ---------------------------------------------------------------------------
+// FACT / FACTDOUBLE
+// ---------------------------------------------------------------------------
+
+/// `FACT(n)` — factorial. Argument truncated to integer.
+///
+/// `n < 0` returns `#NUM!`. `n > 170` overflows f64 → `#NUM!`.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+pub(crate) fn builtin_fact(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let n_raw = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let n = n_raw.trunc() as i64;
+    if n < 0 {
+        return Value::Error(CellError::Num);
+    }
+    let mut result = 1.0_f64;
+    for i in 2..=n {
+        result *= i as f64;
+        if !result.is_finite() {
+            return Value::Error(CellError::Num);
+        }
+    }
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `FACTDOUBLE(n)` — double factorial: `n!! = n * (n-2) * (n-4) * ...`
+///
+/// Excel defines `FACTDOUBLE(-1) = 1` and `FACTDOUBLE(0) = 1`.
+/// `n < -1` returns `#NUM!`.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+pub(crate) fn builtin_factdouble(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let n_raw = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let n = n_raw.trunc() as i64;
+    if n < -1 {
+        return Value::Error(CellError::Num);
+    }
+    if n <= 0 {
+        return Value::Number(1.0);
+    }
+    let mut result = 1.0_f64;
+    let mut i = n;
+    while i >= 2 {
+        result *= i as f64;
+        if !result.is_finite() {
+            return Value::Error(CellError::Num);
+        }
+        i -= 2;
+    }
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PERMUT / PERMUTATIONA
+// ---------------------------------------------------------------------------
+
+/// `PERMUT(n, k)` — permutations without repetition: `n! / (n-k)!`.
+///
+/// Computed as `n * (n-1) * ... * (n-k+1)` (k multiplications).
+/// Both arguments truncated to integer.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+pub(crate) fn builtin_permut(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let n_raw = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let k_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let n = n_raw.trunc() as i64;
+    let k = k_raw.trunc() as i64;
+    if n < 0 || k < 0 || k > n {
+        return Value::Error(CellError::Num);
+    }
+    let mut result = 1.0_f64;
+    for i in 0..k {
+        result *= (n - i) as f64;
+        if !result.is_finite() {
+            return Value::Error(CellError::Num);
+        }
+    }
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `PERMUTATIONA(n, k)` — permutations with repetition: `n^k`.
+///
+/// Both arguments truncated to integer.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+pub(crate) fn builtin_permutationa(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let n_raw = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let k_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let n = n_raw.trunc() as i64;
+    let k = k_raw.trunc() as i64;
+    if n < 0 || k < 0 {
+        return Value::Error(CellError::Num);
+    }
+    let result = (n as f64).powf(k as f64);
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// COMBIN / COMBINA
+// ---------------------------------------------------------------------------
+
+/// Compute C(n, k) using the multiplicative formula with running division
+/// to avoid intermediate overflow.
+///
+/// `result = result * (n - i) / (i + 1)` for i in `0..k`.
+#[allow(clippy::cast_precision_loss)]
+fn combin_core(n: i64, k: i64) -> Result<f64, CellError> {
+    if k < 0 || k > n {
+        return Err(CellError::Num);
+    }
+    let k = k.min(n - k);
+    let mut result = 1.0_f64;
+    for i in 0..k {
+        result = result * (n - i) as f64 / (i + 1) as f64;
+        if !result.is_finite() {
+            return Err(CellError::Num);
+        }
+    }
+    finite_or_num(result)
+}
+
+/// `COMBIN(n, k)` — combinations without repetition: `n! / (k! * (n-k)!)`.
+///
+/// Both arguments truncated to integer.
+#[allow(clippy::cast_possible_truncation)]
+pub(crate) fn builtin_combin(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let n_raw = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let k_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let n = n_raw.trunc() as i64;
+    let k = k_raw.trunc() as i64;
+    if n < 0 || k < 0 {
+        return Value::Error(CellError::Num);
+    }
+    match combin_core(n, k) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `COMBINA(n, k)` — combinations with repetition: `C(n+k-1, k)`.
+///
+/// Both arguments truncated to integer.
+#[allow(clippy::cast_possible_truncation)]
+pub(crate) fn builtin_combina(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let n_raw = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let k_raw = match num_arg(args, 1) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let n = n_raw.trunc() as i64;
+    let k = k_raw.trunc() as i64;
+    if n < 0 || k < 0 {
+        return Value::Error(CellError::Num);
+    }
+    if n == 0 && k == 0 {
+        return Value::Number(1.0);
+    }
+    let adjusted = n + k - 1;
+    if adjusted < k {
+        return Value::Number(0.0);
+    }
+    match combin_core(adjusted, k) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1387,5 +1616,438 @@ mod tests {
     #[test]
     fn atan2_wrong_arg_count() {
         assert_eq!(builtin_atan2(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+    }
+
+    // ===== FACT =====
+
+    #[test]
+    fn fact_zero() {
+        assert_eq!(builtin_fact(&[Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn fact_one() {
+        assert_eq!(builtin_fact(&[Value::Number(1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn fact_five() {
+        assert_eq!(builtin_fact(&[Value::Number(5.0)]), Value::Number(120.0));
+    }
+
+    #[test]
+    fn fact_ten() {
+        assert_eq!(builtin_fact(&[Value::Number(10.0)]), Value::Number(3_628_800.0));
+    }
+
+    #[test]
+    fn fact_twenty() {
+        assert_eq!(
+            builtin_fact(&[Value::Number(20.0)]),
+            Value::Number(2_432_902_008_176_640_000.0)
+        );
+    }
+
+    #[test]
+    fn fact_170_last_valid() {
+        match builtin_fact(&[Value::Number(170.0)]) {
+            Value::Number(n) => assert!(n.is_finite() && n > 7e306),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fact_171_overflows() {
+        assert_eq!(builtin_fact(&[Value::Number(171.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn fact_negative_returns_num() {
+        assert_eq!(builtin_fact(&[Value::Number(-1.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn fact_fractional_truncated() {
+        assert_eq!(builtin_fact(&[Value::Number(5.9)]), Value::Number(120.0));
+    }
+
+    #[test]
+    fn fact_error_propagation() {
+        assert_eq!(builtin_fact(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn fact_wrong_arg_count_zero() {
+        assert_eq!(builtin_fact(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn fact_wrong_arg_count_two() {
+        assert_eq!(
+            builtin_fact(&[Value::Number(1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== FACTDOUBLE =====
+
+    #[test]
+    fn factdouble_zero() {
+        assert_eq!(builtin_factdouble(&[Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn factdouble_one() {
+        assert_eq!(builtin_factdouble(&[Value::Number(1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn factdouble_five() {
+        assert_eq!(builtin_factdouble(&[Value::Number(5.0)]), Value::Number(15.0));
+    }
+
+    #[test]
+    fn factdouble_six() {
+        assert_eq!(builtin_factdouble(&[Value::Number(6.0)]), Value::Number(48.0));
+    }
+
+    #[test]
+    fn factdouble_seven() {
+        assert_eq!(builtin_factdouble(&[Value::Number(7.0)]), Value::Number(105.0));
+    }
+
+    #[test]
+    fn factdouble_ten() {
+        assert_eq!(builtin_factdouble(&[Value::Number(10.0)]), Value::Number(3840.0));
+    }
+
+    #[test]
+    fn factdouble_neg_one() {
+        assert_eq!(builtin_factdouble(&[Value::Number(-1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn factdouble_neg_two_returns_num() {
+        assert_eq!(builtin_factdouble(&[Value::Number(-2.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn factdouble_fractional_truncated() {
+        assert_eq!(builtin_factdouble(&[Value::Number(5.9)]), Value::Number(15.0));
+    }
+
+    #[test]
+    fn factdouble_300_finite() {
+        match builtin_factdouble(&[Value::Number(300.0)]) {
+            Value::Number(n) => assert!(n.is_finite()),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn factdouble_large_overflow() {
+        assert_eq!(builtin_factdouble(&[Value::Number(350.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn factdouble_error_propagation() {
+        assert_eq!(builtin_factdouble(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn factdouble_wrong_arg_count() {
+        assert_eq!(builtin_factdouble(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== PERMUT =====
+
+    #[test]
+    fn permut_5_3() {
+        assert_eq!(builtin_permut(&[Value::Number(5.0), Value::Number(3.0)]), Value::Number(60.0));
+    }
+
+    #[test]
+    fn permut_10_2() {
+        assert_eq!(builtin_permut(&[Value::Number(10.0), Value::Number(2.0)]), Value::Number(90.0));
+    }
+
+    #[test]
+    fn permut_5_0() {
+        assert_eq!(builtin_permut(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn permut_5_5() {
+        assert_eq!(builtin_permut(&[Value::Number(5.0), Value::Number(5.0)]), Value::Number(120.0));
+    }
+
+    #[test]
+    fn permut_1_1() {
+        assert_eq!(builtin_permut(&[Value::Number(1.0), Value::Number(1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn permut_0_0() {
+        assert_eq!(builtin_permut(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn permut_k_greater_than_n() {
+        assert_eq!(
+            builtin_permut(&[Value::Number(3.0), Value::Number(5.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn permut_negative_n() {
+        assert_eq!(
+            builtin_permut(&[Value::Number(-1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn permut_negative_k() {
+        assert_eq!(
+            builtin_permut(&[Value::Number(5.0), Value::Number(-1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn permut_fractional_truncated() {
+        assert_eq!(builtin_permut(&[Value::Number(5.9), Value::Number(3.1)]), Value::Number(60.0));
+    }
+
+    #[test]
+    fn permut_170_1() {
+        assert_eq!(
+            builtin_permut(&[Value::Number(170.0), Value::Number(1.0)]),
+            Value::Number(170.0)
+        );
+    }
+
+    #[test]
+    fn permut_error_propagation() {
+        assert_eq!(
+            builtin_permut(&[Value::Error(CellError::Na), Value::Number(3.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn permut_wrong_arg_count() {
+        assert_eq!(builtin_permut(&[Value::Number(5.0)]), Value::Error(CellError::Value));
+    }
+
+    // ===== PERMUTATIONA =====
+
+    #[test]
+    fn permutationa_5_3() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(5.0), Value::Number(3.0)]),
+            Value::Number(125.0)
+        );
+    }
+
+    #[test]
+    fn permutationa_3_3() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(3.0), Value::Number(3.0)]),
+            Value::Number(27.0)
+        );
+    }
+
+    #[test]
+    fn permutationa_10_0() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(10.0), Value::Number(0.0)]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn permutationa_1_10() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(1.0), Value::Number(10.0)]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn permutationa_0_0() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(0.0), Value::Number(0.0)]),
+            Value::Number(1.0)
+        );
+    }
+
+    #[test]
+    fn permutationa_negative_n() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(-1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn permutationa_overflow() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Number(1000.0), Value::Number(1000.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn permutationa_error_propagation() {
+        assert_eq!(
+            builtin_permutationa(&[Value::Error(CellError::Na), Value::Number(3.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn permutationa_wrong_arg_count() {
+        assert_eq!(builtin_permutationa(&[Value::Number(5.0)]), Value::Error(CellError::Value));
+    }
+
+    // ===== COMBIN =====
+
+    #[test]
+    fn combin_5_3() {
+        assert_eq!(builtin_combin(&[Value::Number(5.0), Value::Number(3.0)]), Value::Number(10.0));
+    }
+
+    #[test]
+    fn combin_10_2() {
+        assert_eq!(builtin_combin(&[Value::Number(10.0), Value::Number(2.0)]), Value::Number(45.0));
+    }
+
+    #[test]
+    fn combin_5_0() {
+        assert_eq!(builtin_combin(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn combin_5_5() {
+        assert_eq!(builtin_combin(&[Value::Number(5.0), Value::Number(5.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn combin_10_1() {
+        assert_eq!(builtin_combin(&[Value::Number(10.0), Value::Number(1.0)]), Value::Number(10.0));
+    }
+
+    #[test]
+    fn combin_20_10() {
+        assert_eq!(
+            builtin_combin(&[Value::Number(20.0), Value::Number(10.0)]),
+            Value::Number(184_756.0)
+        );
+    }
+
+    #[test]
+    fn combin_k_greater_than_n() {
+        assert_eq!(
+            builtin_combin(&[Value::Number(3.0), Value::Number(5.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn combin_0_0() {
+        assert_eq!(builtin_combin(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn combin_negative() {
+        assert_eq!(
+            builtin_combin(&[Value::Number(-1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn combin_fractional_truncated() {
+        assert_eq!(builtin_combin(&[Value::Number(5.9), Value::Number(3.1)]), Value::Number(10.0));
+    }
+
+    #[test]
+    fn combin_100_50_large() {
+        match builtin_combin(&[Value::Number(100.0), Value::Number(50.0)]) {
+            Value::Number(n) => {
+                assert!(n.is_finite());
+                let expected = 1.008_913_445_455_642e29;
+                assert!((n - expected).abs() / expected < 1e-10);
+            }
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn combin_error_propagation() {
+        assert_eq!(
+            builtin_combin(&[Value::Error(CellError::Na), Value::Number(3.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn combin_wrong_arg_count() {
+        assert_eq!(builtin_combin(&[Value::Number(5.0)]), Value::Error(CellError::Value));
+    }
+
+    // ===== COMBINA =====
+
+    #[test]
+    fn combina_5_3() {
+        assert_eq!(builtin_combina(&[Value::Number(5.0), Value::Number(3.0)]), Value::Number(35.0));
+    }
+
+    #[test]
+    fn combina_4_2() {
+        assert_eq!(builtin_combina(&[Value::Number(4.0), Value::Number(2.0)]), Value::Number(10.0));
+    }
+
+    #[test]
+    fn combina_1_5() {
+        assert_eq!(builtin_combina(&[Value::Number(1.0), Value::Number(5.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn combina_5_0() {
+        assert_eq!(builtin_combina(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn combina_0_0() {
+        assert_eq!(builtin_combina(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn combina_0_1() {
+        assert_eq!(builtin_combina(&[Value::Number(0.0), Value::Number(1.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn combina_negative() {
+        assert_eq!(
+            builtin_combina(&[Value::Number(-1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn combina_error_propagation() {
+        assert_eq!(
+            builtin_combina(&[Value::Error(CellError::Na), Value::Number(3.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn combina_wrong_arg_count() {
+        assert_eq!(builtin_combina(&[Value::Number(5.0)]), Value::Error(CellError::Value));
     }
 }
