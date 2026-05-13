@@ -205,6 +205,47 @@ pub fn skew(values: &[Value]) -> Result<f64, CellError> {
     Ok(adjustment * m3)
 }
 
+/// `SKEW.P` — population skewness.
+///
+/// Formula: `(1/n) * sum[(xi - mean) / stdev_p]^3`
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Div0)` if no numeric values, if standard
+/// deviation is zero, or if any input is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::skew_p;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0),
+///             Value::Number(4.0), Value::Number(5.0)];
+/// let result = skew_p(&vals).unwrap();
+/// assert!(result.abs() < 1e-10);
+/// ```
+pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
+    let nums = collect_numerics(values)?;
+    let n = nums.len();
+    if n == 0 {
+        return Err(CellError::Div0);
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let mean = nums.iter().sum::<f64>() / nf;
+
+    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / nf;
+    let stdev = variance.sqrt();
+    if stdev == 0.0 {
+        return Err(CellError::Div0);
+    }
+
+    let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
+
+    Ok(m3 / nf)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -510,5 +551,44 @@ mod tests {
             Value::Number(5.0),
         ];
         assert_eq!(skew(&vals).unwrap_err(), CellError::Na);
+    }
+
+    // ===== SKEW.P =====
+
+    #[test]
+    fn skew_p_symmetric_is_zero() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_close(skew_p(&vals).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn skew_p_right_skewed_is_positive() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 100.0].iter().map(|&n| Value::Number(n)).collect();
+        assert!(skew_p(&vals).unwrap() > 0.0);
+    }
+
+    #[test]
+    fn skew_p_with_two_values() {
+        let vals = [Value::Number(1.0), Value::Number(3.0)];
+        skew_p(&vals).unwrap();
+    }
+
+    #[test]
+    fn skew_p_single_value_div0() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(skew_p(&vals).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn skew_p_empty_returns_div0() {
+        assert_eq!(skew_p(&[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn skew_p_all_same_returns_div0() {
+        let vals: Vec<Value> = [5.0, 5.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(skew_p(&vals).unwrap_err(), CellError::Div0);
     }
 }
