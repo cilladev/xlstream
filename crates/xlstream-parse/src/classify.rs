@@ -461,6 +461,10 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
         return Disposition::RowLocal;
     }
 
+    if sets::is_range_metadata(name) {
+        return Disposition::RowLocal;
+    }
+
     if sets::is_aggregate(name) {
         return classify_aggregate(name, args, ctx);
     }
@@ -1118,5 +1122,98 @@ mod tests {
     fn table_average_whole_column_classifies_as_aggregate() {
         let c = resolve_tables_and_classify("AVERAGE(Table1[Price])", "Sheet1", 2, 5, &[]);
         assert_eq!(c, Classification::AggregateOnly);
+    }
+
+    // -- ROW / COLUMN / ROWS / COLUMNS classification --
+
+    #[test]
+    fn row_with_cell_ref_classifies_as_row_local() {
+        let ast = crate::parse("ROW(A5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn column_with_cell_ref_classifies_as_row_local() {
+        let ast = crate::parse("COLUMN(C3)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn row_no_args_classifies_as_row_local() {
+        let ast = crate::parse("ROW()").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn column_no_args_classifies_as_row_local() {
+        let ast = crate::parse("COLUMN()").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_bounded_range_classifies_as_row_local() {
+        let ast = crate::parse("ROWS(A1:A10)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn columns_bounded_range_classifies_as_row_local() {
+        let ast = crate::parse("COLUMNS(A1:C1)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_whole_column_classifies_as_row_local() {
+        let ast = crate::parse("ROWS(A:A)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn columns_whole_row_classifies_as_row_local() {
+        let ast = crate::parse("COLUMNS(1:1)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn row_case_insensitive_classifies_as_row_local() {
+        let ast = crate::parse("row(a5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn rows_cross_sheet_classifies_as_row_local() {
+        let ast = crate::parse("ROWS(Sheet2!A1:A20)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn row_nested_in_if_classifies_as_row_local() {
+        let ast = crate::parse("IF(ROW()>5,\"big\",\"small\")").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn row_plus_column_classifies_as_row_local() {
+        let ast = crate::parse("ROW()+COLUMN()").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+    }
+
+    #[test]
+    fn row_with_whole_row_ref_classifies_as_row_local() {
+        let ast = crate::parse("ROW(1:5)").unwrap();
+        let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
     }
 }

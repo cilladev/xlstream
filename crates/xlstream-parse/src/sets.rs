@@ -18,7 +18,7 @@ pub(crate) static UNSUPPORTED_FUNCTIONS: Set<&'static str> = phf_set! {
     "SEQUENCE", "RANDARRAY", "LAMBDA", "LET", "HYPERLINK",
     "WEBSERVICE", "CUBEVALUE", "CUBEMEMBER", "CUBESET",
     "RAND", "RANDBETWEEN",
-    "CELL", "INFO", "ROWS", "COLUMNS", "AREAS", "SHEET", "SHEETS",
+    "CELL", "INFO", "AREAS", "SHEET", "SHEETS",
 };
 
 /// Dynamic-array functions (subset of unsupported). Reserved for
@@ -155,6 +155,28 @@ pub fn is_range_expanding(name: &str) -> bool {
     RANGE_EXPANDING_FUNCTIONS.contains(name.to_uppercase().as_str())
 }
 
+/// Functions that inspect range/cell reference metadata (row/column
+/// position or count) without reading cell values. The classifier
+/// returns `RowLocal` unconditionally — ranges passed to these
+/// functions are never expanded or evaluated.
+pub(crate) static RANGE_METADATA_FUNCTIONS: Set<&'static str> = phf_set! {
+    "ROW", "COLUMN", "ROWS", "COLUMNS",
+};
+
+/// `true` if `name` is in `RANGE_METADATA_FUNCTIONS` (case-insensitive).
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::sets::is_range_metadata;
+/// assert!(is_range_metadata("ROWS"));
+/// assert!(is_range_metadata("column"));
+/// ```
+#[must_use]
+pub fn is_range_metadata(name: &str) -> bool {
+    RANGE_METADATA_FUNCTIONS.contains(name.to_uppercase().as_str())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -175,6 +197,19 @@ mod tests {
         assert!(is_unsupported("FILTER"));
         assert!(is_unsupported("RAND"));
         assert!(is_unsupported("RANDBETWEEN"));
+        assert!(!is_unsupported("ROWS"));
+        assert!(!is_unsupported("COLUMNS"));
+    }
+
+    #[test]
+    fn range_metadata_set_lists_row_column_rows_columns() {
+        assert!(is_range_metadata("ROW"));
+        assert!(is_range_metadata("COLUMN"));
+        assert!(is_range_metadata("ROWS"));
+        assert!(is_range_metadata("COLUMNS"));
+        assert!(is_range_metadata("row"));
+        assert!(is_range_metadata("columns"));
+        assert!(!is_range_metadata("SUM"));
     }
 
     #[test]
@@ -235,6 +270,7 @@ mod tests {
             &DYNAMIC_ARRAY_FUNCTIONS,
             &VOLATILE_UNSUPPORTED,
             &RANGE_EXPANDING_FUNCTIONS,
+            &RANGE_METADATA_FUNCTIONS,
         ] {
             for &entry in set.iter() {
                 assert_eq!(entry, entry.to_uppercase(), "set entry {entry:?} must be uppercase");

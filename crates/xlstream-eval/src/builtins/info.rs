@@ -1,10 +1,10 @@
-//! Info/type-checking builtin functions (Phase 9, Chunk 3).
+//! Info/type-checking builtin functions.
 //!
-//! Pure functions: each takes `&[Value]` and returns `Value`.
-//! All type-checking functions are simple pattern matches on the
-//! [`Value`] enum — no coercion needed.
+//! Pure functions: IS* functions take `&[Value]`, ROW/COLUMN/ROWS/COLUMNS
+//! take [`NodeRef`] (lazy dispatch — inspect AST metadata, never cell values).
 
 use xlstream_core::{CellError, Value};
+use xlstream_parse::{NodeRef, NodeView};
 
 // ---------------------------------------------------------------------------
 // ISBLANK
@@ -242,6 +242,127 @@ pub fn builtin_type(args: &[Value]) -> Value {
         Value::Error(_) => 16.0,
     };
     Value::Number(code)
+}
+
+// ---------------------------------------------------------------------------
+// ROW
+// ---------------------------------------------------------------------------
+
+/// `ROW(ref)` — 1-based row number of a cell or range reference.
+///
+/// Lazy dispatch: inspects the AST node without evaluating cell values.
+/// For `CellRef`, returns `row`. For `RangeRef`, returns `start_row`
+/// (or 1 if whole-column). Non-ref args produce `#VALUE!`.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::info::builtin_row;
+/// use xlstream_parse::parse;
+/// let ast = parse("A5").unwrap();
+/// assert_eq!(builtin_row(ast.root()), Value::Number(5.0));
+/// ```
+#[must_use]
+pub fn builtin_row(node: NodeRef<'_>) -> Value {
+    match node.view() {
+        NodeView::CellRef { row, .. } => Value::Number(f64::from(row)),
+        NodeView::RangeRef { start_row, .. } => Value::Number(f64::from(start_row.unwrap_or(1))),
+        _ => Value::Error(CellError::Value),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// COLUMN
+// ---------------------------------------------------------------------------
+
+/// `COLUMN(ref)` — 1-based column number of a cell or range reference.
+///
+/// Lazy dispatch: inspects the AST node without evaluating cell values.
+/// For `CellRef`, returns `col`. For `RangeRef`, returns `start_col`
+/// (or 1 if whole-row). Non-ref args produce `#VALUE!`.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::info::builtin_column;
+/// use xlstream_parse::parse;
+/// let ast = parse("C3").unwrap();
+/// assert_eq!(builtin_column(ast.root()), Value::Number(3.0));
+/// ```
+#[must_use]
+pub fn builtin_column(node: NodeRef<'_>) -> Value {
+    match node.view() {
+        NodeView::CellRef { col, .. } => Value::Number(f64::from(col)),
+        NodeView::RangeRef { start_col, .. } => Value::Number(f64::from(start_col.unwrap_or(1))),
+        _ => Value::Error(CellError::Value),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ROWS
+// ---------------------------------------------------------------------------
+
+/// `ROWS(ref)` — number of rows in a range reference.
+///
+/// Lazy dispatch: inspects the AST node without evaluating cell values.
+/// For `RangeRef`, returns `end_row - start_row + 1`; whole-column refs
+/// return [`EXCEL_MAX_ROWS`](xlstream_core::EXCEL_MAX_ROWS). For
+/// `CellRef`, returns 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::info::builtin_rows;
+/// use xlstream_parse::parse;
+/// let ast = parse("A1:A10").unwrap();
+/// assert_eq!(builtin_rows(ast.root()), Value::Number(10.0));
+/// ```
+#[must_use]
+pub fn builtin_rows(node: NodeRef<'_>) -> Value {
+    match node.view() {
+        NodeView::RangeRef { start_row, end_row, .. } => match (start_row, end_row) {
+            (Some(sr), Some(er)) => Value::Number(f64::from(er - sr + 1)),
+            #[allow(clippy::cast_precision_loss)] // 2^20 is exact in f64
+            _ => Value::Number(xlstream_core::EXCEL_MAX_ROWS as f64),
+        },
+        NodeView::CellRef { .. } => Value::Number(1.0),
+        _ => Value::Error(CellError::Value),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// COLUMNS
+// ---------------------------------------------------------------------------
+
+/// `COLUMNS(ref)` — number of columns in a range reference.
+///
+/// Lazy dispatch: inspects the AST node without evaluating cell values.
+/// For `RangeRef`, returns `end_col - start_col + 1`; whole-row refs
+/// return [`EXCEL_MAX_COLS`](xlstream_core::EXCEL_MAX_COLS). For
+/// `CellRef`, returns 1.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::info::builtin_columns;
+/// use xlstream_parse::parse;
+/// let ast = parse("A1:C5").unwrap();
+/// assert_eq!(builtin_columns(ast.root()), Value::Number(3.0));
+/// ```
+#[must_use]
+pub fn builtin_columns(node: NodeRef<'_>) -> Value {
+    match node.view() {
+        NodeView::RangeRef { start_col, end_col, .. } => match (start_col, end_col) {
+            (Some(sc), Some(ec)) => Value::Number(f64::from(ec - sc + 1)),
+            _ => Value::Number(f64::from(xlstream_core::EXCEL_MAX_COLS)),
+        },
+        NodeView::CellRef { .. } => Value::Number(1.0),
+        _ => Value::Error(CellError::Value),
+    }
 }
 
 #[cfg(test)]
@@ -614,5 +735,169 @@ mod tests {
     #[test]
     fn type_wrong_arg_count() {
         assert_eq!(builtin_type(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== ROW =====
+
+    #[test]
+    fn row_cell_ref() {
+        let ast = xlstream_parse::parse("A5").unwrap();
+        assert_eq!(builtin_row(ast.root()), Value::Number(5.0));
+    }
+
+    #[test]
+    fn row_cell_ref_large() {
+        let ast = xlstream_parse::parse("A100").unwrap();
+        assert_eq!(builtin_row(ast.root()), Value::Number(100.0));
+    }
+
+    #[test]
+    fn row_range_ref_returns_start() {
+        let ast = xlstream_parse::parse("A3:A10").unwrap();
+        assert_eq!(builtin_row(ast.root()), Value::Number(3.0));
+    }
+
+    #[test]
+    fn row_whole_column_returns_1() {
+        let ast = xlstream_parse::parse("A:A").unwrap();
+        assert_eq!(builtin_row(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn row_whole_row_ref_returns_start() {
+        let ast = xlstream_parse::parse("1:5").unwrap();
+        assert_eq!(builtin_row(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn row_non_ref_returns_value_error() {
+        let ast = xlstream_parse::parse("42").unwrap();
+        assert_eq!(builtin_row(ast.root()), Value::Error(CellError::Value));
+    }
+
+    // ===== COLUMN =====
+
+    #[test]
+    fn column_cell_ref() {
+        let ast = xlstream_parse::parse("C3").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Number(3.0));
+    }
+
+    #[test]
+    fn column_cell_ref_z() {
+        let ast = xlstream_parse::parse("Z1").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Number(26.0));
+    }
+
+    #[test]
+    fn column_cell_ref_aa() {
+        let ast = xlstream_parse::parse("AA1").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Number(27.0));
+    }
+
+    #[test]
+    fn column_range_ref_returns_start() {
+        let ast = xlstream_parse::parse("C1:E1").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Number(3.0));
+    }
+
+    #[test]
+    fn column_whole_row_returns_1() {
+        let ast = xlstream_parse::parse("1:1").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn column_whole_column_returns_start() {
+        let ast = xlstream_parse::parse("C:C").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Number(3.0));
+    }
+
+    #[test]
+    fn column_non_ref_returns_value_error() {
+        let ast = xlstream_parse::parse("\"text\"").unwrap();
+        assert_eq!(builtin_column(ast.root()), Value::Error(CellError::Value));
+    }
+
+    // ===== ROWS =====
+
+    #[test]
+    fn rows_bounded_range() {
+        let ast = xlstream_parse::parse("A1:A10").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Number(10.0));
+    }
+
+    #[test]
+    fn rows_multi_column_range() {
+        let ast = xlstream_parse::parse("A1:C5").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Number(5.0));
+    }
+
+    #[test]
+    fn rows_single_row_range() {
+        let ast = xlstream_parse::parse("A1:A1").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn rows_whole_column() {
+        let ast = xlstream_parse::parse("A:A").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Number(1_048_576.0));
+    }
+
+    #[test]
+    fn rows_cell_ref() {
+        let ast = xlstream_parse::parse("A1").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn rows_non_ref_returns_value_error() {
+        let ast = xlstream_parse::parse("42").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Error(CellError::Value));
+    }
+
+    // ===== COLUMNS =====
+
+    #[test]
+    fn columns_bounded_range() {
+        let ast = xlstream_parse::parse("A1:C5").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(3.0));
+    }
+
+    #[test]
+    fn columns_single_col_range() {
+        let ast = xlstream_parse::parse("A1:A10").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn columns_single_cell_range() {
+        let ast = xlstream_parse::parse("A1:A1").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn columns_whole_row() {
+        let ast = xlstream_parse::parse("1:1").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(16_384.0));
+    }
+
+    #[test]
+    fn columns_cell_ref() {
+        let ast = xlstream_parse::parse("A1").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(1.0));
+    }
+
+    #[test]
+    fn columns_non_ref_returns_value_error() {
+        let ast = xlstream_parse::parse("\"text\"").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn columns_wide_range() {
+        let ast = xlstream_parse::parse("A1:Z1").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(26.0));
     }
 }
