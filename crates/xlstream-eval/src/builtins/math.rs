@@ -23,12 +23,12 @@ fn num_arg(args: &[Value], idx: usize) -> Result<f64, Value> {
     }
 }
 
-/// Like [`num_arg`] but returns `CellError` directly.
+/// Extract a numeric argument at `idx`, returning `CellError` directly.
 pub(crate) fn num_arg_ce(args: &[Value], idx: usize) -> Result<f64, CellError> {
     coerce::to_number(args.get(idx).unwrap_or(&Value::Empty))
 }
 
-/// Like [`num_arg_ce`] for booleans — returns `CellError` directly.
+/// Extract a boolean argument at `idx`, returning `CellError` directly.
 pub(crate) fn bool_arg_ce(args: &[Value], idx: usize) -> Result<bool, CellError> {
     coerce::to_bool(args.get(idx).unwrap_or(&Value::Empty))
 }

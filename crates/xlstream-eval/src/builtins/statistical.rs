@@ -2,8 +2,8 @@
 //!
 //! Aggregate stats (AVEDEV, VAR, STDEV, SKEW, KURT, MODE, PERCENTILE,
 //! QUARTILE, RANK) use [`collect_numerics`] and [`mean_and_variance`].
-//! Distribution functions (T.DIST, EXPON.DIST, POISSON.DIST, BINOM.DIST) use
-//! [`num_arg`] + `specfn` primitives.
+//! Distribution functions (NORM.DIST, NORM.INV, T.DIST, EXPON.DIST,
+//! POISSON.DIST, BINOM.DIST) use `num_arg_ce` + `specfn` primitives.
 
 use std::collections::HashMap;
 
@@ -47,7 +47,7 @@ fn ln_gamma(x: f64) -> f64 {
     HALF_LN_2PI + (z + 0.5) * t.ln() - t + sum.ln()
 }
 
-use super::math::{bool_arg_ce, num_arg_ce};
+use crate::builtins::math::{bool_arg_ce, num_arg_ce};
 
 fn finite_or_num(v: f64) -> Result<f64, CellError> {
     if v.is_finite() {
@@ -83,6 +83,7 @@ fn erf_approx(x: f64) -> f64 {
 }
 
 const SQRT_2: f64 = std::f64::consts::SQRT_2;
+/// sqrt(2 * pi)
 const SQRT_2PI: f64 = 2.506_628_274_631_000_5;
 
 /// `NORM.DIST(x, mean, standard_dev, cumulative)` — normal distribution.
@@ -93,7 +94,8 @@ const SQRT_2PI: f64 = 2.506_628_274_631_000_5;
 /// # Errors
 ///
 /// Returns `Err(CellError::Value)` if arg count != 4.
-/// Returns `Err(CellError::Num)` if `standard_dev` <= 0 or non-finite.
+/// Returns `Err(CellError::Num)` if any numeric arg is non-finite or
+/// `standard_dev` <= 0.
 /// Returns `Err(CellError)` if any arg is an error.
 ///
 /// # Examples
@@ -114,7 +116,7 @@ pub fn builtin_norm_dist(args: &[Value]) -> Result<f64, CellError> {
     let stdev = num_arg_ce(args, 2)?;
     let cumulative = bool_arg_ce(args, 3)?;
 
-    if !stdev.is_finite() || stdev <= 0.0 {
+    if !x.is_finite() || !mean.is_finite() || !stdev.is_finite() || stdev <= 0.0 {
         return Err(CellError::Num);
     }
 
@@ -128,7 +130,7 @@ pub fn builtin_norm_dist(args: &[Value]) -> Result<f64, CellError> {
 
 /// Standard normal inverse CDF (quantile function).
 ///
-/// Uses Peter Acklam's rational approximation. Accurate to ~1e-9 across
+/// Uses Peter Acklam's rational approximation. Accurate to ~4e-9 across
 /// (0, 1), well within the 1e-6 conformance tolerance.
 #[allow(clippy::excessive_precision)]
 fn norm_inv_standard(p: f64) -> f64 {
@@ -209,7 +211,7 @@ pub fn builtin_norm_inv(args: &[Value]) -> Result<f64, CellError> {
     let mean = num_arg_ce(args, 1)?;
     let stdev = num_arg_ce(args, 2)?;
 
-    if !stdev.is_finite() || stdev <= 0.0 {
+    if !mean.is_finite() || !stdev.is_finite() || stdev <= 0.0 {
         return Err(CellError::Num);
     }
     if !p.is_finite() || p <= 0.0 || p >= 1.0 {
@@ -3527,6 +3529,35 @@ mod tests {
 
     // ===== erf_approx =====
 
+    fn assert_erf_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() < 1e-7, "expected {expected}, got {actual}");
+    }
+
+    #[test]
+    fn erf_zero_is_zero() {
+        assert_erf_close(erf_approx(0.0), 0.0);
+    }
+
+    #[test]
+    fn erf_positive() {
+        assert_erf_close(erf_approx(1.0), 0.842_700_792_949_715);
+    }
+
+    #[test]
+    fn erf_negative_is_antisymmetric() {
+        assert_erf_close(erf_approx(-1.0), -0.842_700_792_949_715);
+    }
+
+    #[test]
+    fn erf_large_positive_near_one() {
+        assert!((erf_approx(5.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn erf_large_negative_near_neg_one() {
+        assert!((erf_approx(-5.0) + 1.0).abs() < 1e-6);
+    }
+
     // ===== NORM.DIST =====
 
     #[test]
@@ -3639,6 +3670,50 @@ mod tests {
         assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
     }
 
+    #[test]
+    fn norm_dist_x_infinity_returns_num() {
+        let args = [
+            Value::Number(f64::INFINITY),
+            Value::Number(0.0),
+            Value::Number(1.0),
+            Value::Bool(true),
+        ];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_dist_stdev_infinity_returns_num() {
+        let args = [
+            Value::Number(1.0),
+            Value::Number(0.0),
+            Value::Number(f64::INFINITY),
+            Value::Bool(true),
+        ];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_dist_coerces_text_to_number() {
+        let args =
+            [Value::Text("0".into()), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!((v - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_dist_coerces_number_to_bool_cumulative() {
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!((v - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_dist_text_mismatch_returns_value() {
+        let args =
+            [Value::Text("abc".into()), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Value));
+    }
+
     // ===== NORM.INV =====
 
     #[test]
@@ -3730,32 +3805,35 @@ mod tests {
         assert_eq!(builtin_norm_inv(&args), Err(CellError::Value));
     }
 
-    fn assert_erf_close(actual: f64, expected: f64) {
-        assert!((actual - expected).abs() < 1e-7, "expected {expected}, got {actual}");
+    #[test]
+    fn norm_inv_upper_tail_high_p() {
+        let args = [Value::Number(0.999), Value::Number(0.0), Value::Number(1.0)];
+        let v = builtin_norm_inv(&args).unwrap();
+        assert!((v - 3.090_232_306_167_814).abs() < 1e-6);
     }
 
     #[test]
-    fn erf_zero_is_zero() {
-        assert_erf_close(erf_approx(0.0), 0.0);
+    fn norm_inv_nan_p_returns_num() {
+        let args = [Value::Number(f64::NAN), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
     }
 
     #[test]
-    fn erf_positive() {
-        assert_erf_close(erf_approx(1.0), 0.842_700_792_949_715);
+    fn norm_inv_mean_infinity_returns_num() {
+        let args = [Value::Number(0.5), Value::Number(f64::INFINITY), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
     }
 
     #[test]
-    fn erf_negative_is_antisymmetric() {
-        assert_erf_close(erf_approx(-1.0), -0.842_700_792_949_715);
+    fn norm_inv_coerces_text_to_number() {
+        let args = [Value::Text("0.5".into()), Value::Number(0.0), Value::Number(1.0)];
+        let v = builtin_norm_inv(&args).unwrap();
+        assert!(v.abs() < 1e-6);
     }
 
     #[test]
-    fn erf_large_positive_near_one() {
-        assert!((erf_approx(5.0) - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn erf_large_negative_near_neg_one() {
-        assert!((erf_approx(-5.0) + 1.0).abs() < 1e-6);
+    fn norm_inv_text_mismatch_returns_value() {
+        let args = [Value::Text("abc".into()), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Value));
     }
 }
