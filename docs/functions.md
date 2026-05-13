@@ -141,7 +141,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | CHISQ.TEST | . | yes | v0.3 | | | |
 | CONFIDENCE.NORM | . | yes | v0.3 | | | |
 | CONFIDENCE.T | . | yes | v0.3 | | | |
-| CORREL | . | yes | v0.3 | | | Prelude: two-column |
+| CORREL | x | yes | v0.3 | | | |
 | COUNT | x | yes | v0.1 | x | x | |
 | COUNTA | x | yes | v0.1 | x | x | |
 | COUNTBLANK | x | yes | v0.1 | x | | |
