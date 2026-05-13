@@ -302,6 +302,9 @@ pub(crate) fn dispatch(
         "INTERCEPT" => Some(builtin_intercept(args, interp, scope)),
         "RSQ" => Some(builtin_rsq(args, interp, scope)),
         "FORECAST.LINEAR" => Some(builtin_forecast_linear(args, interp, scope)),
+        // -- engineering builtins (pure, eager eval) --
+        "HEX2DEC" => Some(engineering::builtin_hex2dec(&eval_args(args, interp, scope))),
+        "DEC2HEX" => Some(engineering::builtin_dec2hex(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
