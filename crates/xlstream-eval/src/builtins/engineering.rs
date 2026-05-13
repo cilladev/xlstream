@@ -4,10 +4,130 @@ use xlstream_core::{coerce, CellError, Value};
 
 use crate::builtins::math::num_arg_ce;
 
-const MAX_HEX_LEN: usize = 10;
-const TWO_POW_40: i64 = 1 << 40;
-const MAX_POSITIVE: i64 = TWO_POW_40 / 2 - 1;
-const MIN_NEGATIVE: i64 = -(TWO_POW_40 / 2);
+const MAX_BASE_STR_LEN: usize = 10;
+
+const BIN_BIT_WIDTH: u32 = 10;
+const BIN_TWO_POW: i64 = 1 << BIN_BIT_WIDTH;
+const BIN_MAX_POSITIVE: i64 = BIN_TWO_POW / 2 - 1;
+const BIN_MIN_NEGATIVE: i64 = -(BIN_TWO_POW / 2);
+
+const OCT_BIT_WIDTH: u32 = 30;
+const OCT_TWO_POW: i64 = 1 << OCT_BIT_WIDTH;
+const OCT_MAX_POSITIVE: i64 = OCT_TWO_POW / 2 - 1;
+const OCT_MIN_NEGATIVE: i64 = -(OCT_TWO_POW / 2);
+
+const HEX_BIT_WIDTH: u32 = 40;
+const HEX_TWO_POW: i64 = 1 << HEX_BIT_WIDTH;
+const HEX_MAX_POSITIVE: i64 = HEX_TWO_POW / 2 - 1;
+const HEX_MIN_NEGATIVE: i64 = -(HEX_TWO_POW / 2);
+
+const BASE_MAX_VALUE: f64 = 9_007_199_254_740_991.0;
+const BASE_MIN_RADIX: i64 = 2;
+const BASE_MAX_RADIX: i64 = 36;
+const BASE_MAX_MIN_LENGTH: i64 = 255;
+const BASE_DIGITS: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/// Parse a base-N string to decimal, applying two's complement for 10-digit
+/// values whose unsigned interpretation exceeds the half-range.
+///
+/// Coerces numeric inputs to text (Excel: `BIN2DEC(101)` == `BIN2DEC("101")`).
+fn parse_base_str(
+    v: &Value,
+    radix: u32,
+    is_valid: fn(u8) -> bool,
+    bit_width: u32,
+) -> Result<i64, CellError> {
+    if let Value::Error(e) = v {
+        return Err(*e);
+    }
+    let s = coerce::to_text(v);
+    let s = s.as_ref();
+    if s.is_empty() || s.len() > MAX_BASE_STR_LEN {
+        return Err(CellError::Num);
+    }
+    if !s.bytes().all(is_valid) {
+        return Err(CellError::Num);
+    }
+    let unsigned = i64::from_str_radix(s, radix).map_err(|_| CellError::Num)?;
+    let two_pow: i64 = 1 << bit_width;
+    let max_positive = two_pow / 2 - 1;
+    if s.len() == MAX_BASE_STR_LEN && unsigned > max_positive {
+        Ok(unsigned - two_pow)
+    } else {
+        Ok(unsigned)
+    }
+}
+
+/// Extract optional `places` argument at index 1. Valid range: 1..=10.
+fn extract_places(args: &[Value]) -> Result<Option<usize>, CellError> {
+    if args.len() < 2 {
+        return Ok(None);
+    }
+    let pf = coerce::to_number(&args[1])?;
+    if !pf.is_finite() || !(1.0..=10.0).contains(&pf) {
+        return Err(CellError::Num);
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let p = pf.trunc() as usize;
+    if p > MAX_BASE_STR_LEN {
+        return Err(CellError::Num);
+    }
+    Ok(Some(p))
+}
+
+/// Format a decimal integer as a base-N string with optional zero-padding.
+///
+/// Negative values use two's complement (always produces the correct digit
+/// count for the given bit width). Hex output is uppercase.
+fn format_base_str(
+    int_val: i64,
+    radix: u32,
+    bit_width: u32,
+    min_neg: i64,
+    max_pos: i64,
+    places: Option<usize>,
+) -> Result<Value, CellError> {
+    if !(min_neg..=max_pos).contains(&int_val) {
+        return Err(CellError::Num);
+    }
+    let s = if int_val < 0 {
+        #[allow(clippy::cast_sign_loss)]
+        let unsigned = (int_val + (1i64 << bit_width)) as u64;
+        match radix {
+            2 => format!("{unsigned:b}"),
+            8 => format!("{unsigned:o}"),
+            _ => format!("{unsigned:X}"),
+        }
+    } else {
+        #[allow(clippy::cast_sign_loss)]
+        let unsigned = int_val as u64;
+        match radix {
+            2 => format!("{unsigned:b}"),
+            8 => format!("{unsigned:o}"),
+            _ => format!("{unsigned:X}"),
+        }
+    };
+    if let Some(p) = places {
+        if s.len() > p {
+            return Err(CellError::Num);
+        }
+        Ok(Value::Text(format!("{s:0>p$}").into()))
+    } else {
+        Ok(Value::Text(s.into()))
+    }
+}
+
+fn is_binary_digit(b: u8) -> bool {
+    b == b'0' || b == b'1'
+}
+
+fn is_octal_digit(b: u8) -> bool {
+    (b'0'..=b'7').contains(&b)
+}
 
 const MAX_BITWISE: u64 = (1_u64 << 48) - 1;
 const MAX_SHIFT: i32 = 53;
@@ -272,7 +392,7 @@ pub(crate) fn builtin_hex2dec(args: &[Value]) -> Value {
     let hex_str = coerce::to_text(v);
     let hex_str = hex_str.as_ref();
 
-    if hex_str.is_empty() || hex_str.len() > MAX_HEX_LEN {
+    if hex_str.is_empty() || hex_str.len() > MAX_BASE_STR_LEN {
         return Value::Error(CellError::Num);
     }
     if !hex_str.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -284,8 +404,8 @@ pub(crate) fn builtin_hex2dec(args: &[Value]) -> Value {
     };
 
     // 10-digit hex with leading digit >= 8 → negative (two's complement)
-    let result = if hex_str.len() == MAX_HEX_LEN && unsigned > MAX_POSITIVE {
-        unsigned - TWO_POW_40
+    let result = if hex_str.len() == MAX_BASE_STR_LEN && unsigned > HEX_MAX_POSITIVE {
+        unsigned - HEX_TWO_POW
     } else {
         unsigned
     };
@@ -320,13 +440,13 @@ pub(crate) fn builtin_dec2hex(args: &[Value]) -> Value {
     #[allow(clippy::cast_possible_truncation)]
     let int_val = num.trunc() as i64;
 
-    if !(MIN_NEGATIVE..=MAX_POSITIVE).contains(&int_val) {
+    if !(HEX_MIN_NEGATIVE..=HEX_MAX_POSITIVE).contains(&int_val) {
         return Value::Error(CellError::Num);
     }
 
     let hex = if int_val < 0 {
         #[allow(clippy::cast_sign_loss)]
-        let unsigned = (int_val + TWO_POW_40) as u64;
+        let unsigned = (int_val + HEX_TWO_POW) as u64;
         format!("{unsigned:010X}")
     } else {
         #[allow(clippy::cast_sign_loss)]
@@ -344,7 +464,7 @@ pub(crate) fn builtin_dec2hex(args: &[Value]) -> Value {
         }
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let places = places_f.trunc() as usize;
-        if places > MAX_HEX_LEN {
+        if places > MAX_BASE_STR_LEN {
             return Value::Error(CellError::Num);
         }
         if hex.len() > places {
@@ -575,6 +695,341 @@ pub(crate) fn builtin_bitrshift(args: &[Value]) -> Value {
     }
 }
 
+// ---------------------------------------------------------------------------
+// BIN2DEC / DEC2BIN
+// ---------------------------------------------------------------------------
+
+/// `BIN2DEC(number)` — binary string to decimal number.
+///
+/// 10-bit two's complement. Range: -512 to 511.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for invalid binary input.
+pub(crate) fn builtin_bin2dec(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    match parse_base_str(&args[0], 2, is_binary_digit, BIN_BIT_WIDTH) {
+        Ok(v) =>
+        {
+            #[allow(clippy::cast_precision_loss)]
+            Value::Number(v as f64)
+        }
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `DEC2BIN(number, [places])` — decimal number to binary string.
+///
+/// 10-bit two's complement. Range: -512 to 511. Optional places (1-10).
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for out-of-range, invalid places.
+pub(crate) fn builtin_dec2bin(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let num = match coerce::to_number(&args[0]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let int_val = match super::math::to_int(num) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(int_val, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OCT2DEC / DEC2OCT
+// ---------------------------------------------------------------------------
+
+/// `OCT2DEC(number)` — octal string to decimal number.
+///
+/// 30-bit two's complement. Range: -536870912 to 536870911.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for invalid octal input.
+pub(crate) fn builtin_oct2dec(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    match parse_base_str(&args[0], 8, is_octal_digit, OCT_BIT_WIDTH) {
+        Ok(v) =>
+        {
+            #[allow(clippy::cast_precision_loss)]
+            Value::Number(v as f64)
+        }
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `DEC2OCT(number, [places])` — decimal number to octal string.
+///
+/// 30-bit two's complement. Range: -536870912 to 536870911.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for out-of-range, invalid places.
+pub(crate) fn builtin_dec2oct(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let num = match coerce::to_number(&args[0]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let int_val = match super::math::to_int(num) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(int_val, 8, OCT_BIT_WIDTH, OCT_MIN_NEGATIVE, OCT_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cross-base: HEX2BIN, BIN2HEX, HEX2OCT, OCT2HEX, BIN2OCT, OCT2BIN
+// ---------------------------------------------------------------------------
+
+/// `HEX2BIN(number, [places])` — hex string to binary string.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` if hex value outside binary domain.
+pub(crate) fn builtin_hex2bin(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let dec = match parse_base_str(&args[0], 16, |b| b.is_ascii_hexdigit(), HEX_BIT_WIDTH) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(dec, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `BIN2HEX(number, [places])` — binary string to hex string.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for invalid binary input.
+pub(crate) fn builtin_bin2hex(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let dec = match parse_base_str(&args[0], 2, is_binary_digit, BIN_BIT_WIDTH) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(dec, 16, HEX_BIT_WIDTH, HEX_MIN_NEGATIVE, HEX_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `HEX2OCT(number, [places])` — hex string to octal string.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` if hex value outside octal domain.
+pub(crate) fn builtin_hex2oct(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let dec = match parse_base_str(&args[0], 16, |b| b.is_ascii_hexdigit(), HEX_BIT_WIDTH) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(dec, 8, OCT_BIT_WIDTH, OCT_MIN_NEGATIVE, OCT_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `OCT2HEX(number, [places])` — octal string to hex string.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for invalid octal input.
+pub(crate) fn builtin_oct2hex(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let dec = match parse_base_str(&args[0], 8, is_octal_digit, OCT_BIT_WIDTH) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(dec, 16, HEX_BIT_WIDTH, HEX_MIN_NEGATIVE, HEX_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `BIN2OCT(number, [places])` — binary string to octal string.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for invalid binary input.
+pub(crate) fn builtin_bin2oct(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let dec = match parse_base_str(&args[0], 2, is_binary_digit, BIN_BIT_WIDTH) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(dec, 8, OCT_BIT_WIDTH, OCT_MIN_NEGATIVE, OCT_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `OCT2BIN(number, [places])` — octal string to binary string.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` if octal value outside binary domain.
+pub(crate) fn builtin_oct2bin(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let dec = match parse_base_str(&args[0], 8, is_octal_digit, OCT_BIT_WIDTH) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(dec, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BASE
+// ---------------------------------------------------------------------------
+
+/// `BASE(number, radix, [min_length])` — convert non-negative integer to
+/// text in the given base (2-36). Uses digits `0-9A-Z`.
+///
+/// Unlike DEC2HEX/DEC2BIN/DEC2OCT, BASE does **not** use two's complement.
+/// Negative input returns `#NUM!`.
+///
+/// # Errors
+///
+/// `#VALUE!` for wrong arity. `#NUM!` for negative number, radix outside
+/// 2-36, `min_length` outside 0-255, or number >= 2^53.
+pub(crate) fn builtin_base(args: &[Value]) -> Value {
+    if args.len() < 2 || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+
+    let num = match coerce::to_number(&args[0]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    if !num.is_finite() || !(0.0..=BASE_MAX_VALUE).contains(&num) {
+        return Value::Error(CellError::Num);
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let int_val = num.trunc() as u64;
+
+    let radix_f = match coerce::to_number(&args[1]) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let radix = match super::math::to_int(radix_f) {
+        Ok(r) => r,
+        Err(e) => return Value::Error(e),
+    };
+    if !(BASE_MIN_RADIX..=BASE_MAX_RADIX).contains(&radix) {
+        return Value::Error(CellError::Num);
+    }
+
+    let min_len = if args.len() == 3 {
+        let ml_f = match coerce::to_number(&args[2]) {
+            Ok(n) => n,
+            Err(e) => return Value::Error(e),
+        };
+        let ml = match super::math::to_int(ml_f) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        };
+        if !(0..=BASE_MAX_MIN_LENGTH).contains(&ml) {
+            return Value::Error(CellError::Num);
+        }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let ml_usize = ml as usize;
+        ml_usize
+    } else {
+        0
+    };
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let radix_u = radix as u32;
+    let s = if int_val == 0 {
+        "0".to_string()
+    } else {
+        let mut digits = Vec::new();
+        let mut n = int_val;
+        while n > 0 {
+            #[allow(clippy::cast_possible_truncation)]
+            let d = (n % u64::from(radix_u)) as usize;
+            digits.push(BASE_DIGITS[d]);
+            n /= u64::from(radix_u);
+        }
+        digits.reverse();
+        // SAFETY (logical): all bytes are from BASE_DIGITS which is pure ASCII
+        String::from_utf8(digits).unwrap_or_default()
+    };
+
+    if s.len() < min_len {
+        Value::Text(format!("{s:0>min_len$}").into())
+    } else {
+        Value::Text(s.into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -582,6 +1037,205 @@ mod tests {
     use xlstream_core::{CellError, Value};
 
     use super::*;
+
+    // -- parse_base_str --
+
+    #[test]
+    fn parse_base_str_binary_positive() {
+        assert_eq!(
+            parse_base_str(&Value::Text("1100100".into()), 2, is_binary_digit, BIN_BIT_WIDTH),
+            Ok(100),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_binary_negative_twos_complement() {
+        assert_eq!(
+            parse_base_str(&Value::Text("1111111111".into()), 2, is_binary_digit, BIN_BIT_WIDTH),
+            Ok(-1),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_empty_returns_num() {
+        assert_eq!(
+            parse_base_str(&Value::Text("".into()), 2, is_binary_digit, BIN_BIT_WIDTH),
+            Err(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_too_long_returns_num() {
+        assert_eq!(
+            parse_base_str(&Value::Text("10000000001".into()), 2, is_binary_digit, BIN_BIT_WIDTH),
+            Err(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_invalid_char_returns_num() {
+        assert_eq!(
+            parse_base_str(&Value::Text("2".into()), 2, is_binary_digit, BIN_BIT_WIDTH),
+            Err(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_propagates_error() {
+        assert_eq!(
+            parse_base_str(&Value::Error(CellError::Na), 2, is_binary_digit, BIN_BIT_WIDTH),
+            Err(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_coerces_number_to_text() {
+        assert_eq!(parse_base_str(&Value::Number(101.0), 2, is_binary_digit, BIN_BIT_WIDTH), Ok(5),);
+    }
+
+    #[test]
+    fn parse_base_str_octal_positive() {
+        assert_eq!(
+            parse_base_str(&Value::Text("144".into()), 8, is_octal_digit, OCT_BIT_WIDTH),
+            Ok(100),
+        );
+    }
+
+    #[test]
+    fn parse_base_str_octal_negative() {
+        assert_eq!(
+            parse_base_str(&Value::Text("7777777777".into()), 8, is_octal_digit, OCT_BIT_WIDTH),
+            Ok(-1),
+        );
+    }
+
+    // -- extract_places --
+
+    #[test]
+    fn extract_places_present() {
+        let args = [Value::Number(100.0), Value::Number(4.0)];
+        assert_eq!(extract_places(&args), Ok(Some(4)));
+    }
+
+    #[test]
+    fn extract_places_absent() {
+        let args = [Value::Number(100.0)];
+        assert_eq!(extract_places(&args), Ok(None));
+    }
+
+    #[test]
+    fn extract_places_truncates_fractional() {
+        let args = [Value::Number(100.0), Value::Number(4.9)];
+        assert_eq!(extract_places(&args), Ok(Some(4)));
+    }
+
+    #[test]
+    fn extract_places_zero_returns_num() {
+        let args = [Value::Number(100.0), Value::Number(0.0)];
+        assert_eq!(extract_places(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn extract_places_eleven_returns_num() {
+        let args = [Value::Number(100.0), Value::Number(11.0)];
+        assert_eq!(extract_places(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn extract_places_error_propagates() {
+        let args = [Value::Number(100.0), Value::Error(CellError::Na)];
+        assert_eq!(extract_places(&args), Err(CellError::Na));
+    }
+
+    // -- format_base_str --
+
+    #[test]
+    fn format_base_str_binary_positive() {
+        assert_eq!(
+            format_base_str(100, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, None),
+            Ok(Value::Text("1100100".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_binary_zero() {
+        assert_eq!(
+            format_base_str(0, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, None),
+            Ok(Value::Text("0".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_binary_negative() {
+        assert_eq!(
+            format_base_str(-1, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, None),
+            Ok(Value::Text("1111111111".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_binary_min_negative() {
+        assert_eq!(
+            format_base_str(-512, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, None),
+            Ok(Value::Text("1000000000".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_binary_with_places() {
+        assert_eq!(
+            format_base_str(100, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, Some(10)),
+            Ok(Value::Text("0001100100".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_binary_places_too_small() {
+        assert_eq!(
+            format_base_str(100, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, Some(6)),
+            Err(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn format_base_str_binary_out_of_range_high() {
+        assert_eq!(
+            format_base_str(512, 2, BIN_BIT_WIDTH, BIN_MIN_NEGATIVE, BIN_MAX_POSITIVE, None),
+            Err(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn format_base_str_octal_positive() {
+        assert_eq!(
+            format_base_str(100, 8, OCT_BIT_WIDTH, OCT_MIN_NEGATIVE, OCT_MAX_POSITIVE, None),
+            Ok(Value::Text("144".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_octal_negative() {
+        assert_eq!(
+            format_base_str(-1, 8, OCT_BIT_WIDTH, OCT_MIN_NEGATIVE, OCT_MAX_POSITIVE, None),
+            Ok(Value::Text("7777777777".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_hex_positive() {
+        assert_eq!(
+            format_base_str(255, 16, HEX_BIT_WIDTH, HEX_MIN_NEGATIVE, HEX_MAX_POSITIVE, None),
+            Ok(Value::Text("FF".into())),
+        );
+    }
+
+    #[test]
+    fn format_base_str_hex_negative() {
+        assert_eq!(
+            format_base_str(-1, 16, HEX_BIT_WIDTH, HEX_MIN_NEGATIVE, HEX_MAX_POSITIVE, None),
+            Ok(Value::Text("FFFFFFFFFF".into())),
+        );
+    }
 
     // -- HEX2DEC --
 
@@ -1640,6 +2294,779 @@ mod tests {
         assert_eq!(
             builtin_bitrshift(&[Value::Text("16".into()), Value::Number(2.0)]),
             Value::Number(4.0),
+        );
+    }
+
+    // -- BIN2DEC --
+
+    #[test]
+    fn bin2dec_basic() {
+        assert_eq!(builtin_bin2dec(&[Value::Text("1100100".into())]), Value::Number(100.0));
+        assert_eq!(builtin_bin2dec(&[Value::Text("1010".into())]), Value::Number(10.0));
+        assert_eq!(builtin_bin2dec(&[Value::Text("0".into())]), Value::Number(0.0));
+        assert_eq!(builtin_bin2dec(&[Value::Text("1".into())]), Value::Number(1.0));
+        assert_eq!(builtin_bin2dec(&[Value::Text("11".into())]), Value::Number(3.0));
+    }
+
+    #[test]
+    fn bin2dec_max_positive() {
+        assert_eq!(builtin_bin2dec(&[Value::Text("0111111111".into())]), Value::Number(511.0),);
+    }
+
+    #[test]
+    fn bin2dec_negative_twos_complement() {
+        assert_eq!(builtin_bin2dec(&[Value::Text("1111111111".into())]), Value::Number(-1.0),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("1000000000".into())]), Value::Number(-512.0),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("1111111110".into())]), Value::Number(-2.0),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("1111111100".into())]), Value::Number(-4.0),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("1110000000".into())]), Value::Number(-128.0),);
+    }
+
+    #[test]
+    fn bin2dec_leading_zeros() {
+        assert_eq!(builtin_bin2dec(&[Value::Text("0000000001".into())]), Value::Number(1.0),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("0000000000".into())]), Value::Number(0.0),);
+    }
+
+    #[test]
+    fn bin2dec_numeric_coercion() {
+        assert_eq!(builtin_bin2dec(&[Value::Number(101.0)]), Value::Number(5.0));
+    }
+
+    #[test]
+    fn bin2dec_empty_string() {
+        assert_eq!(builtin_bin2dec(&[Value::Text("".into())]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn bin2dec_invalid_chars() {
+        assert_eq!(builtin_bin2dec(&[Value::Text("2".into())]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("10201".into())]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_bin2dec(&[Value::Text("1A".into())]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn bin2dec_too_long() {
+        assert_eq!(
+            builtin_bin2dec(&[Value::Text("10000000001".into())]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bin2dec_error_propagation() {
+        assert_eq!(builtin_bin2dec(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn bin2dec_wrong_arity() {
+        assert_eq!(builtin_bin2dec(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_bin2dec(&[Value::Text("1".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // -- DEC2BIN --
+
+    #[test]
+    fn dec2bin_basic() {
+        assert_eq!(builtin_dec2bin(&[Value::Number(100.0)]), Value::Text("1100100".into()),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(0.0)]), Value::Text("0".into()));
+        assert_eq!(builtin_dec2bin(&[Value::Number(10.0)]), Value::Text("1010".into()));
+        assert_eq!(builtin_dec2bin(&[Value::Number(511.0)]), Value::Text("111111111".into()),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(1.0)]), Value::Text("1".into()));
+    }
+
+    #[test]
+    fn dec2bin_with_places() {
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(100.0), Value::Number(10.0)]),
+            Value::Text("0001100100".into()),
+        );
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(100.0), Value::Number(7.0)]),
+            Value::Text("1100100".into()),
+        );
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(0.0), Value::Number(4.0)]),
+            Value::Text("0000".into()),
+        );
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(1.0), Value::Number(10.0)]),
+            Value::Text("0000000001".into()),
+        );
+    }
+
+    #[test]
+    fn dec2bin_negative_twos_complement() {
+        assert_eq!(builtin_dec2bin(&[Value::Number(-1.0)]), Value::Text("1111111111".into()),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(-512.0)]), Value::Text("1000000000".into()),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(-2.0)]), Value::Text("1111111110".into()),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(-128.0)]), Value::Text("1110000000".into()),);
+    }
+
+    #[test]
+    fn dec2bin_out_of_range() {
+        assert_eq!(builtin_dec2bin(&[Value::Number(512.0)]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(-513.0)]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn dec2bin_places_too_small() {
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(100.0), Value::Number(6.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn dec2bin_places_out_of_bounds() {
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(100.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(100.0), Value::Number(11.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn dec2bin_negative_with_places_too_small() {
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(-1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn dec2bin_truncates_decimal() {
+        assert_eq!(builtin_dec2bin(&[Value::Number(100.7)]), Value::Text("1100100".into()),);
+    }
+
+    #[test]
+    fn dec2bin_text_coercion() {
+        assert_eq!(builtin_dec2bin(&[Value::Text("100".into())]), Value::Text("1100100".into()),);
+    }
+
+    #[test]
+    fn dec2bin_bool_coercion() {
+        assert_eq!(builtin_dec2bin(&[Value::Bool(true)]), Value::Text("1".into()));
+    }
+
+    #[test]
+    fn dec2bin_nan_returns_num() {
+        assert_eq!(builtin_dec2bin(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_dec2bin(&[Value::Number(f64::INFINITY)]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn dec2bin_error_propagation() {
+        assert_eq!(builtin_dec2bin(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn dec2bin_wrong_arity() {
+        assert_eq!(builtin_dec2bin(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // -- OCT2DEC --
+
+    #[test]
+    fn oct2dec_basic() {
+        assert_eq!(builtin_oct2dec(&[Value::Text("144".into())]), Value::Number(100.0));
+        assert_eq!(builtin_oct2dec(&[Value::Text("52".into())]), Value::Number(42.0));
+        assert_eq!(builtin_oct2dec(&[Value::Text("0".into())]), Value::Number(0.0));
+        assert_eq!(builtin_oct2dec(&[Value::Text("1".into())]), Value::Number(1.0));
+        assert_eq!(builtin_oct2dec(&[Value::Text("7".into())]), Value::Number(7.0));
+        assert_eq!(builtin_oct2dec(&[Value::Text("10".into())]), Value::Number(8.0));
+    }
+
+    #[test]
+    fn oct2dec_max_positive() {
+        assert_eq!(
+            builtin_oct2dec(&[Value::Text("3777777777".into())]),
+            Value::Number(536_870_911.0),
+        );
+    }
+
+    #[test]
+    fn oct2dec_negative_twos_complement() {
+        assert_eq!(builtin_oct2dec(&[Value::Text("7777777777".into())]), Value::Number(-1.0),);
+        assert_eq!(
+            builtin_oct2dec(&[Value::Text("4000000000".into())]),
+            Value::Number(-536_870_912.0),
+        );
+        assert_eq!(builtin_oct2dec(&[Value::Text("7777777770".into())]), Value::Number(-8.0),);
+        assert_eq!(builtin_oct2dec(&[Value::Text("7777777600".into())]), Value::Number(-128.0),);
+    }
+
+    #[test]
+    fn oct2dec_leading_zeros() {
+        assert_eq!(builtin_oct2dec(&[Value::Text("0000000001".into())]), Value::Number(1.0),);
+        assert_eq!(builtin_oct2dec(&[Value::Text("0000000000".into())]), Value::Number(0.0),);
+    }
+
+    #[test]
+    fn oct2dec_numeric_coercion() {
+        assert_eq!(builtin_oct2dec(&[Value::Number(77.0)]), Value::Number(63.0));
+    }
+
+    #[test]
+    fn oct2dec_invalid_chars() {
+        assert_eq!(builtin_oct2dec(&[Value::Text("8".into())]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_oct2dec(&[Value::Text("9".into())]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_oct2dec(&[Value::Text("1A".into())]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn oct2dec_empty_string() {
+        assert_eq!(builtin_oct2dec(&[Value::Text("".into())]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn oct2dec_too_long() {
+        assert_eq!(
+            builtin_oct2dec(&[Value::Text("10000000001".into())]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn oct2dec_error_propagation() {
+        assert_eq!(builtin_oct2dec(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn oct2dec_wrong_arity() {
+        assert_eq!(builtin_oct2dec(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_oct2dec(&[Value::Text("1".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // -- DEC2OCT --
+
+    #[test]
+    fn dec2oct_basic() {
+        assert_eq!(builtin_dec2oct(&[Value::Number(100.0)]), Value::Text("144".into()));
+        assert_eq!(builtin_dec2oct(&[Value::Number(0.0)]), Value::Text("0".into()));
+        assert_eq!(builtin_dec2oct(&[Value::Number(42.0)]), Value::Text("52".into()));
+        assert_eq!(builtin_dec2oct(&[Value::Number(8.0)]), Value::Text("10".into()));
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(536_870_911.0)]),
+            Value::Text("3777777777".into()),
+        );
+    }
+
+    #[test]
+    fn dec2oct_with_places() {
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(100.0), Value::Number(6.0)]),
+            Value::Text("000144".into()),
+        );
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(100.0), Value::Number(3.0)]),
+            Value::Text("144".into()),
+        );
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(0.0), Value::Number(4.0)]),
+            Value::Text("0000".into()),
+        );
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(1.0), Value::Number(10.0)]),
+            Value::Text("0000000001".into()),
+        );
+    }
+
+    #[test]
+    fn dec2oct_negative_twos_complement() {
+        assert_eq!(builtin_dec2oct(&[Value::Number(-1.0)]), Value::Text("7777777777".into()),);
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(-536_870_912.0)]),
+            Value::Text("4000000000".into()),
+        );
+        assert_eq!(builtin_dec2oct(&[Value::Number(-8.0)]), Value::Text("7777777770".into()),);
+        assert_eq!(builtin_dec2oct(&[Value::Number(-128.0)]), Value::Text("7777777600".into()),);
+    }
+
+    #[test]
+    fn dec2oct_out_of_range() {
+        assert_eq!(builtin_dec2oct(&[Value::Number(536_870_912.0)]), Value::Error(CellError::Num),);
+        assert_eq!(builtin_dec2oct(&[Value::Number(-536_870_913.0)]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn dec2oct_places_too_small() {
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(100.0), Value::Number(2.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn dec2oct_places_out_of_bounds() {
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(100.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(100.0), Value::Number(11.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn dec2oct_negative_with_places_too_small() {
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(-1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn dec2oct_truncates_decimal() {
+        assert_eq!(builtin_dec2oct(&[Value::Number(100.7)]), Value::Text("144".into()),);
+    }
+
+    #[test]
+    fn dec2oct_text_coercion() {
+        assert_eq!(builtin_dec2oct(&[Value::Text("100".into())]), Value::Text("144".into()),);
+    }
+
+    #[test]
+    fn dec2oct_bool_coercion() {
+        assert_eq!(builtin_dec2oct(&[Value::Bool(true)]), Value::Text("1".into()));
+    }
+
+    #[test]
+    fn dec2oct_nan_returns_num() {
+        assert_eq!(builtin_dec2oct(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num),);
+    }
+
+    #[test]
+    fn dec2oct_error_propagation() {
+        assert_eq!(builtin_dec2oct(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn dec2oct_wrong_arity() {
+        assert_eq!(builtin_dec2oct(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // -- HEX2BIN --
+
+    #[test]
+    fn hex2bin_basic() {
+        assert_eq!(builtin_hex2bin(&[Value::Text("F".into())]), Value::Text("1111".into()),);
+        assert_eq!(builtin_hex2bin(&[Value::Text("A".into())]), Value::Text("1010".into()),);
+        assert_eq!(builtin_hex2bin(&[Value::Text("0".into())]), Value::Text("0".into()));
+        assert_eq!(builtin_hex2bin(&[Value::Text("1FF".into())]), Value::Text("111111111".into()),);
+    }
+
+    #[test]
+    fn hex2bin_with_places() {
+        assert_eq!(
+            builtin_hex2bin(&[Value::Text("F".into()), Value::Number(8.0)]),
+            Value::Text("00001111".into()),
+        );
+        assert_eq!(
+            builtin_hex2bin(&[Value::Text("F".into()), Value::Number(4.0)]),
+            Value::Text("1111".into()),
+        );
+    }
+
+    #[test]
+    fn hex2bin_negative() {
+        assert_eq!(
+            builtin_hex2bin(&[Value::Text("FFFFFFFFFE".into())]),
+            Value::Text("1111111110".into()),
+        );
+        assert_eq!(
+            builtin_hex2bin(&[Value::Text("FFFFFFFE00".into())]),
+            Value::Text("1000000000".into()),
+        );
+    }
+
+    #[test]
+    fn hex2bin_out_of_binary_range() {
+        assert_eq!(builtin_hex2bin(&[Value::Text("200".into())]), Value::Error(CellError::Num),);
+        assert_eq!(
+            builtin_hex2bin(&[Value::Text("FFFFFFFDFF".into())]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn hex2bin_wrong_arity() {
+        assert_eq!(builtin_hex2bin(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn hex2bin_error_propagation() {
+        assert_eq!(builtin_hex2bin(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn hex2bin_lowercase_input() {
+        assert_eq!(builtin_hex2bin(&[Value::Text("f".into())]), Value::Text("1111".into()),);
+    }
+
+    // -- BIN2HEX --
+
+    #[test]
+    fn bin2hex_basic() {
+        assert_eq!(builtin_bin2hex(&[Value::Text("1111".into())]), Value::Text("F".into()),);
+        assert_eq!(builtin_bin2hex(&[Value::Text("0".into())]), Value::Text("0".into()));
+        assert_eq!(builtin_bin2hex(&[Value::Text("0111111111".into())]), Value::Text("1FF".into()),);
+    }
+
+    #[test]
+    fn bin2hex_with_places() {
+        assert_eq!(
+            builtin_bin2hex(&[Value::Text("1111".into()), Value::Number(4.0)]),
+            Value::Text("000F".into()),
+        );
+    }
+
+    #[test]
+    fn bin2hex_negative() {
+        assert_eq!(
+            builtin_bin2hex(&[Value::Text("1111111111".into())]),
+            Value::Text("FFFFFFFFFF".into()),
+        );
+        assert_eq!(
+            builtin_bin2hex(&[Value::Text("1000000000".into())]),
+            Value::Text("FFFFFFFE00".into()),
+        );
+    }
+
+    #[test]
+    fn bin2hex_error_propagation() {
+        assert_eq!(builtin_bin2hex(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn bin2hex_wrong_arity() {
+        assert_eq!(builtin_bin2hex(&[]), Value::Error(CellError::Value));
+    }
+
+    // -- HEX2OCT --
+
+    #[test]
+    fn hex2oct_basic() {
+        assert_eq!(builtin_hex2oct(&[Value::Text("F".into())]), Value::Text("17".into()),);
+        assert_eq!(builtin_hex2oct(&[Value::Text("0".into())]), Value::Text("0".into()));
+        assert_eq!(
+            builtin_hex2oct(&[Value::Text("1FFFFFFF".into())]),
+            Value::Text("3777777777".into()),
+        );
+    }
+
+    #[test]
+    fn hex2oct_with_places() {
+        assert_eq!(
+            builtin_hex2oct(&[Value::Text("F".into()), Value::Number(4.0)]),
+            Value::Text("0017".into()),
+        );
+    }
+
+    #[test]
+    fn hex2oct_negative() {
+        assert_eq!(
+            builtin_hex2oct(&[Value::Text("FFFFFFFFFF".into())]),
+            Value::Text("7777777777".into()),
+        );
+    }
+
+    #[test]
+    fn hex2oct_out_of_octal_range() {
+        assert_eq!(
+            builtin_hex2oct(&[Value::Text("2000000000".into())]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    // -- OCT2HEX --
+
+    #[test]
+    fn oct2hex_basic() {
+        assert_eq!(builtin_oct2hex(&[Value::Text("17".into())]), Value::Text("F".into()),);
+        assert_eq!(builtin_oct2hex(&[Value::Text("0".into())]), Value::Text("0".into()));
+        assert_eq!(
+            builtin_oct2hex(&[Value::Text("3777777777".into())]),
+            Value::Text("1FFFFFFF".into()),
+        );
+    }
+
+    #[test]
+    fn oct2hex_with_places() {
+        assert_eq!(
+            builtin_oct2hex(&[Value::Text("17".into()), Value::Number(4.0)]),
+            Value::Text("000F".into()),
+        );
+    }
+
+    #[test]
+    fn oct2hex_negative() {
+        assert_eq!(
+            builtin_oct2hex(&[Value::Text("7777777777".into())]),
+            Value::Text("FFFFFFFFFF".into()),
+        );
+    }
+
+    // -- BIN2OCT --
+
+    #[test]
+    fn bin2oct_basic() {
+        assert_eq!(builtin_bin2oct(&[Value::Text("1111".into())]), Value::Text("17".into()),);
+        assert_eq!(builtin_bin2oct(&[Value::Text("0".into())]), Value::Text("0".into()));
+        assert_eq!(builtin_bin2oct(&[Value::Text("0111111111".into())]), Value::Text("777".into()),);
+    }
+
+    #[test]
+    fn bin2oct_with_places() {
+        assert_eq!(
+            builtin_bin2oct(&[Value::Text("1111".into()), Value::Number(4.0)]),
+            Value::Text("0017".into()),
+        );
+    }
+
+    #[test]
+    fn bin2oct_negative() {
+        assert_eq!(
+            builtin_bin2oct(&[Value::Text("1111111111".into())]),
+            Value::Text("7777777777".into()),
+        );
+        assert_eq!(
+            builtin_bin2oct(&[Value::Text("1000000000".into())]),
+            Value::Text("7777777000".into()),
+        );
+    }
+
+    // -- OCT2BIN --
+
+    #[test]
+    fn oct2bin_basic() {
+        assert_eq!(builtin_oct2bin(&[Value::Text("17".into())]), Value::Text("1111".into()),);
+        assert_eq!(builtin_oct2bin(&[Value::Text("0".into())]), Value::Text("0".into()));
+        assert_eq!(builtin_oct2bin(&[Value::Text("777".into())]), Value::Text("111111111".into()),);
+    }
+
+    #[test]
+    fn oct2bin_with_places() {
+        assert_eq!(
+            builtin_oct2bin(&[Value::Text("17".into()), Value::Number(8.0)]),
+            Value::Text("00001111".into()),
+        );
+    }
+
+    #[test]
+    fn oct2bin_negative() {
+        assert_eq!(
+            builtin_oct2bin(&[Value::Text("7777777776".into())]),
+            Value::Text("1111111110".into()),
+        );
+        assert_eq!(
+            builtin_oct2bin(&[Value::Text("7777777000".into())]),
+            Value::Text("1000000000".into()),
+        );
+    }
+
+    #[test]
+    fn oct2bin_out_of_binary_range() {
+        assert_eq!(builtin_oct2bin(&[Value::Text("1000".into())]), Value::Error(CellError::Num),);
+    }
+
+    // -- BASE --
+
+    #[test]
+    fn base_basic() {
+        assert_eq!(
+            builtin_base(&[Value::Number(255.0), Value::Number(16.0)]),
+            Value::Text("FF".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(2.0)]),
+            Value::Text("1010".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(100.0), Value::Number(8.0)]),
+            Value::Text("144".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(0.0), Value::Number(16.0)]),
+            Value::Text("0".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(0.0), Value::Number(2.0)]),
+            Value::Text("0".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(255.0), Value::Number(10.0)]),
+            Value::Text("255".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(35.0), Value::Number(36.0)]),
+            Value::Text("Z".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(36.0), Value::Number(36.0)]),
+            Value::Text("10".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(1295.0), Value::Number(36.0)]),
+            Value::Text("ZZ".into()),
+        );
+    }
+
+    #[test]
+    fn base_with_min_length() {
+        assert_eq!(
+            builtin_base(&[Value::Number(255.0), Value::Number(16.0), Value::Number(4.0)]),
+            Value::Text("00FF".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(7.0), Value::Number(2.0), Value::Number(8.0)]),
+            Value::Text("00000111".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(255.0), Value::Number(16.0), Value::Number(2.0)]),
+            Value::Text("FF".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(255.0), Value::Number(16.0), Value::Number(1.0)]),
+            Value::Text("FF".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(0.0), Value::Number(2.0), Value::Number(4.0)]),
+            Value::Text("0000".into()),
+        );
+    }
+
+    #[test]
+    fn base_large_values() {
+        assert_eq!(
+            builtin_base(&[Value::Number(9_007_199_254_740_991.0), Value::Number(16.0)]),
+            Value::Text("1FFFFFFFFFFFFF".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(4_294_967_295.0), Value::Number(16.0)]),
+            Value::Text("FFFFFFFF".into()),
+        );
+    }
+
+    #[test]
+    fn base_various_radixes() {
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(3.0)]),
+            Value::Text("101".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(10.0)]),
+            Value::Text("10".into()),
+        );
+    }
+
+    #[test]
+    fn base_type_coercion() {
+        assert_eq!(
+            builtin_base(&[Value::Number(255.9), Value::Number(16.0)]),
+            Value::Text("FF".into()),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Text("255".into()), Value::Number(16.0)]),
+            Value::Text("FF".into()),
+        );
+        assert_eq!(builtin_base(&[Value::Bool(true), Value::Number(2.0)]), Value::Text("1".into()),);
+    }
+
+    #[test]
+    fn base_negative_returns_num() {
+        assert_eq!(
+            builtin_base(&[Value::Number(-1.0), Value::Number(16.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn base_too_large_returns_num() {
+        assert_eq!(
+            builtin_base(&[Value::Number(9_007_199_254_740_992.0), Value::Number(16.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn base_radix_out_of_range() {
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(37.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(0.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn base_min_length_out_of_range() {
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(2.0), Value::Number(256.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(2.0), Value::Number(-1.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn base_error_propagation() {
+        assert_eq!(
+            builtin_base(&[Value::Error(CellError::Na), Value::Number(16.0)]),
+            Value::Error(CellError::Na),
+        );
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn base_wrong_arity() {
+        assert_eq!(builtin_base(&[]), Value::Error(CellError::Value));
+        assert_eq!(builtin_base(&[Value::Number(10.0)]), Value::Error(CellError::Value),);
+        assert_eq!(
+            builtin_base(&[
+                Value::Number(10.0),
+                Value::Number(2.0),
+                Value::Number(4.0),
+                Value::Number(1.0)
+            ]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn base_nan_returns_num() {
+        assert_eq!(
+            builtin_base(&[Value::Number(f64::NAN), Value::Number(16.0)]),
+            Value::Error(CellError::Num),
         );
     }
 }

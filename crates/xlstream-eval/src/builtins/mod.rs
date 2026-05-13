@@ -313,6 +313,17 @@ pub(crate) fn dispatch(
         "BITXOR" => Some(engineering::builtin_bitxor(&eval_args(args, interp, scope))),
         "BITLSHIFT" => Some(engineering::builtin_bitlshift(&eval_args(args, interp, scope))),
         "BITRSHIFT" => Some(engineering::builtin_bitrshift(&eval_args(args, interp, scope))),
+        "BIN2DEC" => Some(engineering::builtin_bin2dec(&eval_args(args, interp, scope))),
+        "DEC2BIN" => Some(engineering::builtin_dec2bin(&eval_args(args, interp, scope))),
+        "OCT2DEC" => Some(engineering::builtin_oct2dec(&eval_args(args, interp, scope))),
+        "DEC2OCT" => Some(engineering::builtin_dec2oct(&eval_args(args, interp, scope))),
+        "HEX2BIN" => Some(engineering::builtin_hex2bin(&eval_args(args, interp, scope))),
+        "BIN2HEX" => Some(engineering::builtin_bin2hex(&eval_args(args, interp, scope))),
+        "HEX2OCT" => Some(engineering::builtin_hex2oct(&eval_args(args, interp, scope))),
+        "OCT2HEX" => Some(engineering::builtin_oct2hex(&eval_args(args, interp, scope))),
+        "BIN2OCT" => Some(engineering::builtin_bin2oct(&eval_args(args, interp, scope))),
+        "OCT2BIN" => Some(engineering::builtin_oct2bin(&eval_args(args, interp, scope))),
+        "BASE" => Some(engineering::builtin_base(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
