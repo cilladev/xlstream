@@ -36,7 +36,7 @@ pub(crate) fn format_complex(real: f64, imag: f64, suffix: char) -> String {
 
 /// Format a number with no trailing ".0" for integers.
 fn format_number(n: f64) -> String {
-    if n.fract() == 0.0 && n.abs() < 1e15 {
+    if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
         #[allow(clippy::cast_possible_truncation)]
         let i = n as i64;
         format!("{i}")
@@ -71,7 +71,6 @@ fn format_imag_part(imag: f64, suffix: char) -> String {
 ///
 /// Returns `CellError::Num` for invalid complex number format.
 pub(crate) fn parse_complex(s: &str) -> Result<(f64, f64, char), CellError> {
-    let s = s.trim();
     if s.is_empty() {
         return Err(CellError::Num);
     }
@@ -132,6 +131,7 @@ fn find_imag_split(body: &str) -> Result<usize, CellError> {
     let mut i = bytes.len();
     while i > 0 {
         i -= 1;
+        // i > 0: leading sign belongs to real part, also guards bytes[i-1] access
         if (bytes[i] == b'+' || bytes[i] == b'-') && i > 0 {
             let prev = bytes[i - 1];
             if prev == b'e' || prev == b'E' {
@@ -169,6 +169,10 @@ pub(crate) fn builtin_complex(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
+
+    if !real.is_finite() || !imag.is_finite() {
+        return Value::Error(CellError::Num);
+    }
 
     let suffix = if args.len() == 3 {
         let v = &args[2];
@@ -711,6 +715,10 @@ mod tests {
         let (r2, i2, _) = parse_complex("1.5E-2+3i").unwrap();
         assert!((r2 - 0.015).abs() < 1e-12);
         assert!((i2 - 3.0).abs() < 1e-12);
+
+        let (r3, i3, _) = parse_complex("3+1E2i").unwrap();
+        assert!((r3 - 3.0).abs() < 1e-12);
+        assert!((i3 - 100.0).abs() < 1e-12);
     }
 
     #[test]
@@ -883,6 +891,22 @@ mod tests {
         assert_eq!(
             builtin_complex(&[Value::Number(3.0), Value::Error(CellError::Na)]),
             Value::Error(CellError::Na),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(4.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn complex_non_finite_returns_num_error() {
+        assert_eq!(
+            builtin_complex(&[Value::Number(f64::NAN), Value::Number(4.0)]),
+            Value::Error(CellError::Num),
+        );
+        assert_eq!(
+            builtin_complex(&[Value::Number(3.0), Value::Number(f64::INFINITY)]),
+            Value::Error(CellError::Num),
         );
     }
 
