@@ -21,5 +21,7 @@ mod lookup;
 mod math;
 #[path = "conformance/operators.rs"]
 mod operators;
+#[path = "conformance/statistical.rs"]
+mod statistical;
 #[path = "conformance/text.rs"]
 mod text;
