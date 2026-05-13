@@ -281,6 +281,14 @@ pub(crate) fn dispatch(
             statistical::builtin_norm_inv(&eval_args(args, interp, scope))
                 .map_or_else(Value::Error, Value::Number),
         ),
+        "NORM.S.DIST" => Some(
+            statistical::builtin_norm_s_dist(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
+        "NORM.S.INV" => Some(
+            statistical::builtin_norm_s_inv(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
         _ => None,
     }
 }
