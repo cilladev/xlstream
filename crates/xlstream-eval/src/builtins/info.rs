@@ -324,7 +324,10 @@ pub fn builtin_column(node: NodeRef<'_>) -> Value {
 pub fn builtin_rows(node: NodeRef<'_>) -> Value {
     match node.view() {
         NodeView::RangeRef { start_row, end_row, .. } => match (start_row, end_row) {
-            (Some(sr), Some(er)) => Value::Number(f64::from(er - sr + 1)),
+            (Some(sr), Some(er)) => {
+                let count = if er >= sr { er - sr + 1 } else { sr - er + 1 };
+                Value::Number(f64::from(count))
+            }
             #[allow(clippy::cast_precision_loss)] // 2^20 is exact in f64
             _ => Value::Number(xlstream_core::EXCEL_MAX_ROWS as f64),
         },
@@ -357,7 +360,10 @@ pub fn builtin_rows(node: NodeRef<'_>) -> Value {
 pub fn builtin_columns(node: NodeRef<'_>) -> Value {
     match node.view() {
         NodeView::RangeRef { start_col, end_col, .. } => match (start_col, end_col) {
-            (Some(sc), Some(ec)) => Value::Number(f64::from(ec - sc + 1)),
+            (Some(sc), Some(ec)) => {
+                let count = if ec >= sc { ec - sc + 1 } else { sc - ec + 1 };
+                Value::Number(f64::from(count))
+            }
             _ => Value::Number(f64::from(xlstream_core::EXCEL_MAX_COLS)),
         },
         NodeView::CellRef { .. } => Value::Number(1.0),
@@ -899,5 +905,19 @@ mod tests {
     fn columns_wide_range() {
         let ast = xlstream_parse::parse("A1:Z1").unwrap();
         assert_eq!(builtin_columns(ast.root()), Value::Number(26.0));
+    }
+
+    // ===== Reversed range safety =====
+
+    #[test]
+    fn rows_reversed_range_no_underflow() {
+        let ast = xlstream_parse::parse("A5:A3").unwrap();
+        assert_eq!(builtin_rows(ast.root()), Value::Number(3.0));
+    }
+
+    #[test]
+    fn columns_reversed_range_no_underflow() {
+        let ast = xlstream_parse::parse("C1:A1").unwrap();
+        assert_eq!(builtin_columns(ast.root()), Value::Number(3.0));
     }
 }

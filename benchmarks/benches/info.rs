@@ -19,6 +19,12 @@ fn bench_info(c: &mut Criterion) {
         ("type", "TYPE(B1)"),
         ("istext", "ISTEXT(C1)"),
         ("iserror", "ISERROR(A1)"),
+        ("row_ref", "ROW(A5)"),
+        ("column_ref", "COLUMN(C3)"),
+        ("row_no_arg", "ROW()"),
+        ("column_no_arg", "COLUMN()"),
+        ("rows_range", "ROWS(A1:A10)"),
+        ("columns_range", "COLUMNS(A1:C5)"),
     ];
 
     let mut group = c.benchmark_group("info");

@@ -201,7 +201,7 @@ fn evaluate_lookup_formulas(
             }
             // Scoped block: borrow row immutably for RowScope, then write.
             let result = {
-                let scope = RowScope::new(row, row_idx as u32);
+                let scope = RowScope::new(row, row_idx as u32).with_col_idx(fcol);
                 interp.eval(ast.root(), &scope)
             };
             row[fcol_idx] = result;
