@@ -138,6 +138,7 @@ pub fn is_volatile_unsupported(name: &str) -> bool {
 pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "IRR", "NPV", "CONCAT", "CONCATENATE", "TEXTJOIN",
     "NETWORKDAYS", "WORKDAY", "AND", "OR", "SUMPRODUCT",
+    "VAR.S", "VAR.P", "STDEV.S", "STDEV.P",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
