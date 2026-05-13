@@ -8,14 +8,19 @@ Build the fastest, leanest Excel formula evaluation engine in Python's reach, by
 
 Data scientists, analysts, and finance teams generate Excel workbooks programmatically, often with hundreds of thousands of rows and a handful of formula columns. Existing Python-callable evaluators do not scale:
 
-| Engine | Approach | Measured on 700k × 20 reference workload |
-|---|---|---|
-| `formualizer` (Rust, graph-based) | Full dependency DAG | **3.3 GB RSS, 5h 40m wall-clock** (measured 2026-04-17: Deals 700,001×20 + Thresholds 26×4 + Region Info 6×4) |
-| `pycel`, `xlcalculator`, `formulas` (pure Python) | Graph + interpreter | Hours → days; OOM on lookups at scale |
-| `xlwings` | Drives real Excel via COM | Requires Excel installed; slow |
-| LibreOffice `soffice --headless` | Shells out to LO | 1–3 GB RAM, minutes-to-tens-of-minutes; installs 600 MB of LibreOffice |
+Measured 2026-05-13 on 100k rows × 50 cols (20 data + 30 formula). Intel i9-10910, 128 GB RAM.
 
-None of these is satisfying for an automated pipeline that processes large workbooks repeatedly. xlstream's target on the same workload: **< 250 MB peak RSS, < 3 min wall-clock**. That's roughly **13× less memory and 100× faster** than formualizer.
+| Engine | Version | Wall-clock | Peak RSS | Architecture |
+|---|---|---|---|---|
+| **xlstream (1 worker)** | 0.2.1 | **26.5s** | **643 MB** | Streaming (2-pass) |
+| **xlstream (4 workers)** | 0.2.1 | **23.0s** | **681 MB** | Streaming (2-pass) |
+| LibreOffice | 26.2 | 31.9s | 2,081 MB | Graph |
+| Excel | 16.108.2 | ~99s | ~430 MB | Graph (20 threads) |
+| formualizer | 0.5.6 | 2h 8m | 11,322 MB | Full dependency graph |
+| `pycel`, `xlcalculator`, `formulas` | — | Hours → days | OOM at scale | Graph + interpreter |
+| `xlwings` | — | Slow | — | Drives real Excel via COM |
+
+None of these is satisfying for an automated pipeline that processes large workbooks repeatedly. xlstream is **335× faster and 17× less memory** than formualizer on the same workload.
 
 ## Insight
 
