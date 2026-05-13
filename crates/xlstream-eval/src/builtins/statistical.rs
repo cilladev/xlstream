@@ -2,6 +2,7 @@
 //!
 //! Aggregate stats (AVEDEV, VAR, STDEV, SKEW, KURT, MODE, PERCENTILE,
 //! QUARTILE, RANK) use [`collect_numerics`] and [`mean_and_variance`].
+//! Paired-array stats (CORREL, COVARIANCE) use [`collect_paired_numerics`].
 //! Distribution functions (NORM.DIST, NORM.INV, T.DIST, EXPON.DIST,
 //! POISSON.DIST, BINOM.DIST) use `num_arg_ce` + `specfn` primitives.
 
@@ -431,6 +432,70 @@ pub fn correl(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
     finite_or_num(sum_cross / denom)
 }
 
+/// `COVARIANCE.P` — population covariance (divides by n).
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if array lengths differ.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain after filtering.
+/// Returns `Err(CellError::Num)` if result is non-finite.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::covariance_p;
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// assert!((covariance_p(&xs, &ys).unwrap() - 1.333_333_333_333_333_3).abs() < 1e-9);
+/// ```
+pub fn covariance_p(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(xs, ys)?;
+    if pairs.is_empty() {
+        return Err(CellError::Div0);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let nf = pairs.len() as f64;
+    let mean_x = pairs.iter().map(|(x, _)| x).sum::<f64>() / nf;
+    let mean_y = pairs.iter().map(|(_, y)| y).sum::<f64>() / nf;
+    let cov = pairs.iter().map(|(x, y)| (x - mean_x) * (y - mean_y)).sum::<f64>() / nf;
+    finite_or_num(cov)
+}
+
+/// `COVARIANCE.S` — sample covariance (divides by n-1).
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if array lengths differ.
+/// Returns `Err(CellError::Div0)` if fewer than 2 numeric pairs.
+/// Returns `Err(CellError::Num)` if result is non-finite.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::covariance_s;
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// assert!((covariance_s(&xs, &ys).unwrap() - 2.0).abs() < 1e-9);
+/// ```
+pub fn covariance_s(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(xs, ys)?;
+    let n = pairs.len();
+    if n < 2 {
+        return Err(CellError::Div0);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let mean_x = pairs.iter().map(|(x, _)| x).sum::<f64>() / nf;
+    let mean_y = pairs.iter().map(|(_, y)| y).sum::<f64>() / nf;
+    #[allow(clippy::cast_precision_loss)]
+    let cov = pairs.iter().map(|(x, y)| (x - mean_x) * (y - mean_y)).sum::<f64>()
+        / (n - 1) as f64;
+    finite_or_num(cov)
+}
 /// Compute the mean and variance of a `&[f64]` slice.
 ///
 /// `ddof` is the delta degrees of freedom: 0 for population, 1 for sample.
@@ -4327,5 +4392,170 @@ mod tests {
         let xs = [Value::Integer(1), Value::Integer(2), Value::Date(date)];
         let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
         assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    // ===== COVARIANCE.P =====
+
+    #[test]
+    fn covariance_p_linear() {
+        let xs = [
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+            Value::Number(5.0),
+        ];
+        let ys = [
+            Value::Number(2.0),
+            Value::Number(4.0),
+            Value::Number(6.0),
+            Value::Number(8.0),
+            Value::Number(10.0),
+        ];
+        assert_close(covariance_p(&xs, &ys).unwrap(), 4.0);
+    }
+
+    #[test]
+    fn covariance_p_negative() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(3.0), Value::Number(2.0), Value::Number(1.0)];
+        let result = covariance_p(&xs, &ys).unwrap();
+        assert!((result - (-2.0 / 3.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn covariance_p_single_pair() {
+        let xs = [Value::Number(1.0)];
+        let ys = [Value::Number(2.0)];
+        assert_close(covariance_p(&xs, &ys).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn covariance_p_empty_returns_div0() {
+        assert_eq!(covariance_p(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn covariance_p_all_same_returns_zero() {
+        let xs = [Value::Number(5.0), Value::Number(5.0), Value::Number(5.0)];
+        let ys = [Value::Number(5.0), Value::Number(5.0), Value::Number(5.0)];
+        assert_close(covariance_p(&xs, &ys).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn covariance_p_different_length_returns_na() {
+        let xs = [Value::Number(1.0), Value::Number(2.0)];
+        let ys = [Value::Number(1.0)];
+        assert_eq!(covariance_p(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn covariance_p_text_skipped_pairwise() {
+        let xs = [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Text("y".into()), Value::Number(4.0)];
+        assert_close(covariance_p(&xs, &ys).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn covariance_p_error_propagation() {
+        let xs = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+        assert_eq!(covariance_p(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn covariance_p_nan_input_returns_num() {
+        let xs = [Value::Number(f64::NAN), Value::Number(2.0)];
+        let ys = [Value::Number(1.0), Value::Number(4.0)];
+        assert_eq!(covariance_p(&xs, &ys).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn covariance_p_filtering_reduces_to_single_pair_returns_zero() {
+        let xs = [Value::Number(1.0), Value::Text("x".into())];
+        let ys = [Value::Number(2.0), Value::Number(4.0)];
+        assert_close(covariance_p(&xs, &ys).unwrap(), 0.0);
+    }
+
+    // ===== COVARIANCE.S =====
+
+    #[test]
+    fn covariance_s_linear() {
+        let xs = [
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+            Value::Number(5.0),
+        ];
+        let ys = [
+            Value::Number(2.0),
+            Value::Number(4.0),
+            Value::Number(6.0),
+            Value::Number(8.0),
+            Value::Number(10.0),
+        ];
+        assert_close(covariance_s(&xs, &ys).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn covariance_s_negative() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(3.0), Value::Number(2.0), Value::Number(1.0)];
+        assert_close(covariance_s(&xs, &ys).unwrap(), -1.0);
+    }
+
+    #[test]
+    fn covariance_s_single_pair_returns_div0() {
+        let xs = [Value::Number(1.0)];
+        let ys = [Value::Number(2.0)];
+        assert_eq!(covariance_s(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn covariance_s_two_pairs() {
+        let xs = [Value::Number(1.0), Value::Number(2.0)];
+        let ys = [Value::Number(3.0), Value::Number(4.0)];
+        assert_close(covariance_s(&xs, &ys).unwrap(), 0.5);
+    }
+
+    #[test]
+    fn covariance_s_empty_returns_div0() {
+        assert_eq!(covariance_s(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn covariance_s_all_non_numeric_after_filter_returns_div0() {
+        let xs = [Value::Text("a".into()), Value::Bool(true)];
+        let ys = [Value::Text("b".into()), Value::Empty];
+        assert_eq!(covariance_s(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn covariance_s_error_propagation() {
+        let xs = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+        assert_eq!(covariance_s(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn covariance_s_nan_input_returns_num() {
+        let xs = [Value::Number(f64::NAN), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(1.0), Value::Number(4.0), Value::Number(6.0)];
+        assert_eq!(covariance_s(&xs, &ys).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn covariance_s_text_skipped_pairwise() {
+        let xs = [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Text("y".into()), Value::Number(4.0)];
+        assert_close(covariance_s(&xs, &ys).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn covariance_s_filtering_reduces_below_threshold_returns_div0() {
+        let xs = [Value::Number(1.0), Value::Text("x".into())];
+        let ys = [Value::Number(2.0), Value::Number(4.0)];
+        assert_eq!(covariance_s(&xs, &ys).unwrap_err(), CellError::Div0);
     }
 }
