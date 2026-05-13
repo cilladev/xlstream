@@ -9,7 +9,7 @@ mod compatibility;
 mod conditional;
 mod database;
 pub(crate) mod date;
-mod engineering;
+pub mod engineering;
 pub mod financial;
 pub mod info;
 mod lookup;
@@ -324,6 +324,8 @@ pub(crate) fn dispatch(
         "BIN2OCT" => Some(engineering::builtin_bin2oct(&eval_args(args, interp, scope))),
         "OCT2BIN" => Some(engineering::builtin_oct2bin(&eval_args(args, interp, scope))),
         "BASE" => Some(engineering::builtin_base(&eval_args(args, interp, scope))),
+        "DELTA" => Some(engineering::builtin_delta(&eval_args(args, interp, scope))),
+        "GESTEP" => Some(engineering::builtin_gestep(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
