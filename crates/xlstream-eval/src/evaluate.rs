@@ -905,7 +905,7 @@ fn eval_column(
 
     if !is_self_ref || !options.iterative_calc {
         let result = {
-            let scope = RowScope::new(row_values, row_idx);
+            let scope = RowScope::new(row_values, row_idx).with_col_idx(fcol);
             interp.eval(ast.root(), &scope)
         };
         row_values[fcol_idx] = result;
@@ -915,7 +915,7 @@ fn eval_column(
     let mut previous = row_values[fcol_idx].clone();
     for iteration in 0..options.max_iterations {
         let result = {
-            let scope = RowScope::new(row_values, row_idx);
+            let scope = RowScope::new(row_values, row_idx).with_col_idx(fcol);
             interp.eval(ast.root(), &scope)
         };
 

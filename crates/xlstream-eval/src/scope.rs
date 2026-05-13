@@ -23,6 +23,7 @@ use xlstream_core::{CellError, Value};
 pub struct RowScope<'row> {
     values: &'row [Value],
     row_idx: u32,
+    col_idx: u32,
 }
 
 impl<'row> RowScope<'row> {
@@ -40,7 +41,25 @@ impl<'row> RowScope<'row> {
     /// ```
     #[must_use]
     pub fn new(values: &'row [Value], row_idx: u32) -> Self {
-        Self { values, row_idx }
+        Self { values, row_idx, col_idx: 0 }
+    }
+
+    /// Set the 0-based column index of the formula cell being evaluated.
+    ///
+    /// Used by `COLUMN()` (no-arg form) to return the formula cell's
+    /// position. Defaults to 0 if not set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::RowScope;
+    /// let scope = RowScope::new(&[], 0).with_col_idx(4);
+    /// assert_eq!(scope.col_idx(), 4);
+    /// ```
+    #[must_use]
+    pub fn with_col_idx(mut self, col_idx: u32) -> Self {
+        self.col_idx = col_idx;
+        self
     }
 
     /// Get cell value by 1-based column index. Out of bounds returns
@@ -81,6 +100,20 @@ impl<'row> RowScope<'row> {
     #[must_use]
     pub fn row_idx(&self) -> u32 {
         self.row_idx
+    }
+
+    /// 0-based column index of the formula cell being evaluated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::RowScope;
+    /// let scope = RowScope::new(&[], 0).with_col_idx(3);
+    /// assert_eq!(scope.col_idx(), 3);
+    /// ```
+    #[must_use]
+    pub fn col_idx(&self) -> u32 {
+        self.col_idx
     }
 
     /// Borrow the underlying values slice.
