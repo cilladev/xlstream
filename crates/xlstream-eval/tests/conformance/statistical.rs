@@ -69,3 +69,8 @@ fn norm_dist() {
 fn norm_s_dist() {
     run_conformance("statistical/norm_s_dist.xlsx");
 }
+
+#[test]
+fn correl() {
+    run_conformance("statistical/correl.xlsx");
+}
