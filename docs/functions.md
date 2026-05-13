@@ -192,8 +192,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | NORM.S.DIST | . | yes | v0.3 | | | |
 | NORM.S.INV | . | yes | v0.3 | | | |
 | PEARSON | . | yes | v0.3 | | | |
-| PERCENTILE.EXC | . | yes | v0.3 | | | |
-| PERCENTILE.INC | . | yes | v0.3 | | | |
+| PERCENTILE.EXC | x | yes | v0.3 | | | |
+| PERCENTILE.INC | x | yes | v0.3 | | | |
 | PERCENTRANK.EXC | . | yes | v0.3 | | | |
 | PERCENTRANK.INC | . | yes | v0.3 | | | |
 | PERMUT | . | yes | v0.3 | | | |
@@ -201,8 +201,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | PHI | . | yes | v0.3 | | | |
 | POISSON.DIST | . | yes | v0.3 | | | |
 | PROB | . | yes | v0.3 | | | |
-| QUARTILE.EXC | . | yes | v0.3 | | | |
-| QUARTILE.INC | . | yes | v0.3 | | | |
+| QUARTILE.EXC | x | yes | v0.3 | | | |
+| QUARTILE.INC | x | yes | v0.3 | | | |
 | RANK.AVG | . | yes | v0.3 | | | |
 | RANK.EQ | . | yes | v0.3 | | | |
 | RSQ | . | yes | v0.3 | | | |
