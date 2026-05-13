@@ -383,6 +383,149 @@ pub fn mode_sngl(values: &[Value]) -> Result<f64, CellError> {
     finite_or_num(nums[*first_pos])
 }
 
+/// Collect numerics, reject non-finite values, sort ascending.
+///
+/// Shared by percentile and quartile functions. Returns `#NUM!` if
+/// any value is NaN or infinite, or if no numeric values remain.
+fn sorted_numerics(values: &[Value]) -> Result<Vec<f64>, CellError> {
+    let mut nums = collect_numerics(values)?;
+    if nums.is_empty() || nums.iter().any(|x| !x.is_finite()) {
+        return Err(CellError::Num);
+    }
+    nums.sort_by(f64::total_cmp);
+    Ok(nums)
+}
+
+/// `PERCENTILE.INC` — inclusive percentile via linear interpolation.
+///
+/// `k` must be in \[0, 1\]. Collects numerics, sorts, interpolates
+/// using Excel's method: `rank = k * (n - 1)`.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Num)` if `k` is out of range, no numeric
+/// values exist, or any input is NaN/infinite.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::percentile_inc;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!((percentile_inc(&vals, 0.5).unwrap() - 2.0).abs() < 1e-9);
+/// ```
+pub fn percentile_inc(values: &[Value], k: f64) -> Result<f64, CellError> {
+    if !(0.0..=1.0).contains(&k) {
+        return Err(CellError::Num);
+    }
+    let nums = sorted_numerics(values)?;
+    #[allow(clippy::cast_precision_loss)]
+    let rank = k * (nums.len() - 1) as f64;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let lo = rank.floor() as usize;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let hi = rank.ceil() as usize;
+    let frac = rank - rank.floor();
+    Ok(nums[lo] + frac * (nums[hi] - nums[lo]))
+}
+
+/// `PERCENTILE.EXC` — exclusive percentile via linear interpolation.
+///
+/// `k` must be in (0, 1). Uses 1-based ranking: `rank = k * (n + 1)`.
+/// Rank must fall in \[1, n\] after computation.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Num)` if `k` is out of range, rank falls
+/// outside \[1, n\], no numeric values exist, or any input is
+/// NaN/infinite.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::percentile_exc;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0),
+///             Value::Number(4.0), Value::Number(5.0)];
+/// assert!((percentile_exc(&vals, 0.5).unwrap() - 3.0).abs() < 1e-9);
+/// ```
+pub fn percentile_exc(values: &[Value], k: f64) -> Result<f64, CellError> {
+    if k <= 0.0 || k >= 1.0 {
+        return Err(CellError::Num);
+    }
+    let nums = sorted_numerics(values)?;
+    let n = nums.len();
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let lower = 1.0 / (nf + 1.0);
+    let upper = nf / (nf + 1.0);
+    if lower >= upper || k < lower || k > upper {
+        return Err(CellError::Num);
+    }
+    let rank = k * (nf + 1.0);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let lo = (rank.floor() as usize).saturating_sub(1);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let hi = (rank.ceil() as usize).saturating_sub(1).min(n - 1);
+    let frac = rank - rank.floor();
+    Ok(nums[lo] + frac * (nums[hi] - nums[lo]))
+}
+
+/// `QUARTILE.INC` — inclusive quartile. `quart` must be in \[0, 4\].
+///
+/// Delegates to [`percentile_inc`] with `k = quart / 4`.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Num)` if `quart` is not in \[0, 4\] or data is empty.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::quartile_inc;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0),
+///             Value::Number(4.0), Value::Number(5.0)];
+/// assert!((quartile_inc(&vals, 2).unwrap() - 3.0).abs() < 1e-9);
+/// ```
+pub fn quartile_inc(values: &[Value], quart: i32) -> Result<f64, CellError> {
+    if !(0..=4).contains(&quart) {
+        return Err(CellError::Num);
+    }
+    let k = f64::from(quart) / 4.0;
+    percentile_inc(values, k)
+}
+
+/// `QUARTILE.EXC` — exclusive quartile. `quart` must be in \[1, 3\].
+///
+/// Delegates to [`percentile_exc`] with `k = quart / 4`.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Num)` if `quart` is not in \[1, 3\] or data
+/// is insufficient for exclusive percentile.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::quartile_exc;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0),
+///             Value::Number(4.0), Value::Number(5.0)];
+/// assert!((quartile_exc(&vals, 2).unwrap() - 3.0).abs() < 1e-9);
+/// ```
+pub fn quartile_exc(values: &[Value], quart: i32) -> Result<f64, CellError> {
+    if !(1..=3).contains(&quart) {
+        return Err(CellError::Num);
+    }
+    let k = f64::from(quart) / 4.0;
+    percentile_exc(values, k)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -1098,5 +1241,212 @@ mod tests {
     fn mode_sngl_infinity_mode_returns_num() {
         let vals = [Value::Number(f64::INFINITY), Value::Number(f64::INFINITY), Value::Number(1.0)];
         assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Num);
+    }
+
+    // ===== PERCENTILE.INC =====
+
+    #[test]
+    fn percentile_inc_quartiles_of_five() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_close(percentile_inc(&vals, 0.0).unwrap(), 1.0);
+        assert_close(percentile_inc(&vals, 0.25).unwrap(), 2.0);
+        assert_close(percentile_inc(&vals, 0.5).unwrap(), 3.0);
+        assert_close(percentile_inc(&vals, 0.75).unwrap(), 4.0);
+        assert_close(percentile_inc(&vals, 1.0).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn percentile_inc_interpolates_ten_values() {
+        let vals: Vec<Value> = (1..=10).map(|n| Value::Number(f64::from(n))).collect();
+        assert_close(percentile_inc(&vals, 0.25).unwrap(), 3.25);
+        assert_close(percentile_inc(&vals, 0.75).unwrap(), 7.75);
+    }
+
+    #[test]
+    fn percentile_inc_single_value() {
+        let vals = [Value::Number(5.0)];
+        assert_close(percentile_inc(&vals, 0.5).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn percentile_inc_two_values() {
+        let vals = [Value::Number(1.0), Value::Number(3.0)];
+        assert_close(percentile_inc(&vals, 0.5).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn percentile_inc_all_same() {
+        let vals = [Value::Number(5.0), Value::Number(5.0), Value::Number(5.0)];
+        assert_close(percentile_inc(&vals, 0.25).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn percentile_inc_k_out_of_range_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(2.0)];
+        assert_eq!(percentile_inc(&vals, 1.5).unwrap_err(), CellError::Num);
+        assert_eq!(percentile_inc(&vals, -0.1).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_inc_empty_returns_num() {
+        assert_eq!(percentile_inc(&[], 0.5).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_inc_all_text_returns_num() {
+        let vals = [Value::Text("a".into()), Value::Text("b".into())];
+        assert_eq!(percentile_inc(&vals, 0.5).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_inc_skips_text_and_bool() {
+        let vals =
+            [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0), Value::Bool(true)];
+        assert_close(percentile_inc(&vals, 0.5).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn percentile_inc_propagates_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        assert_eq!(percentile_inc(&vals, 0.5).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn percentile_inc_nan_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(f64::NAN), Value::Number(3.0)];
+        assert_eq!(percentile_inc(&vals, 0.5).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_inc_infinity_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(f64::INFINITY)];
+        assert_eq!(percentile_inc(&vals, 0.5).unwrap_err(), CellError::Num);
+    }
+
+    // ===== PERCENTILE.EXC =====
+
+    #[test]
+    fn percentile_exc_quartiles_of_five() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_close(percentile_exc(&vals, 0.25).unwrap(), 1.5);
+        assert_close(percentile_exc(&vals, 0.5).unwrap(), 3.0);
+        assert_close(percentile_exc(&vals, 0.75).unwrap(), 4.5);
+    }
+
+    #[test]
+    fn percentile_exc_ten_values() {
+        let vals: Vec<Value> = (1..=10).map(|n| Value::Number(f64::from(n))).collect();
+        assert_close(percentile_exc(&vals, 0.25).unwrap(), 2.75);
+        assert_close(percentile_exc(&vals, 0.5).unwrap(), 5.5);
+        assert_close(percentile_exc(&vals, 0.75).unwrap(), 8.25);
+    }
+
+    #[test]
+    fn percentile_exc_k_zero_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(percentile_exc(&vals, 0.0).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_exc_k_one_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(percentile_exc(&vals, 1.0).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_exc_single_value_returns_num() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(percentile_exc(&vals, 0.5).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_exc_empty_returns_num() {
+        assert_eq!(percentile_exc(&[], 0.5).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn percentile_exc_propagates_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Na)];
+        assert_eq!(percentile_exc(&vals, 0.5).unwrap_err(), CellError::Na);
+    }
+
+    // ===== QUARTILE.INC =====
+
+    #[test]
+    fn quartile_inc_all_five_quarts() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_close(quartile_inc(&vals, 0).unwrap(), 1.0);
+        assert_close(quartile_inc(&vals, 1).unwrap(), 2.0);
+        assert_close(quartile_inc(&vals, 2).unwrap(), 3.0);
+        assert_close(quartile_inc(&vals, 3).unwrap(), 4.0);
+        assert_close(quartile_inc(&vals, 4).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn quartile_inc_invalid_quart_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(quartile_inc(&vals, 5).unwrap_err(), CellError::Num);
+        assert_eq!(quartile_inc(&vals, -1).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn quartile_inc_single_value() {
+        let vals = [Value::Number(5.0)];
+        assert_close(quartile_inc(&vals, 2).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn quartile_inc_empty_returns_num() {
+        assert_eq!(quartile_inc(&[], 1).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn quartile_inc_all_same() {
+        let vals = [Value::Number(7.0), Value::Number(7.0), Value::Number(7.0)];
+        assert_close(quartile_inc(&vals, 3).unwrap(), 7.0);
+    }
+
+    #[test]
+    fn quartile_inc_propagates_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        assert_eq!(quartile_inc(&vals, 1).unwrap_err(), CellError::Na);
+    }
+
+    // ===== QUARTILE.EXC =====
+
+    #[test]
+    fn quartile_exc_three_quarts() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_close(quartile_exc(&vals, 1).unwrap(), 1.5);
+        assert_close(quartile_exc(&vals, 2).unwrap(), 3.0);
+        assert_close(quartile_exc(&vals, 3).unwrap(), 4.5);
+    }
+
+    #[test]
+    fn quartile_exc_invalid_quart_returns_num() {
+        let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        assert_eq!(quartile_exc(&vals, 0).unwrap_err(), CellError::Num);
+        assert_eq!(quartile_exc(&vals, 4).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn quartile_exc_single_value_returns_num() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(quartile_exc(&vals, 1).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn quartile_exc_empty_returns_num() {
+        assert_eq!(quartile_exc(&[], 1).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn quartile_exc_propagates_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Na)];
+        assert_eq!(quartile_exc(&vals, 1).unwrap_err(), CellError::Na);
     }
 }
