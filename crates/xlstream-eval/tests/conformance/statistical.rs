@@ -49,3 +49,8 @@ fn expon_dist() {
 fn poisson_dist() {
     run_conformance("statistical/poisson_dist.xlsx");
 }
+
+#[test]
+fn t_dist() {
+    run_conformance("statistical/t_dist.xlsx");
+}
