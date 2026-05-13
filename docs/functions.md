@@ -50,7 +50,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ATAN | x | yes | v0.1 | x | | |
 | ATAN2 | x | yes | v0.1 | x | | |
 | ATANH | . | yes | v0.3 | x | | |
-| BASE | . | yes | v0.3 | | | |
+| BASE | x | yes | v0.3 | | | |
 | CEILING | x | yes | v0.1 | x | x | |
 | CEILING.MATH | . | yes | v0.3 | | | |
 | CEILING.PRECISE | . | yes | v0.3 | | | |
@@ -421,9 +421,9 @@ All row-local (pure math). No streaming concerns.
 
 | Function | xlstream | Streamable | Version | formualizer | xlcalculator | Notes |
 |---|---|---|---|---|---|---|
-| BIN2DEC | . | yes | v0.3 | | x | |
-| BIN2HEX | . | yes | v0.3 | | x | |
-| BIN2OCT | . | yes | v0.3 | | x | |
+| BIN2DEC | x | yes | v0.3 | | x | |
+| BIN2HEX | x | yes | v0.3 | | x | |
+| BIN2OCT | x | yes | v0.3 | | x | |
 | BITAND | x | yes | v0.3 | | | |
 | BITLSHIFT | x | yes | v0.3 | | | |
 | BITOR | x | yes | v0.3 | | | |
@@ -431,21 +431,21 @@ All row-local (pure math). No streaming concerns.
 | BITXOR | x | yes | v0.3 | | | |
 | COMPLEX | x | yes | v0.3 | | | |
 | CONVERT | . | yes | v0.3 | | | |
-| DEC2BIN | . | yes | v0.3 | | x | |
+| DEC2BIN | x | yes | v0.3 | | x | |
 | DEC2HEX | x | yes | v0.3 | | x | |
-| DEC2OCT | . | yes | v0.3 | | x | |
+| DEC2OCT | x | yes | v0.3 | | x | |
 | DELTA | . | yes | v0.3 | | | |
 | ERF | . | yes | v0.3 | | | |
 | ERF.PRECISE | . | yes | v0.3 | | | |
 | ERFC | . | yes | v0.3 | | | |
 | ERFC.PRECISE | . | yes | v0.3 | | | |
 | GESTEP | . | yes | v0.3 | | | |
-| HEX2BIN | . | yes | v0.3 | | x | |
+| HEX2BIN | x | yes | v0.3 | | x | |
 | HEX2DEC | x | yes | v0.3 | | x | |
-| HEX2OCT | . | yes | v0.3 | | x | |
-| OCT2BIN | . | yes | v0.3 | | x | |
-| OCT2DEC | . | yes | v0.3 | | x | |
-| OCT2HEX | . | yes | v0.3 | | x | |
+| HEX2OCT | x | yes | v0.3 | | x | |
+| OCT2BIN | x | yes | v0.3 | | x | |
+| OCT2DEC | x | yes | v0.3 | | x | |
+| OCT2HEX | x | yes | v0.3 | | x | |
 | BESSELI | . | yes | v0.3 | | | |
 | BESSELJ | . | yes | v0.3 | | | |
 | BESSELK | . | yes | v0.3 | | | |

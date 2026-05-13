@@ -9,6 +9,10 @@ Semver.
 - BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT bitwise operations (48-bit non-negative integers)
 - COMPLEX, IMREAL, IMAGINARY complex number creation and extraction
 - HEX2DEC, DEC2HEX hexadecimal conversion (40-bit two's complement)
+- BIN2DEC, DEC2BIN binary conversion (10-bit two's complement)
+- OCT2DEC, DEC2OCT octal conversion (30-bit two's complement)
+- HEX2BIN, BIN2HEX, HEX2OCT, OCT2HEX, BIN2OCT, OCT2BIN cross-base conversion
+- BASE general base conversion (radix 2-36, non-negative)
 - ROW, COLUMN, ROWS, COLUMNS: return positional metadata from cell/range references (lazy dispatch, no cell reads)
 - STDEV.S, STDEV.P, VAR.S, VAR.P statistical functions
 - SKEW, SKEW.P, KURT higher-order moment statistics
