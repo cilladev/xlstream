@@ -492,8 +492,7 @@ pub fn covariance_s(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
     let mean_x = pairs.iter().map(|(x, _)| x).sum::<f64>() / nf;
     let mean_y = pairs.iter().map(|(_, y)| y).sum::<f64>() / nf;
     #[allow(clippy::cast_precision_loss)]
-    let cov = pairs.iter().map(|(x, y)| (x - mean_x) * (y - mean_y)).sum::<f64>()
-        / (n - 1) as f64;
+    let cov = pairs.iter().map(|(x, y)| (x - mean_x) * (y - mean_y)).sum::<f64>() / (n - 1) as f64;
     finite_or_num(cov)
 }
 /// Compute the mean and variance of a `&[f64]` slice.
