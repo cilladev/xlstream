@@ -19,8 +19,8 @@ No new functions. v1.0 is the stability commitment — after this release, the p
 
 ## Performance hardening
 
-- [ ] **Memory target: < 250 MB for 700k rows** — investigate and reduce calamine shared-strings buffering and rust_xlsxwriter string table overhead. Current: ~734 MB, evaluator itself ~10 MB.
-- [ ] **Wall-clock target: < 3 min for 700k rows** — profile and optimize hot paths. Current: ~2.5 min (1 worker), ~2.3 min (8 workers).
+- [ ] **Memory target: < 250 MB for 700k rows** — investigate and reduce calamine shared-strings buffering and rust_xlsxwriter string table overhead. Current 700k: ~734 MB, evaluator itself ~10 MB. Baseline 100k (2026-05-13): 643 MB (1w) / 681 MB (4w).
+- [ ] **Wall-clock target: < 3 min for 700k rows** — profile and optimize hot paths. Current 700k: ~2.5 min (1w), ~2.3 min (8w). Baseline 100k (2026-05-13): 26.5s (1w) / 23.0s (4w).
 - [ ] **Benchmark regression gate** — CI blocks merge on >10% RSS or >20% wall-clock regression. Currently only micro-benchmarks are gated.
 - [ ] **Memory benchmark in CI** — add tier benchmarks (small/medium/large) to CI with RSS tracking.
 

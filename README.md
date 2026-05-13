@@ -9,13 +9,17 @@ We are not building a general-purpose spreadsheet engine. We are building the *f
 
 ## Performance
 
-**425x faster** on the same workbook. [Full benchmarks](benchmarks/reports)
+**335x faster** than graph-based evaluation. [Full benchmarks](benchmarks/reports)
 
-|                     | xlstream           | formualizer           |
-| ------------------- | ------------------ | --------------------- |
-| 700k rows x 20 cols | **48s**            | 5h 40m                |
-| Peak memory         | **734 MB**         | 3.3 GB                |
-| Architecture        | Streaming (2-pass) | Full dependency graph |
+Benchmark: 100k rows x 50 cols (20 data + 30 formula). Intel i9-10910, 128 GB RAM.
+
+| Engine | Version | Wall-clock | Peak RSS | Architecture |
+| --- | --- | --- | --- | --- |
+| **xlstream (1 worker)** | 0.2.1 | **26.5s** | **643 MB** | Streaming (2-pass) |
+| **xlstream (4 workers)** | 0.2.1 | **23.0s** | **681 MB** | Streaming (2-pass) |
+| LibreOffice | 26.2 | 31.9s | 2,081 MB | Graph |
+| Excel | 16.108.2 | ~99s | ~430 MB | Graph (20 threads) |
+| formualizer | 0.5.6 | 2h 8m | 11,322 MB | Full dependency graph |
 
 
 ## Supported functions

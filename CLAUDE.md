@@ -12,7 +12,17 @@ We are not building a general-purpose spreadsheet engine. We are building the *f
 
 ## Why this exists
 
-The alternative, `formualizer` (Rust, graph-based), takes **5h 40m wall-clock at 3.3 GB peak RSS** to evaluate a 700k × 20 workbook (measured 2026-04-17). That's architectural: the graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we target **~13× less memory and ~100× faster wall-clock** on the identical workload.
+On a 100k × 50 workbook (20 data + 30 formula cols, measured 2026-05-13, Intel i9-10910, 128 GB RAM):
+
+| Engine | Version | Wall-clock | Peak RSS | Architecture |
+|---|---|---|---|---|
+| **xlstream (1 worker)** | 0.2.1 | **26.5s** | **643 MB** | Streaming (2-pass) |
+| **xlstream (4 workers)** | 0.2.1 | **23.0s** | **681 MB** | Streaming (2-pass) |
+| LibreOffice | 26.2 | 31.9s | 2,081 MB | Graph |
+| Excel | 16.108.2 | ~99s | ~430 MB | Graph (20 threads) |
+| formualizer | 0.5.6 | 2h 8m | 11,322 MB | Full dependency graph |
+
+That's **335× faster and 17× less memory** than formualizer. The gap is architectural: formualizer's graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we achieve dramatically better performance on row-local workloads.
 
 Full background: [`docs/brief.md`](docs/brief.md) and [`docs/research/formualizer.md`](docs/research/formualizer.md).
 
@@ -125,10 +135,10 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 | Workload | Target RSS | Measured RSS | Target time | Measured time |
 |---|---|---|---|---|
 | 10k × 20 (10 formula cols) | < 50 MB | 31 MB | < 2 s | 1.6s |
-| 100k × 20 (10 formula cols) | < 150 MB | 206 MB | < 15 s | 16.0s |
-| 700k × 20 (10 formula cols) | < 250 MB | ~734 MB* | < 3 min | ~48s* |
+| 100k × 50 (30 formula cols)* | < 150 MB | 643–681 MB | < 15 s | 26.5s (1w) / 23.0s (4w) |
+| 700k × 20 (10 formula cols) | < 250 MB | ~734 MB** | < 3 min | ~48s** |
 
-*Measured on a 50-col workbook (20 data + 30 formula). RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`benchmarks/reports/`](benchmarks/reports/).
+*Measured 2026-05-13, bench_medium.xlsx. **Measured on a similar 50-col workbook. RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`benchmarks/reports/`](benchmarks/reports/).
 
 ## Current state
 
