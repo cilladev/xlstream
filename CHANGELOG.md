@@ -21,6 +21,7 @@ Semver.
 - NORM.DIST, NORM.INV normal distribution (CDF, PDF, inverse CDF)
 - NORM.S.DIST, NORM.S.INV standard normal distribution and inverse
 - CORREL Pearson correlation coefficient
+- COVARIANCE.P, COVARIANCE.S covariance (population and sample)
 
 ## [0.2.1] - 2026-05-11
 
