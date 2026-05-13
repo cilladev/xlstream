@@ -9,3 +9,8 @@ fn stdev_var() {
 fn skew_kurt() {
     run_conformance("statistical/skew_kurt.xlsx");
 }
+
+#[test]
+fn avedev() {
+    run_conformance("statistical/avedev.xlsx");
+}

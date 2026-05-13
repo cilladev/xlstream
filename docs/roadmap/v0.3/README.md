@@ -24,7 +24,7 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 ### Descriptive statistics
 - [x] **STDEV.S / STDEV.P** — sample and population standard deviation. ~0.5 day.
 - [x] **VAR.S / VAR.P** — sample and population variance. ~0.5 day.
-- [ ] **AVEDEV** — average absolute deviation. ~2 hours.
+- [x] **AVEDEV** — average absolute deviation. ~2 hours.
 - [x] **SKEW / SKEW.P** — skewness. ~2 hours.
 - [x] **KURT** — kurtosis. ~2 hours.
 

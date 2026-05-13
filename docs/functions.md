@@ -128,7 +128,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | AVERAGEA | . | yes | v0.3 | | | |
 | AVERAGEIF | x | yes | v0.1 | x | | |
 | AVERAGEIFS | x | yes | v0.1 | x | | |
-| AVEDEV | . | yes | v0.3 | | | |
+| AVEDEV | x | yes | v0.3 | | | |
 | BETA.DIST | . | yes | v0.3 | | | |
 | BETA.INV | . | yes | v0.3 | | | |
 | BINOM.DIST | . | yes | v0.3 | | | |
