@@ -25,8 +25,8 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 - [x] **STDEV.S / STDEV.P** — sample and population standard deviation. ~0.5 day.
 - [x] **VAR.S / VAR.P** — sample and population variance. ~0.5 day.
 - [ ] **AVEDEV** — average absolute deviation. ~2 hours.
-- [ ] **SKEW / SKEW.P** — skewness. ~2 hours.
-- [ ] **KURT** — kurtosis. ~2 hours.
+- [x] **SKEW / SKEW.P** — skewness. ~2 hours.
+- [x] **KURT** — kurtosis. ~2 hours.
 
 ### Ranking / percentiles
 - [ ] **PERCENTILE.INC / PERCENTILE.EXC** — percentile (inclusive/exclusive). ~0.5 day.
