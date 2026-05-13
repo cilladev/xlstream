@@ -384,11 +384,11 @@ fn validate_shift(v: f64) -> Result<i32, CellError> {
     if v.fract() != 0.0 {
         return Err(CellError::Num);
     }
-    #[allow(clippy::cast_possible_truncation)]
-    let s = v as i32;
-    if !(-MAX_SHIFT..=MAX_SHIFT).contains(&s) {
+    if v < f64::from(-MAX_SHIFT) || v > f64::from(MAX_SHIFT) {
         return Err(CellError::Num);
     }
+    #[allow(clippy::cast_possible_truncation)]
+    let s = v as i32;
     Ok(s)
 }
 
@@ -1360,6 +1360,40 @@ mod tests {
         );
     }
 
+    #[test]
+    fn bitor_wrong_arity() {
+        assert_eq!(builtin_bitor(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_bitor(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitor_type_error() {
+        assert_eq!(
+            builtin_bitor(&[Value::Text("abc".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitor_error_propagation() {
+        assert_eq!(
+            builtin_bitor(&[Value::Error(CellError::Na), Value::Number(1.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn bitor_coercion() {
+        assert_eq!(builtin_bitor(&[Value::Bool(true), Value::Number(0.0)]), Value::Number(1.0));
+        assert_eq!(
+            builtin_bitor(&[Value::Text("13".into()), Value::Number(25.0)]),
+            Value::Number(29.0),
+        );
+    }
+
     // -- BITXOR --
 
     #[test]
@@ -1384,6 +1418,40 @@ mod tests {
         assert_eq!(
             builtin_bitxor(&[Value::Number(13.0), Value::Number(25.1)]),
             Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitxor_wrong_arity() {
+        assert_eq!(builtin_bitxor(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_bitxor(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitxor_type_error() {
+        assert_eq!(
+            builtin_bitxor(&[Value::Text("abc".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitxor_error_propagation() {
+        assert_eq!(
+            builtin_bitxor(&[Value::Error(CellError::Na), Value::Number(1.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn bitxor_coercion() {
+        assert_eq!(builtin_bitxor(&[Value::Bool(true), Value::Number(1.0)]), Value::Number(0.0));
+        assert_eq!(
+            builtin_bitxor(&[Value::Text("13".into()), Value::Number(25.0)]),
+            Value::Number(20.0),
         );
     }
 
@@ -1486,6 +1554,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn bitlshift_type_error() {
+        assert_eq!(
+            builtin_bitlshift(&[Value::Text("abc".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitlshift_coercion() {
+        assert_eq!(builtin_bitlshift(&[Value::Bool(true), Value::Number(3.0)]), Value::Number(8.0),);
+        assert_eq!(
+            builtin_bitlshift(&[Value::Text("4".into()), Value::Number(2.0)]),
+            Value::Number(16.0),
+        );
+    }
+
     // -- BITRSHIFT --
 
     #[test]
@@ -1521,6 +1606,40 @@ mod tests {
         assert_eq!(
             builtin_bitrshift(&[Value::Number(-1.0), Value::Number(1.0)]),
             Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn bitrshift_wrong_arity() {
+        assert_eq!(builtin_bitrshift(&[Value::Number(1.0)]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_bitrshift(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitrshift_type_error() {
+        assert_eq!(
+            builtin_bitrshift(&[Value::Text("abc".into()), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bitrshift_error_propagation() {
+        assert_eq!(
+            builtin_bitrshift(&[Value::Error(CellError::Na), Value::Number(1.0)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn bitrshift_coercion() {
+        assert_eq!(builtin_bitrshift(&[Value::Bool(true), Value::Number(0.0)]), Value::Number(1.0),);
+        assert_eq!(
+            builtin_bitrshift(&[Value::Text("16".into()), Value::Number(2.0)]),
+            Value::Number(4.0),
         );
     }
 }
