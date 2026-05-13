@@ -2979,8 +2979,7 @@ mod tests {
 
     #[test]
     fn binom_dist_cdf_fair_coin() {
-        let args =
-            [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(true)];
+        let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(true)];
         assert_close(builtin_binom_dist(&args).unwrap(), 0.623_046_875);
     }
 
@@ -3023,8 +3022,7 @@ mod tests {
 
     #[test]
     fn binom_dist_p_zero_cdf() {
-        let args =
-            [Value::Number(5.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(true)];
+        let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(true)];
         assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
     }
 
@@ -3044,8 +3042,7 @@ mod tests {
 
     #[test]
     fn binom_dist_p_one_cdf_below_n() {
-        let args =
-            [Value::Number(5.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(true)];
+        let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(true)];
         assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
     }
 
@@ -3058,8 +3055,7 @@ mod tests {
 
     #[test]
     fn binom_dist_trials_zero() {
-        let args =
-            [Value::Number(0.0), Value::Number(0.0), Value::Number(0.5), Value::Bool(false)];
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(0.5), Value::Bool(false)];
         assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
     }
 
@@ -3158,19 +3154,14 @@ mod tests {
 
     #[test]
     fn binom_dist_text_numeric_coerces() {
-        let args = [
-            Value::Text("5".into()),
-            Value::Number(10.0),
-            Value::Number(0.5),
-            Value::Bool(false),
-        ];
+        let args =
+            [Value::Text("5".into()), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
         assert_close(builtin_binom_dist(&args).unwrap(), 0.246_093_75);
     }
 
     #[test]
     fn binom_dist_bool_coerces() {
-        let args =
-            [Value::Bool(true), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
+        let args = [Value::Bool(true), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
         assert_close(builtin_binom_dist(&args).unwrap(), 0.009_765_625);
     }
 
@@ -3303,11 +3294,7 @@ mod tests {
 
     #[test]
     fn binom_inv_n_exceeds_max_returns_num() {
-        let args = [
-            Value::Number(MAX_BINOM_TRIALS + 1.0),
-            Value::Number(0.5),
-            Value::Number(0.5),
-        ];
+        let args = [Value::Number(MAX_BINOM_TRIALS + 1.0), Value::Number(0.5), Value::Number(0.5)];
         assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
     }
 
