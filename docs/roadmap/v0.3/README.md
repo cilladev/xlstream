@@ -15,7 +15,7 @@ These didn't ship with v0.2:
 
 - [ ] **Auto-detect iterative calc settings** — parse `calcPr` from `xl/workbook.xml` in xlstream-io (#77). ~2 hours.
 - [ ] **Cross-column same-row circular references** — SCC detection in topo sort, iterate groups (#80). ~1 day.
-- [ ] **ROW / COLUMN / ROWS / COLUMNS** — ROW/COLUMN return row/col number of a cell; ROWS/COLUMNS return row/col count of a range. ROWS/COLUMNS carried from v0.2 (implemented on branch but never merged). ~1 day.
+- [x] **ROW / COLUMN / ROWS / COLUMNS** — ROW/COLUMN return row/col number of a cell; ROWS/COLUMNS return row/col count of a range. ROWS/COLUMNS carried from v0.2 (implemented on branch but never merged). ~1 day.
 
 ## Statistical functions (~30)
 
