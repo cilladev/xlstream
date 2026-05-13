@@ -1,10 +1,12 @@
 //! Statistical builtin functions.
 //!
-//! AVEDEV, VAR.S, VAR.P, STDEV.S, STDEV.P, SKEW, SKEW.P, KURT and
-//! future functions share common helpers: [`collect_numerics`] extracts
-//! `f64` values from a `&[Value]` slice, and [`mean_and_variance`]
-//! computes the mean and variance in a single pass over the collected
-//! numbers.
+//! AVEDEV, VAR.S, VAR.P, STDEV.S, STDEV.P, SKEW, SKEW.P, KURT,
+//! MODE.SNGL and future functions share common helpers:
+//! [`collect_numerics`] extracts `f64` values from a `&[Value]` slice,
+//! and [`mean_and_variance`] computes the mean and variance in a single
+//! pass over the collected numbers.
+
+use std::collections::HashMap;
 
 use xlstream_core::{CellError, Value};
 
@@ -318,6 +320,67 @@ pub fn builtin_avedev(values: &[Value]) -> Result<f64, CellError> {
     let mean = nums.iter().sum::<f64>() / n;
     let dev_sum: f64 = nums.iter().map(|x| (x - mean).abs()).sum();
     finite_or_num(dev_sum / n)
+}
+
+/// Normalize -0.0 to +0.0, then return `f64::to_bits()`.
+fn canonical_bits(v: f64) -> u64 {
+    if v == 0.0 {
+        0.0_f64.to_bits()
+    } else {
+        v.to_bits()
+    }
+}
+
+/// `MODE.SNGL` — most frequently occurring value.
+///
+/// Returns the value that appears most often. Ties are broken by first
+/// occurrence (the value that appears earliest wins). Returns `#N/A` if
+/// no value repeats or if no numeric values exist.
+///
+/// Text, booleans, and empty cells are skipped. Errors propagate.
+/// Float comparison uses exact bit equality (after -0.0 → +0.0
+/// normalization), matching Excel semantics.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if no numeric values exist, or if all
+/// values are unique (no repeats).
+/// Returns `Err(CellError)` if any input value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::mode_sngl;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0),
+///             Value::Number(3.0), Value::Number(4.0)];
+/// assert_eq!(mode_sngl(&vals).unwrap(), 3.0);
+/// ```
+pub fn mode_sngl(values: &[Value]) -> Result<f64, CellError> {
+    let nums = collect_numerics(values)?;
+    if nums.is_empty() {
+        return Err(CellError::Na);
+    }
+
+    let mut freq: HashMap<u64, (usize, usize)> = HashMap::with_capacity(nums.len());
+    for (pos, &v) in nums.iter().enumerate() {
+        let bits = canonical_bits(v);
+        freq.entry(bits).and_modify(|(count, _)| *count += 1).or_insert((1, pos));
+    }
+
+    let (_, (max_count, _)) =
+        freq.iter().max_by_key(|&(_, &(count, _))| count).ok_or(CellError::Na)?;
+    if *max_count < 2 {
+        return Err(CellError::Na);
+    }
+
+    let (_, (_, first_pos)) = freq
+        .iter()
+        .filter(|&(_, &(count, _))| count == *max_count)
+        .min_by_key(|&(_, &(_, pos))| pos)
+        .ok_or(CellError::Na)?;
+
+    Ok(nums[*first_pos])
 }
 
 #[cfg(test)]
@@ -905,5 +968,123 @@ mod tests {
     fn avedev_large_numbers() {
         let vals = [Value::Number(1e10), Value::Number(1e10 + 2.0)];
         assert_eq!(builtin_avedev(&vals).unwrap(), 1.0);
+    }
+
+    // ===== MODE.SNGL — happy path =====
+
+    #[test]
+    fn mode_sngl_single_mode() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 3.0, 4.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn mode_sngl_tie_returns_first_occurrence() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 2.0, 3.0, 3.0, 4.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn mode_sngl_all_same() {
+        let vals: Vec<Value> = [5.0, 5.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn mode_sngl_fractional() {
+        let vals: Vec<Value> =
+            [1.5, 1.5, 2.5, 2.5, 2.5].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), 2.5);
+    }
+
+    // ===== MODE.SNGL — edge cases =====
+
+    #[test]
+    fn mode_sngl_all_unique_returns_na() {
+        let vals: Vec<Value> = [1.0, 2.0, 3.0, 4.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn mode_sngl_single_value_returns_na() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn mode_sngl_two_identical_returns_value() {
+        let vals = [Value::Number(5.0), Value::Number(5.0)];
+        assert_eq!(mode_sngl(&vals).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn mode_sngl_empty_returns_na() {
+        assert_eq!(mode_sngl(&[]).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn mode_sngl_all_text_returns_na() {
+        let vals = [Value::Text("a".into()), Value::Text("b".into())];
+        assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn mode_sngl_negative_values() {
+        let vals: Vec<Value> =
+            [-3.0, -3.0, -1.0, -1.0, -1.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), -1.0);
+    }
+
+    #[test]
+    fn mode_sngl_zero_mode() {
+        let vals: Vec<Value> = [0.0, 0.0, 1.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn mode_sngl_large_count_wins() {
+        let vals: Vec<Value> =
+            [1.0, 1.0, 1.0, 2.0, 2.0, 3.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(mode_sngl(&vals).unwrap(), 1.0);
+    }
+
+    // ===== MODE.SNGL — type handling =====
+
+    #[test]
+    fn mode_sngl_skips_text() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Text("text".into()),
+            Value::Number(1.0),
+            Value::Number(3.0),
+        ];
+        assert_eq!(mode_sngl(&vals).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn mode_sngl_skips_bool() {
+        let vals = [Value::Number(1.0), Value::Bool(true), Value::Number(1.0), Value::Number(3.0)];
+        assert_eq!(mode_sngl(&vals).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn mode_sngl_propagates_error() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Error(CellError::Na),
+            Value::Number(1.0),
+            Value::Number(3.0),
+        ];
+        assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Na);
+    }
+
+    // ===== MODE.SNGL — float edge cases =====
+
+    #[test]
+    fn mode_sngl_positive_and_negative_zero_treated_equal() {
+        let vals = [Value::Number(0.0), Value::Number(-0.0), Value::Number(1.0)];
+        assert_eq!(mode_sngl(&vals).unwrap(), 0.0);
     }
 }

@@ -10,6 +10,7 @@ Semver.
 - STDEV.S, STDEV.P, VAR.S, VAR.P statistical functions
 - SKEW, SKEW.P, KURT higher-order moment statistics
 - AVEDEV average absolute deviation
+- MODE.SNGL most frequent value (tie-broken by first occurrence)
 ## [0.2.1] - 2026-05-11
 
 ### Added

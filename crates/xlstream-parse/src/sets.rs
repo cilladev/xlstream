@@ -140,6 +140,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "NETWORKDAYS", "WORKDAY", "AND", "OR", "SUMPRODUCT",
     "VAR.S", "VAR.P", "STDEV.S", "STDEV.P",
     "SKEW", "SKEW.P", "KURT", "AVEDEV",
+    "MODE.SNGL",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
@@ -266,6 +267,8 @@ mod tests {
         assert!(is_range_expanding("SKEW"));
         assert!(is_range_expanding("SKEW.P"));
         assert!(is_range_expanding("KURT"));
+        assert!(is_range_expanding("MODE.SNGL"));
+        assert!(is_range_expanding("mode.sngl"));
         assert!(!is_range_expanding("SUM"));
     }
 
