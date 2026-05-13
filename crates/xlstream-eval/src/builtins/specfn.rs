@@ -235,6 +235,9 @@ fn initial_guess(p: f64, df: f64) -> f64 {
 /// Uses the Chebyshev fitting from Numerical Recipes. Max absolute error
 /// ~1.2e-7 — sufficient for Excel-compatible results at 1e-6 conformance
 /// tolerance.
+///
+/// NaN passes through (returns NaN). Infinity returns +/-1.0 correctly.
+/// Callers must guard NaN before calling if they need `#NUM!`.
 pub(super) fn erf_approx(x: f64) -> f64 {
     let t = 1.0 / (1.0 + 0.5 * x.abs());
     let tau = t
