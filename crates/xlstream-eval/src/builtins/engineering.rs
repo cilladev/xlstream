@@ -969,8 +969,10 @@ pub(crate) fn builtin_base(args: &[Value]) -> Value {
             n /= u64::from(radix_u);
         }
         digits.reverse();
-        // SAFETY (logical): all bytes are from BASE_DIGITS which is pure ASCII
-        String::from_utf8(digits).unwrap_or_default()
+        match String::from_utf8(digits) {
+            Ok(s) => s,
+            Err(_) => return Value::Error(CellError::Num),
+        }
     };
 
     if s.len() < min_len {
@@ -3017,6 +3019,125 @@ mod tests {
         assert_eq!(
             builtin_base(&[Value::Number(f64::NAN), Value::Number(16.0)]),
             Value::Error(CellError::Num),
+        );
+    }
+
+    #[test]
+    fn base_error_propagation_in_min_length() {
+        assert_eq!(
+            builtin_base(&[Value::Number(10.0), Value::Number(2.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn base_min_length_zero_no_padding() {
+        assert_eq!(
+            builtin_base(&[Value::Number(7.0), Value::Number(2.0), Value::Number(0.0)]),
+            Value::Text("111".into()),
+        );
+    }
+
+    // -- cross-base: missing error propagation + arity tests --
+
+    #[test]
+    fn hex2oct_error_propagation() {
+        assert_eq!(builtin_hex2oct(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn hex2oct_wrong_arity() {
+        assert_eq!(builtin_hex2oct(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_hex2oct(&[Value::Text("F".into()), Value::Number(4.0), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn oct2hex_error_propagation() {
+        assert_eq!(builtin_oct2hex(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn oct2hex_wrong_arity() {
+        assert_eq!(builtin_oct2hex(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_oct2hex(&[Value::Text("17".into()), Value::Number(4.0), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn bin2oct_error_propagation() {
+        assert_eq!(builtin_bin2oct(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn bin2oct_wrong_arity() {
+        assert_eq!(builtin_bin2oct(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_bin2oct(&[Value::Text("1111".into()), Value::Number(4.0), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn oct2bin_error_propagation() {
+        assert_eq!(builtin_oct2bin(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na),);
+    }
+
+    #[test]
+    fn oct2bin_wrong_arity() {
+        assert_eq!(builtin_oct2bin(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_oct2bin(&[Value::Text("17".into()), Value::Number(8.0), Value::Number(1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // -- cross-base: missing numeric input coercion tests --
+
+    #[test]
+    fn bin2hex_numeric_coercion() {
+        assert_eq!(builtin_bin2hex(&[Value::Number(1111.0)]), Value::Text("F".into()));
+    }
+
+    #[test]
+    fn hex2oct_numeric_coercion() {
+        assert_eq!(builtin_hex2oct(&[Value::Number(15.0)]), Value::Text("25".into()));
+    }
+
+    #[test]
+    fn oct2hex_numeric_coercion() {
+        assert_eq!(builtin_oct2hex(&[Value::Number(17.0)]), Value::Text("F".into()));
+    }
+
+    #[test]
+    fn bin2oct_numeric_coercion() {
+        assert_eq!(builtin_bin2oct(&[Value::Number(1111.0)]), Value::Text("17".into()));
+    }
+
+    #[test]
+    fn oct2bin_numeric_coercion() {
+        assert_eq!(builtin_oct2bin(&[Value::Number(17.0)]), Value::Text("1111".into()));
+    }
+
+    // -- DEC2BIN/DEC2OCT: missing error propagation in places arg --
+
+    #[test]
+    fn dec2bin_error_propagation_in_places() {
+        assert_eq!(
+            builtin_dec2bin(&[Value::Number(1.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn dec2oct_error_propagation_in_places() {
+        assert_eq!(
+            builtin_dec2oct(&[Value::Number(1.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
         );
     }
 }
