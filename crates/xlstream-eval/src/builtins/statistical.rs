@@ -380,7 +380,7 @@ pub fn mode_sngl(values: &[Value]) -> Result<f64, CellError> {
         .min_by_key(|&(_, &(_, pos))| pos)
         .ok_or(CellError::Na)?;
 
-    Ok(nums[*first_pos])
+    finite_or_num(nums[*first_pos])
 }
 
 #[cfg(test)]
@@ -1080,11 +1080,23 @@ mod tests {
         assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Na);
     }
 
+    #[test]
+    fn mode_sngl_propagates_non_na_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Div0), Value::Number(1.0)];
+        assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Div0);
+    }
+
     // ===== MODE.SNGL — float edge cases =====
 
     #[test]
     fn mode_sngl_positive_and_negative_zero_treated_equal() {
         let vals = [Value::Number(0.0), Value::Number(-0.0), Value::Number(1.0)];
         assert_eq!(mode_sngl(&vals).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn mode_sngl_infinity_mode_returns_num() {
+        let vals = [Value::Number(f64::INFINITY), Value::Number(f64::INFINITY), Value::Number(1.0)];
+        assert_eq!(mode_sngl(&vals).unwrap_err(), CellError::Num);
     }
 }
