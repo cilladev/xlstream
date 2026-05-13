@@ -432,7 +432,7 @@ All row-local (pure math). No streaming concerns.
 | COMPLEX | . | yes | v0.3 | | | |
 | CONVERT | . | yes | v0.3 | | | |
 | DEC2BIN | . | yes | v0.3 | | x | |
-| DEC2HEX | . | yes | v0.3 | | x | |
+| DEC2HEX | x | yes | v0.3 | | x | |
 | DEC2OCT | . | yes | v0.3 | | x | |
 | DELTA | . | yes | v0.3 | | | |
 | ERF | . | yes | v0.3 | | | |
@@ -441,7 +441,7 @@ All row-local (pure math). No streaming concerns.
 | ERFC.PRECISE | . | yes | v0.3 | | | |
 | GESTEP | . | yes | v0.3 | | | |
 | HEX2BIN | . | yes | v0.3 | | x | |
-| HEX2DEC | . | yes | v0.3 | | x | |
+| HEX2DEC | x | yes | v0.3 | | x | |
 | HEX2OCT | . | yes | v0.3 | | x | |
 | OCT2BIN | . | yes | v0.3 | | x | |
 | OCT2DEC | . | yes | v0.3 | | x | |
