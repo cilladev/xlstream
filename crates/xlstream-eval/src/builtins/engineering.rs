@@ -384,34 +384,14 @@ pub(crate) fn builtin_hex2dec(args: &[Value]) -> Value {
     if args.len() != 1 {
         return Value::Error(CellError::Value);
     }
-    let v = &args[0];
-    if let Value::Error(e) = v {
-        return Value::Error(*e);
+    match parse_base_str(&args[0], 16, |b| b.is_ascii_hexdigit(), HEX_BIT_WIDTH) {
+        Ok(v) =>
+        {
+            #[allow(clippy::cast_precision_loss)]
+            Value::Number(v as f64)
+        }
+        Err(e) => Value::Error(e),
     }
-    // Must check Error above: to_text on Error produces "#DIV/0!" etc.
-    let hex_str = coerce::to_text(v);
-    let hex_str = hex_str.as_ref();
-
-    if hex_str.is_empty() || hex_str.len() > MAX_BASE_STR_LEN {
-        return Value::Error(CellError::Num);
-    }
-    if !hex_str.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Value::Error(CellError::Num);
-    }
-
-    let Ok(unsigned) = i64::from_str_radix(hex_str, 16) else {
-        return Value::Error(CellError::Num);
-    };
-
-    // 10-digit hex with leading digit >= 8 → negative (two's complement)
-    let result = if hex_str.len() == MAX_BASE_STR_LEN && unsigned > HEX_MAX_POSITIVE {
-        unsigned - HEX_TWO_POW
-    } else {
-        unsigned
-    };
-
-    #[allow(clippy::cast_precision_loss)]
-    Value::Number(result as f64)
 }
 
 /// `DEC2HEX(number, [places])` — convert decimal number to hex string.
@@ -432,48 +412,18 @@ pub(crate) fn builtin_dec2hex(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
-
-    if !num.is_finite() {
-        return Value::Error(CellError::Num);
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    let int_val = num.trunc() as i64;
-
-    if !(HEX_MIN_NEGATIVE..=HEX_MAX_POSITIVE).contains(&int_val) {
-        return Value::Error(CellError::Num);
-    }
-
-    let hex = if int_val < 0 {
-        #[allow(clippy::cast_sign_loss)]
-        let unsigned = (int_val + HEX_TWO_POW) as u64;
-        format!("{unsigned:010X}")
-    } else {
-        #[allow(clippy::cast_sign_loss)]
-        let unsigned = int_val as u64;
-        format!("{unsigned:X}")
+    let int_val = match super::math::to_int(num) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
     };
-
-    if args.len() == 2 {
-        let places_f = match coerce::to_number(&args[1]) {
-            Ok(n) => n,
-            Err(e) => return Value::Error(e),
-        };
-        if !places_f.is_finite() || places_f < 1.0 {
-            return Value::Error(CellError::Num);
-        }
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let places = places_f.trunc() as usize;
-        if places > MAX_BASE_STR_LEN {
-            return Value::Error(CellError::Num);
-        }
-        if hex.len() > places {
-            return Value::Error(CellError::Num);
-        }
-        return Value::Text(format!("{hex:0>places$}").into());
+    let places = match extract_places(args) {
+        Ok(p) => p,
+        Err(e) => return Value::Error(e),
+    };
+    match format_base_str(int_val, 16, HEX_BIT_WIDTH, HEX_MIN_NEGATIVE, HEX_MAX_POSITIVE, places) {
+        Ok(v) => v,
+        Err(e) => Value::Error(e),
     }
-
-    Value::Text(hex.into())
 }
 
 /// Validate a bitwise argument: must be finite, non-negative, integer,
