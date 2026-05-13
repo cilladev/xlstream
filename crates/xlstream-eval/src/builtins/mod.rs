@@ -260,6 +260,11 @@ pub(crate) fn dispatch(
             statistical::builtin_poisson_dist(&eval_args(args, interp, scope))
                 .map_or_else(Value::Error, Value::Number),
         ),
+        "T.DIST" => Some(statistical::builtin_t_dist(&eval_args(args, interp, scope))),
+        "T.DIST.RT" => Some(statistical::builtin_t_dist_rt(&eval_args(args, interp, scope))),
+        "T.DIST.2T" => Some(statistical::builtin_t_dist_2t(&eval_args(args, interp, scope))),
+        "T.INV" => Some(statistical::builtin_t_inv(&eval_args(args, interp, scope))),
+        "T.INV.2T" => Some(statistical::builtin_t_inv_2t(&eval_args(args, interp, scope))),
         _ => None,
     }
 }

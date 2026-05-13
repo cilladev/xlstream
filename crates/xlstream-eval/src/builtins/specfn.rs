@@ -4,8 +4,6 @@
 //! and distribution primitives (t-distribution CDF/PDF/inverse) reused across
 //! T.DIST, NORM.DIST, BINOM.DIST, etc.
 
-#![allow(dead_code)]
-
 use std::f64::consts::PI;
 
 /// Lanczos approximation parameter g.
