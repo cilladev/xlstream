@@ -6,6 +6,14 @@
 
 use xlstream_core::{CellError, Value};
 
+fn finite_or_num(v: f64) -> Result<f64, CellError> {
+    if v.is_finite() {
+        Ok(v)
+    } else {
+        Err(CellError::Num)
+    }
+}
+
 /// Extract numeric values from a `&[Value]` slice using range semantics.
 ///
 /// Includes `Number`, `Integer` (cast to f64), and `Date` (serial).
@@ -48,6 +56,7 @@ pub fn collect_numerics(values: &[Value]) -> Result<Vec<f64>, CellError> {
 /// # Errors
 ///
 /// Returns `Err(CellError::Div0)` if fewer than 2 numeric values.
+/// Returns `Err(CellError::Num)` if the result overflows to NaN/Infinity.
 /// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
@@ -69,7 +78,7 @@ pub fn var_s(values: &[Value]) -> Result<f64, CellError> {
     let mean = nums.iter().sum::<f64>() / n as f64;
     #[allow(clippy::cast_precision_loss)]
     let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
-    Ok(variance)
+    finite_or_num(variance)
 }
 
 /// `VAR.P` — population variance (divides by n).
@@ -80,6 +89,7 @@ pub fn var_s(values: &[Value]) -> Result<f64, CellError> {
 /// # Errors
 ///
 /// Returns `Err(CellError::Div0)` if no numeric values.
+/// Returns `Err(CellError::Num)` if the result overflows to NaN/Infinity.
 /// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
@@ -101,7 +111,7 @@ pub fn var_p(values: &[Value]) -> Result<f64, CellError> {
     let mean = nums.iter().sum::<f64>() / n as f64;
     #[allow(clippy::cast_precision_loss)]
     let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
-    Ok(variance)
+    finite_or_num(variance)
 }
 
 /// `STDEV.S` — sample standard deviation (sqrt of [`var_s`]).
@@ -194,6 +204,13 @@ mod tests {
         assert_eq!(collect_numerics(&vals).unwrap(), vec![1.0, 2.0, 3.0]);
     }
 
+    #[test]
+    fn collect_numerics_includes_date_serial() {
+        let date = xlstream_core::ExcelDate { serial: 45000.0 };
+        let vals = [Value::Number(1.0), Value::Date(date)];
+        assert_eq!(collect_numerics(&vals).unwrap(), vec![1.0, 45000.0]);
+    }
+
     // ===== VAR.S =====
 
     #[test]
@@ -281,6 +298,13 @@ mod tests {
         assert_eq!(var_p(&vals).unwrap_err(), CellError::Div0);
     }
 
+    #[test]
+    fn var_p_skips_text_and_bool() {
+        let vals =
+            [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0), Value::Bool(false)];
+        assert_close(var_p(&vals).unwrap(), 1.0);
+    }
+
     // ===== STDEV.S =====
 
     #[test]
@@ -318,6 +342,12 @@ mod tests {
         assert_eq!(stdev_s(&vals).unwrap_err(), CellError::Na);
     }
 
+    #[test]
+    fn stdev_s_negative_numbers() {
+        let vals = [Value::Number(-2.0), Value::Number(-4.0), Value::Number(-6.0)];
+        assert_close(stdev_s(&vals).unwrap(), 2.0);
+    }
+
     // ===== STDEV.P =====
 
     #[test]
@@ -349,5 +379,17 @@ mod tests {
     fn var_p_large_numbers_stable() {
         let vals = [Value::Number(1e10), Value::Number(1e10 + 1.0)];
         assert_close(var_p(&vals).unwrap(), 0.25);
+    }
+
+    #[test]
+    fn var_s_overflow_returns_num() {
+        let vals = [Value::Number(f64::MAX), Value::Number(f64::MAX)];
+        assert_eq!(var_s(&vals).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn var_p_infinity_returns_num() {
+        let vals = [Value::Number(f64::INFINITY), Value::Number(1.0)];
+        assert_eq!(var_p(&vals).unwrap_err(), CellError::Num);
     }
 }
