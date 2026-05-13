@@ -429,7 +429,7 @@ All row-local (pure math). No streaming concerns.
 | BITOR | . | yes | v0.3 | | | |
 | BITRSHIFT | . | yes | v0.3 | | | |
 | BITXOR | . | yes | v0.3 | | | |
-| COMPLEX | . | yes | v0.3 | | | |
+| COMPLEX | x | yes | v0.3 | | | |
 | CONVERT | . | yes | v0.3 | | | |
 | DEC2BIN | . | yes | v0.3 | | x | |
 | DEC2HEX | x | yes | v0.3 | | x | |
@@ -451,7 +451,7 @@ All row-local (pure math). No streaming concerns.
 | BESSELK | . | yes | v0.3 | | | |
 | BESSELY | . | yes | v0.3 | | | |
 | IMABS | . | yes | v0.3 | | | Complex number ops |
-| IMAGINARY | . | yes | v0.3 | | | |
+| IMAGINARY | x | yes | v0.3 | | | |
 | IMARGUMENT | . | yes | v0.3 | | | |
 | IMCONJUGATE | . | yes | v0.3 | | | |
 | IMCOS | . | yes | v0.3 | | | |
@@ -466,7 +466,7 @@ All row-local (pure math). No streaming concerns.
 | IMLOG2 | . | yes | v0.3 | | | |
 | IMPOWER | . | yes | v0.3 | | | |
 | IMPRODUCT | . | yes | v0.3 | | | |
-| IMREAL | . | yes | v0.3 | | | |
+| IMREAL | x | yes | v0.3 | | | |
 | IMSEC | . | yes | v0.3 | | | |
 | IMSECH | . | yes | v0.3 | | | |
 | IMSIN | . | yes | v0.3 | | | |

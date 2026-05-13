@@ -6,6 +6,7 @@ Semver.
 ## [Unreleased]
 
 ### Added
+- COMPLEX, IMREAL, IMAGINARY complex number creation and extraction
 - HEX2DEC, DEC2HEX hexadecimal conversion (40-bit two's complement)
 - ROW, COLUMN, ROWS, COLUMNS: return positional metadata from cell/range references (lazy dispatch, no cell reads)
 - STDEV.S, STDEV.P, VAR.S, VAR.P statistical functions
