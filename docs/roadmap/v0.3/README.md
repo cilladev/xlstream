@@ -51,8 +51,6 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 
 ### Combinatorics
 - [x] **PERMUT / PERMUTA** — permutations. ~2 hours.
-- [x] **COMBIN / COMBINA** — combinations. ~2 hours.
-- [x] **FACT / FACTDOUBLE** — factorial. ~2 hours.
 
 ## Engineering functions (~15)
 
@@ -78,6 +76,8 @@ All row-local. Implement in `builtins/engineering.rs`.
 
 Row-local additions to `builtins/math.rs`.
 
+- [x] **COMBIN / COMBINA** — combinations. ~2 hours.
+- [x] **FACT / FACTDOUBLE** — factorial. ~2 hours.
 - [ ] **ACOSH / ASINH / ATANH** — inverse hyperbolic trig. ~1 hour.
 - [ ] **COSH / SINH / TANH** — hyperbolic trig. ~1 hour.
 - [ ] **COT / CSC / SEC / COTH / CSCH / SECH** — reciprocal trig. ~2 hours.
