@@ -15,6 +15,7 @@ pub mod info;
 mod lookup;
 pub(crate) mod math;
 mod multi_conditional;
+mod specfn;
 pub mod statistical;
 pub(crate) mod string;
 
