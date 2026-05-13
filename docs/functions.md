@@ -147,8 +147,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | COUNTBLANK | x | yes | v0.1 | x | | |
 | COUNTIF | x | yes | v0.1 | x | x | |
 | COUNTIFS | x | yes | v0.1 | x | | |
-| COVARIANCE.P | . | yes | v0.3 | | | |
-| COVARIANCE.S | . | yes | v0.3 | | | |
+| COVARIANCE.P | x | yes | v0.3 | | | |
+| COVARIANCE.S | x | yes | v0.3 | | | |
 | DEVSQ | . | yes | v0.3 | | | |
 | EXPON.DIST | x | yes | v0.3 | | | |
 | F.DIST | . | yes | v0.3 | | | |
