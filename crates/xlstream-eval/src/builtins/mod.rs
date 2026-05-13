@@ -255,6 +255,10 @@ pub(crate) fn dispatch(
         "RANK.EQ" => Some(builtin_rank_eq(args, interp, scope)),
         "RANK.AVG" => Some(builtin_rank_avg(args, interp, scope)),
         "EXPON.DIST" => Some(builtin_expon_dist(args, interp, scope)),
+        "POISSON.DIST" | "POISSON" => Some(
+            statistical::builtin_poisson_dist(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
         _ => None,
     }
 }
