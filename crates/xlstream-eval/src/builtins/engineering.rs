@@ -3,6 +3,7 @@
 use xlstream_core::{coerce, CellError, Value};
 
 use crate::builtins::math::num_arg_ce;
+use crate::builtins::specfn::erf_approx;
 
 const MAX_BASE_STR_LEN: usize = 10;
 
@@ -1066,6 +1067,118 @@ pub fn builtin_gestep(args: &[Value]) -> Value {
     } else {
         Value::Number(0.0)
     }
+}
+
+/// `ERF(lower_limit, [upper_limit])` — error function.
+///
+/// With 1 arg: returns erf(x). With 2 args: returns erf(upper) - erf(lower).
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (0 or >2 args) or non-numeric input.
+/// Propagates errors from arguments.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::engineering::builtin_erf;
+/// if let Value::Number(n) = builtin_erf(&[Value::Number(1.0)]) {
+///     assert!((n - 0.842701).abs() < 1e-5);
+/// } else { panic!() }
+/// ```
+#[must_use]
+pub fn builtin_erf(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let lower = match num_arg_ce(args, 0) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    if args.len() == 1 {
+        return Value::Number(erf_approx(lower));
+    }
+    let upper = match num_arg_ce(args, 1) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    Value::Number(erf_approx(upper) - erf_approx(lower))
+}
+
+/// `ERFC(x)` — complementary error function: 1 - erf(x).
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (!=1 arg) or non-numeric input.
+/// Propagates errors from arguments.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::engineering::builtin_erfc;
+/// if let Value::Number(n) = builtin_erfc(&[Value::Number(1.0)]) {
+///     assert!((n - 0.157299).abs() < 1e-5);
+/// } else { panic!() }
+/// ```
+#[must_use]
+pub fn builtin_erfc(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg_ce(args, 0) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    Value::Number(1.0 - erf_approx(x))
+}
+
+/// `ERF.PRECISE(x)` — identical to ERF with 1 arg. Compatibility alias.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (!=1 arg) or non-numeric input.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::engineering::builtin_erf_precise;
+/// if let Value::Number(n) = builtin_erf_precise(&[Value::Number(1.0)]) {
+///     assert!((n - 0.842701).abs() < 1e-5);
+/// } else { panic!() }
+/// ```
+#[must_use]
+pub fn builtin_erf_precise(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg_ce(args, 0) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    Value::Number(erf_approx(x))
+}
+
+/// `ERFC.PRECISE(x)` — identical to ERFC. Compatibility alias.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (!=1 arg) or non-numeric input.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::engineering::builtin_erfc_precise;
+/// if let Value::Number(n) = builtin_erfc_precise(&[Value::Number(1.0)]) {
+///     assert!((n - 0.157299).abs() < 1e-5);
+/// } else { panic!() }
+/// ```
+#[must_use]
+pub fn builtin_erfc_precise(args: &[Value]) -> Value {
+    builtin_erfc(args)
 }
 
 #[cfg(test)]
@@ -3409,5 +3522,172 @@ mod tests {
             builtin_gestep(&[Value::Text("5".into()), Value::Number(4.0)]),
             Value::Number(1.0),
         );
+    }
+
+    // -- ERF --
+
+    fn assert_close(actual: f64, expected: f64, tol: f64) {
+        assert!(
+            (actual - expected).abs() < tol,
+            "expected {expected}, got {actual} (diff {})",
+            (actual - expected).abs()
+        );
+    }
+
+    fn unwrap_number(v: Value) -> f64 {
+        match v {
+            Value::Number(n) => n,
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn erf_one_arg_happy_path() {
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(0.0)])), 0.0, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(1.0)])), 0.842_700_793, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(0.5)])), 0.520_499_878, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(2.0)])), 0.995_322_265, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(3.0)])), 0.999_977_910, 1e-6);
+    }
+
+    #[test]
+    fn erf_one_arg_negative_is_odd() {
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(-1.0)])), -0.842_700_793, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(-0.5)])), -0.520_499_878, 1e-6);
+    }
+
+    #[test]
+    fn erf_two_arg_happy_path() {
+        assert_close(
+            unwrap_number(builtin_erf(&[Value::Number(0.0), Value::Number(1.0)])),
+            0.842_700_793,
+            1e-6,
+        );
+        assert_close(
+            unwrap_number(builtin_erf(&[Value::Number(1.0), Value::Number(2.0)])),
+            0.152_621_472,
+            1e-6,
+        );
+        assert_close(
+            unwrap_number(builtin_erf(&[Value::Number(0.0), Value::Number(0.0)])),
+            0.0,
+            1e-6,
+        );
+    }
+
+    #[test]
+    fn erf_two_arg_with_negatives() {
+        assert_close(
+            unwrap_number(builtin_erf(&[Value::Number(-1.0), Value::Number(1.0)])),
+            1.685_401_586,
+            1e-6,
+        );
+        assert_close(
+            unwrap_number(builtin_erf(&[Value::Number(2.0), Value::Number(1.0)])),
+            -0.152_621_472,
+            1e-6,
+        );
+    }
+
+    #[test]
+    fn erf_edge_large_values() {
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(10.0)])), 1.0, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Number(-10.0)])), -1.0, 1e-6);
+    }
+
+    #[test]
+    fn erf_wrong_arity() {
+        assert_eq!(builtin_erf(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_erf(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn erf_error_propagation() {
+        assert_eq!(builtin_erf(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn erf_non_numeric_text_returns_value_error() {
+        assert_eq!(builtin_erf(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn erf_coercion_bool_and_text() {
+        assert_close(unwrap_number(builtin_erf(&[Value::Bool(true)])), 0.842_700_793, 1e-6);
+        assert_close(unwrap_number(builtin_erf(&[Value::Text("0.5".into())])), 0.520_499_878, 1e-6);
+    }
+
+    // -- ERFC --
+
+    #[test]
+    fn erfc_happy_path() {
+        assert_close(unwrap_number(builtin_erfc(&[Value::Number(0.0)])), 1.0, 1e-6);
+        assert_close(unwrap_number(builtin_erfc(&[Value::Number(1.0)])), 0.157_299_207, 1e-6);
+        assert_close(unwrap_number(builtin_erfc(&[Value::Number(2.0)])), 0.004_677_735, 1e-6);
+        assert_close(unwrap_number(builtin_erfc(&[Value::Number(-1.0)])), 1.842_700_793, 1e-6);
+    }
+
+    #[test]
+    fn erfc_edge_large_values() {
+        let v = unwrap_number(builtin_erfc(&[Value::Number(10.0)]));
+        assert!((0.0..1e-6).contains(&v), "expected ~0, got {v}");
+        assert_close(unwrap_number(builtin_erfc(&[Value::Number(-10.0)])), 2.0, 1e-6);
+    }
+
+    #[test]
+    fn erfc_wrong_arity() {
+        assert_eq!(builtin_erfc(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_erfc(&[Value::Number(1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn erfc_error_propagation() {
+        assert_eq!(builtin_erfc(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn erfc_non_numeric_text_returns_value_error() {
+        assert_eq!(builtin_erfc(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // -- ERF.PRECISE / ERFC.PRECISE --
+
+    #[test]
+    fn erf_precise_matches_erf() {
+        assert_close(
+            unwrap_number(builtin_erf_precise(&[Value::Number(1.0)])),
+            0.842_700_793,
+            1e-6,
+        );
+        assert_close(unwrap_number(builtin_erf_precise(&[Value::Number(0.0)])), 0.0, 1e-6);
+    }
+
+    #[test]
+    fn erf_precise_wrong_arity() {
+        assert_eq!(
+            builtin_erf_precise(&[Value::Number(1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn erfc_precise_matches_erfc() {
+        assert_close(
+            unwrap_number(builtin_erfc_precise(&[Value::Number(1.0)])),
+            0.157_299_207,
+            1e-6,
+        );
+        assert_close(unwrap_number(builtin_erfc_precise(&[Value::Number(0.0)])), 1.0, 1e-6);
+    }
+
+    #[test]
+    fn erfc_precise_wrong_arity() {
+        assert_eq!(builtin_erfc_precise(&[]), Value::Error(CellError::Value));
     }
 }

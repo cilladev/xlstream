@@ -326,6 +326,10 @@ pub(crate) fn dispatch(
         "BASE" => Some(engineering::builtin_base(&eval_args(args, interp, scope))),
         "DELTA" => Some(engineering::builtin_delta(&eval_args(args, interp, scope))),
         "GESTEP" => Some(engineering::builtin_gestep(&eval_args(args, interp, scope))),
+        "ERF" => Some(engineering::builtin_erf(&eval_args(args, interp, scope))),
+        "ERFC" => Some(engineering::builtin_erfc(&eval_args(args, interp, scope))),
+        "ERF.PRECISE" => Some(engineering::builtin_erf_precise(&eval_args(args, interp, scope))),
+        "ERFC.PRECISE" => Some(engineering::builtin_erfc_precise(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
