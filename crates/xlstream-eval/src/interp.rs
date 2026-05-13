@@ -385,4 +385,22 @@ mod tests {
         let scope = RowScope::new(&[], 0);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value));
     }
+
+    #[test]
+    fn eval_rows_reversed_range() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("ROWS(A5:A3)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(3.0));
+    }
+
+    #[test]
+    fn eval_columns_reversed_range() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("COLUMNS(C1:A1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(3.0));
+    }
 }

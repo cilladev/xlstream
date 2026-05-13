@@ -196,25 +196,31 @@ pub(crate) fn dispatch(
             Some(Value::Bool(is_ref))
         }
         "ROW" => {
+            if args.len() > 1 {
+                return Some(Value::Error(CellError::Value));
+            }
             if args.is_empty() {
-                return Some(Value::Number(f64::from(scope.row_idx() + 1)));
+                return Some(Value::Number(f64::from(scope.row_idx().saturating_add(1))));
             }
             Some(info::builtin_row(args[0]))
         }
         "COLUMN" => {
+            if args.len() > 1 {
+                return Some(Value::Error(CellError::Value));
+            }
             if args.is_empty() {
-                return Some(Value::Number(f64::from(scope.col_idx() + 1)));
+                return Some(Value::Number(f64::from(scope.col_idx().saturating_add(1))));
             }
             Some(info::builtin_column(args[0]))
         }
         "ROWS" => {
-            if args.is_empty() {
+            if args.len() != 1 {
                 return Some(Value::Error(CellError::Value));
             }
             Some(info::builtin_rows(args[0]))
         }
         "COLUMNS" => {
-            if args.is_empty() {
+            if args.len() != 1 {
                 return Some(Value::Error(CellError::Value));
             }
             Some(info::builtin_columns(args[0]))

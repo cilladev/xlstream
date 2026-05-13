@@ -162,7 +162,18 @@ mod tests {
     fn get_col_zero_returns_ref_error() {
         let row = vec![Value::Number(1.0)];
         let scope = RowScope::new(&row, 0);
-        // col 0 is invalid — columns are 1-based.
         assert_eq!(scope.get(0), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn col_idx_defaults_to_zero() {
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(scope.col_idx(), 0);
+    }
+
+    #[test]
+    fn with_col_idx_overrides_default() {
+        let scope = RowScope::new(&[], 0).with_col_idx(7);
+        assert_eq!(scope.col_idx(), 7);
     }
 }
