@@ -22,7 +22,7 @@ On a 100k × 50 workbook (20 data + 30 formula cols, measured 2026-05-13, Intel 
 | Excel | 16.108.2 | ~99s | ~430 MB | Graph (20 threads) |
 | formualizer | 0.5.6 | 2h 8m | 11,322 MB | Full dependency graph |
 
-That's **335× faster and 17× less memory** than formualizer. The gap is architectural: formualizer's graph holds every cell as a vertex, and umya buffers the whole workbook in memory at both load and save. By trading feature breadth (no volatile re-eval, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we achieve dramatically better performance on row-local workloads.
+That's **3× less memory and 1.4× faster than LibreOffice**, and **290× faster than formualizer**. The gap is architectural: graph-based engines hold every cell as a vertex and buffer the whole workbook in memory. By trading feature breadth (no volatile re-eval, no full dynamic-array spills) for architectural simplicity (streaming, two-pass) we achieve dramatically better performance on row-local workloads.
 
 Full background: [`docs/brief.md`](docs/brief.md) and [`docs/research/formualizer.md`](docs/research/formualizer.md).
 

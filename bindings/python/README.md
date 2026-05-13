@@ -9,16 +9,16 @@ We are not building a general-purpose spreadsheet engine. We are building the *f
 
 ## Performance
 
-**335x faster** than graph-based evaluation. [Full benchmarks](https://github.com/cilladev/xlstream/tree/main/benchmarks/reports)
+**3x less memory and 1.4x faster than LibreOffice. No install. Embeddable.** [Full benchmarks](https://github.com/cilladev/xlstream/tree/main/benchmarks/reports)
 
 Benchmark: 100k rows x 50 cols (20 data + 30 formula). Intel i9-10910, 128 GB RAM.
 
 | Engine | Version | Wall-clock | Peak RSS | Architecture |
-| --- | --- | --- | --- | --- |
+|---|---|---|---|---|
 | **xlstream (1 worker)** | 0.2.1 | **26.5s** | **643 MB** | Streaming (2-pass) |
 | **xlstream (4 workers)** | 0.2.1 | **23.0s** | **681 MB** | Streaming (2-pass) |
 | LibreOffice | 26.2 | 31.9s | 2,081 MB | Graph |
-| Excel | 16.108.2 | ~99s | ~430 MB | Graph (20 threads) |
+| Excel (20 threads) | 16.108.2 | ~99s | ~430 MB | Graph |
 | formualizer | 0.5.6 | 2h 8m | 11,322 MB | Full dependency graph |
 
 

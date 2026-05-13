@@ -20,7 +20,7 @@ Measured 2026-05-13 on 100k rows × 50 cols (20 data + 30 formula). Intel i9-109
 | `pycel`, `xlcalculator`, `formulas` | — | Hours → days | OOM at scale | Graph + interpreter |
 | `xlwings` | — | Slow | — | Drives real Excel via COM |
 
-None of these is satisfying for an automated pipeline that processes large workbooks repeatedly. xlstream is **335× faster and 17× less memory** than formualizer on the same workload.
+None of these is satisfying for an automated pipeline that processes large workbooks repeatedly. xlstream is **3× less memory and 1.4× faster than LibreOffice**, and **290× faster than formualizer**.
 
 ## Insight
 
