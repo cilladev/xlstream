@@ -434,12 +434,12 @@ All row-local (pure math). No streaming concerns.
 | DEC2BIN | x | yes | v0.3 | | x | |
 | DEC2HEX | x | yes | v0.3 | | x | |
 | DEC2OCT | x | yes | v0.3 | | x | |
-| DELTA | . | yes | v0.3 | | | |
-| ERF | . | yes | v0.3 | | | |
-| ERF.PRECISE | . | yes | v0.3 | | | |
-| ERFC | . | yes | v0.3 | | | |
-| ERFC.PRECISE | . | yes | v0.3 | | | |
-| GESTEP | . | yes | v0.3 | | | |
+| DELTA | x | yes | v0.3 | | | |
+| ERF | x | yes | v0.3 | | | |
+| ERF.PRECISE | x | yes | v0.3 | | | |
+| ERFC | x | yes | v0.3 | | | |
+| ERFC.PRECISE | x | yes | v0.3 | | | |
+| GESTEP | x | yes | v0.3 | | | |
 | HEX2BIN | x | yes | v0.3 | | x | |
 | HEX2DEC | x | yes | v0.3 | | x | |
 | HEX2OCT | x | yes | v0.3 | | x | |

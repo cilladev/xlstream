@@ -6,6 +6,8 @@ Semver.
 ## [Unreleased]
 
 ### Added
+- DELTA, GESTEP Kronecker delta and unit step
+- ERF, ERFC, ERF.PRECISE, ERFC.PRECISE error function and complement
 - BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT bitwise operations (48-bit non-negative integers)
 - COMPLEX, IMREAL, IMAGINARY complex number creation and extraction
 - HEX2DEC, DEC2HEX hexadecimal conversion (40-bit two's complement)
