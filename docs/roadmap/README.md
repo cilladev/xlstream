@@ -70,7 +70,7 @@ All row-local (pure functions of their args). No streaming concerns. Mostly math
 
 No new functions. Focus:
 - API freeze — `evaluate()` signature, `EvaluateOptions`, `OutputMode`, Python bindings, CLI locked
-- Performance hardening — memory < 250 MB, wall-clock < 3 min for 700k rows
+- Performance hardening — memory < 250 MB, wall-clock < 15s for 100k rows
 - Documentation — mdBook site, migration guide, per-crate README audit
 - Quality — 100% conformance coverage, fuzz testing, property-based testing
 - 1-year semver stability commitment
