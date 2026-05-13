@@ -254,6 +254,7 @@ pub(crate) fn dispatch(
         "QUARTILE.EXC" => Some(builtin_quartile_exc(args, interp, scope)),
         "RANK.EQ" => Some(builtin_rank_eq(args, interp, scope)),
         "RANK.AVG" => Some(builtin_rank_avg(args, interp, scope)),
+        "EXPON.DIST" => Some(statistical::builtin_expon_dist(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
