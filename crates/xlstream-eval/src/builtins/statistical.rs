@@ -2735,4 +2735,86 @@ mod tests {
             Value::Error(CellError::Na),
         );
     }
+
+    // ===== T.DIST coercion (shape 4) =====
+
+    #[test]
+    fn t_dist_text_numeric_coerces() {
+        match builtin_t_dist(&[Value::Text("1.0".into()), Value::Number(10.0), Value::Bool(true)]) {
+            Value::Number(n) => assert_approx(n, 0.82955),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_integer_df_coerces() {
+        match builtin_t_dist(&[Value::Number(1.0), Value::Integer(10), Value::Bool(true)]) {
+            Value::Number(n) => assert_approx(n, 0.82955),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_empty_cumulative_is_false() {
+        match builtin_t_dist(&[Value::Number(0.0), Value::Number(10.0), Value::Empty]) {
+            Value::Number(n) => assert_approx(n, 0.38909),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn t_dist_number_cumulative_nonzero_is_true() {
+        match builtin_t_dist(&[Value::Number(0.0), Value::Number(10.0), Value::Number(1.0)]) {
+            Value::Number(n) => assert_close(n, 0.5),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    // ===== T.DIST type mismatch (shape 5) =====
+
+    #[test]
+    fn t_dist_text_non_numeric_returns_value() {
+        assert_eq!(
+            builtin_t_dist(&[Value::Text("abc".into()), Value::Number(10.0), Value::Bool(true)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn t_dist_rt_text_df_returns_value() {
+        assert_eq!(
+            builtin_t_dist_rt(&[Value::Number(1.0), Value::Text("abc".into())]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn t_dist_text_cumulative_returns_value() {
+        assert_eq!(
+            builtin_t_dist(&[Value::Number(1.0), Value::Number(10.0), Value::Text("yes".into())]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    // ===== Error propagation — df and cumulative positions =====
+
+    #[test]
+    fn t_dist_error_in_df_propagates() {
+        assert_eq!(
+            builtin_t_dist(&[Value::Number(1.0), Value::Error(CellError::Ref), Value::Bool(true)]),
+            Value::Error(CellError::Ref),
+        );
+    }
+
+    #[test]
+    fn t_dist_error_in_cumulative_propagates() {
+        assert_eq!(
+            builtin_t_dist(&[
+                Value::Number(1.0),
+                Value::Number(10.0),
+                Value::Error(CellError::Div0)
+            ]),
+            Value::Error(CellError::Div0),
+        );
+    }
 }
