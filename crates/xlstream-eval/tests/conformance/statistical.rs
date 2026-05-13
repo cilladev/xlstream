@@ -19,3 +19,13 @@ fn avedev() {
 fn mode_sngl() {
     run_conformance("statistical/mode_sngl.xlsx");
 }
+
+#[test]
+fn percentile() {
+    run_conformance("statistical/percentile.xlsx");
+}
+
+#[test]
+fn quartile() {
+    run_conformance("statistical/quartile.xlsx");
+}
