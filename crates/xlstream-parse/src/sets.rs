@@ -257,6 +257,11 @@ mod tests {
         assert!(is_range_expanding("NPV"));
         assert!(is_range_expanding("SUMPRODUCT"));
         assert!(is_range_expanding("sumproduct"));
+        assert!(is_range_expanding("VAR.S"));
+        assert!(is_range_expanding("VAR.P"));
+        assert!(is_range_expanding("STDEV.S"));
+        assert!(is_range_expanding("STDEV.P"));
+        assert!(is_range_expanding("var.s"));
         assert!(!is_range_expanding("SUM"));
     }
 

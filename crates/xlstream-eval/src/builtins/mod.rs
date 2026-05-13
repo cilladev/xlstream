@@ -265,24 +265,36 @@ fn builtin_sumproduct(
 
 /// `VAR.S(range, ...)` — sample variance. Range-expanding.
 fn builtin_var_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::var_s(&values).map_or_else(Value::Error, Value::Number)
 }
 
 /// `VAR.P(range, ...)` — population variance. Range-expanding.
 fn builtin_var_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::var_p(&values).map_or_else(Value::Error, Value::Number)
 }
 
 /// `STDEV.S(range, ...)` — sample standard deviation. Range-expanding.
 fn builtin_stdev_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::stdev_s(&values).map_or_else(Value::Error, Value::Number)
 }
 
 /// `STDEV.P(range, ...)` — population standard deviation. Range-expanding.
 fn builtin_stdev_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::stdev_p(&values).map_or_else(Value::Error, Value::Number)
 }
