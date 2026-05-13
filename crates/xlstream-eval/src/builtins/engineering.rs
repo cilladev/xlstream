@@ -982,6 +982,92 @@ pub(crate) fn builtin_base(args: &[Value]) -> Value {
     }
 }
 
+/// `DELTA(number1, [number2])` — Kronecker delta.
+///
+/// Returns 1 if `number1 == number2` (exact IEEE 754 equality), else 0.
+/// Second argument defaults to 0.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (0 or >2 args) or non-numeric input.
+/// Propagates errors from arguments.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::engineering::builtin_delta;
+/// assert_eq!(builtin_delta(&[Value::Number(5.0), Value::Number(5.0)]), Value::Number(1.0));
+/// assert_eq!(builtin_delta(&[Value::Number(5.0), Value::Number(4.0)]), Value::Number(0.0));
+/// assert_eq!(builtin_delta(&[Value::Number(0.0)]), Value::Number(1.0));
+/// ```
+#[allow(clippy::float_cmp)]
+#[must_use]
+pub fn builtin_delta(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let a = match num_arg_ce(args, 0) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let b = if args.len() == 2 {
+        match num_arg_ce(args, 1) {
+            Ok(n) => n,
+            Err(e) => return Value::Error(e),
+        }
+    } else {
+        0.0
+    };
+    if a == b {
+        Value::Number(1.0)
+    } else {
+        Value::Number(0.0)
+    }
+}
+
+/// `GESTEP(number, [step])` — unit step function.
+///
+/// Returns 1 if `number >= step`, else 0. Step defaults to 0.
+///
+/// # Errors
+///
+/// Returns `#VALUE!` for wrong arity (0 or >2 args) or non-numeric input.
+/// Propagates errors from arguments.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::engineering::builtin_gestep;
+/// assert_eq!(builtin_gestep(&[Value::Number(5.0), Value::Number(4.0)]), Value::Number(1.0));
+/// assert_eq!(builtin_gestep(&[Value::Number(4.0), Value::Number(5.0)]), Value::Number(0.0));
+/// assert_eq!(builtin_gestep(&[Value::Number(0.0)]), Value::Number(1.0));
+/// ```
+#[must_use]
+pub fn builtin_gestep(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg_ce(args, 0) {
+        Ok(n) => n,
+        Err(e) => return Value::Error(e),
+    };
+    let step = if args.len() == 2 {
+        match num_arg_ce(args, 1) {
+            Ok(n) => n,
+            Err(e) => return Value::Error(e),
+        }
+    } else {
+        0.0
+    };
+    if number >= step {
+        Value::Number(1.0)
+    } else {
+        Value::Number(0.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -3138,6 +3224,190 @@ mod tests {
         assert_eq!(
             builtin_dec2oct(&[Value::Number(1.0), Value::Error(CellError::Na)]),
             Value::Error(CellError::Na),
+        );
+    }
+
+    // -- DELTA --
+
+    #[test]
+    fn delta_equal_values() {
+        assert_eq!(builtin_delta(&[Value::Number(5.0), Value::Number(5.0)]), Value::Number(1.0));
+        assert_eq!(builtin_delta(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(1.0));
+        assert_eq!(builtin_delta(&[Value::Number(-3.0), Value::Number(-3.0)]), Value::Number(1.0),);
+        assert_eq!(builtin_delta(&[Value::Number(1.5), Value::Number(1.5)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn delta_unequal_values() {
+        assert_eq!(builtin_delta(&[Value::Number(5.0), Value::Number(4.0)]), Value::Number(0.0));
+        assert_eq!(builtin_delta(&[Value::Number(100.0), Value::Number(99.0)]), Value::Number(0.0),);
+    }
+
+    #[test]
+    fn delta_default_second_arg() {
+        assert_eq!(builtin_delta(&[Value::Number(0.0)]), Value::Number(1.0));
+        assert_eq!(builtin_delta(&[Value::Number(5.0)]), Value::Number(0.0));
+        assert_eq!(builtin_delta(&[Value::Number(-1.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn delta_negative_zero_equals_zero() {
+        assert_eq!(builtin_delta(&[Value::Number(0.0), Value::Number(-0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn delta_infinity() {
+        assert_eq!(
+            builtin_delta(&[Value::Number(f64::INFINITY), Value::Number(f64::INFINITY)]),
+            Value::Number(1.0),
+        );
+        assert_eq!(
+            builtin_delta(&[Value::Number(f64::NEG_INFINITY), Value::Number(f64::NEG_INFINITY)]),
+            Value::Number(1.0),
+        );
+        assert_eq!(
+            builtin_delta(&[Value::Number(f64::INFINITY), Value::Number(f64::NEG_INFINITY)]),
+            Value::Number(0.0),
+        );
+    }
+
+    #[test]
+    fn delta_nan_not_equal_to_nan() {
+        assert_eq!(
+            builtin_delta(&[Value::Number(f64::NAN), Value::Number(f64::NAN)]),
+            Value::Number(0.0),
+        );
+    }
+
+    #[test]
+    fn delta_no_epsilon_tolerance() {
+        assert_eq!(
+            builtin_delta(&[Value::Number(1.0), Value::Number(1.0 + f64::EPSILON)]),
+            Value::Number(0.0),
+        );
+    }
+
+    #[test]
+    fn delta_error_propagation() {
+        assert_eq!(
+            builtin_delta(&[Value::Error(CellError::Na), Value::Number(0.0)]),
+            Value::Error(CellError::Na),
+        );
+        assert_eq!(
+            builtin_delta(&[Value::Number(0.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn delta_wrong_arity() {
+        assert_eq!(builtin_delta(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_delta(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn delta_non_numeric_text_returns_value_error() {
+        assert_eq!(
+            builtin_delta(&[Value::Text("abc".into()), Value::Number(0.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn delta_coercion_bool_and_text() {
+        assert_eq!(builtin_delta(&[Value::Bool(true), Value::Number(1.0)]), Value::Number(1.0));
+        assert_eq!(
+            builtin_delta(&[Value::Text("5".into()), Value::Number(5.0)]),
+            Value::Number(1.0),
+        );
+    }
+
+    // -- GESTEP --
+
+    #[test]
+    fn gestep_greater_or_equal() {
+        assert_eq!(builtin_gestep(&[Value::Number(5.0), Value::Number(4.0)]), Value::Number(1.0));
+        assert_eq!(builtin_gestep(&[Value::Number(5.0), Value::Number(5.0)]), Value::Number(1.0));
+        assert_eq!(builtin_gestep(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(1.0));
+        assert_eq!(builtin_gestep(&[Value::Number(-4.0), Value::Number(-5.0)]), Value::Number(1.0),);
+    }
+
+    #[test]
+    fn gestep_less_than() {
+        assert_eq!(builtin_gestep(&[Value::Number(4.0), Value::Number(5.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn gestep_default_step() {
+        assert_eq!(builtin_gestep(&[Value::Number(0.0)]), Value::Number(1.0));
+        assert_eq!(builtin_gestep(&[Value::Number(1.0)]), Value::Number(1.0));
+        assert_eq!(builtin_gestep(&[Value::Number(-1.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn gestep_negative_zero() {
+        assert_eq!(builtin_gestep(&[Value::Number(0.0), Value::Number(-0.0)]), Value::Number(1.0));
+        assert_eq!(builtin_gestep(&[Value::Number(-0.0), Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn gestep_infinity() {
+        assert_eq!(
+            builtin_gestep(&[Value::Number(f64::INFINITY), Value::Number(0.0)]),
+            Value::Number(1.0),
+        );
+        assert_eq!(
+            builtin_gestep(&[Value::Number(f64::NEG_INFINITY), Value::Number(0.0)]),
+            Value::Number(0.0),
+        );
+    }
+
+    #[test]
+    fn gestep_nan_returns_zero() {
+        assert_eq!(
+            builtin_gestep(&[Value::Number(f64::NAN), Value::Number(0.0)]),
+            Value::Number(0.0),
+        );
+    }
+
+    #[test]
+    fn gestep_error_propagation() {
+        assert_eq!(
+            builtin_gestep(&[Value::Error(CellError::Na), Value::Number(0.0)]),
+            Value::Error(CellError::Na),
+        );
+        assert_eq!(
+            builtin_gestep(&[Value::Number(0.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na),
+        );
+    }
+
+    #[test]
+    fn gestep_wrong_arity() {
+        assert_eq!(builtin_gestep(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_gestep(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn gestep_non_numeric_text_returns_value_error() {
+        assert_eq!(
+            builtin_gestep(&[Value::Text("abc".into()), Value::Number(0.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn gestep_coercion_bool_and_text() {
+        assert_eq!(builtin_gestep(&[Value::Bool(true), Value::Number(0.0)]), Value::Number(1.0));
+        assert_eq!(
+            builtin_gestep(&[Value::Text("5".into()), Value::Number(4.0)]),
+            Value::Number(1.0),
         );
     }
 }
