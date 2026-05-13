@@ -598,6 +598,56 @@ pub fn large(values: &[Value], k_val: &Value) -> Result<f64, CellError> {
 pub fn small(values: &[Value], k_val: &Value) -> Result<f64, CellError> {
     kth_value(values, k_val, false)
 }
+
+/// `RANK.EQ` — rank of a number in a list (ties get the top rank).
+///
+/// `ascending`: if `true`, smallest is rank 1; if `false`, largest is rank 1.
+/// Uses exact f64 equality for lookup — no epsilon tolerance.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if `number` is not found in `nums`.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_eval::builtins::statistical::rank_eq;
+/// assert_eq!(rank_eq(3.0, &[5.0, 3.0, 1.0], false).unwrap(), 2.0);
+/// ```
+pub fn rank_eq(number: f64, nums: &[f64], ascending: bool) -> Result<f64, CellError> {
+    if !nums.contains(&number) {
+        return Err(CellError::Na);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let rank = if ascending {
+        nums.iter().filter(|&&x| x < number).count() as f64 + 1.0
+    } else {
+        nums.iter().filter(|&&x| x > number).count() as f64 + 1.0
+    };
+    Ok(rank)
+}
+
+/// `RANK.AVG` — rank of a number in a list (ties get the average rank).
+///
+/// `ascending`: if `true`, smallest is rank 1; if `false`, largest is rank 1.
+/// Uses exact f64 equality for lookup — no epsilon tolerance.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if `number` is not found in `nums`.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_eval::builtins::statistical::rank_avg;
+/// assert_eq!(rank_avg(3.0, &[5.0, 3.0, 3.0, 1.0], false).unwrap(), 2.5);
+/// ```
+pub fn rank_avg(number: f64, nums: &[f64], ascending: bool) -> Result<f64, CellError> {
+    let eq_rank = rank_eq(number, nums, ascending)?;
+    #[allow(clippy::cast_precision_loss, clippy::float_cmp)]
+    let dup_count = nums.iter().filter(|&&x| x == number).count() as f64;
+    Ok(eq_rank + (dup_count - 1.0) / 2.0)
+}
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -1660,5 +1710,95 @@ mod tests {
     /// Helper: build `Vec<Value::Number>` from f64 slice.
     fn n(vals: &[f64]) -> Vec<Value> {
         vals.iter().map(|&v| Value::Number(v)).collect()
+    }
+
+    // ===== RANK.EQ =====
+
+    #[test]
+    fn rank_eq_descending() {
+        assert_close(rank_eq(3.0, &[5.0, 3.0, 1.0], false).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn rank_eq_ascending() {
+        assert_close(rank_eq(3.0, &[1.0, 3.0, 5.0], true).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn rank_eq_highest_descending() {
+        assert_close(rank_eq(5.0, &[5.0, 3.0, 1.0], false).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rank_eq_lowest_descending() {
+        assert_close(rank_eq(1.0, &[5.0, 3.0, 1.0], false).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn rank_eq_not_found_returns_na() {
+        assert_eq!(rank_eq(4.0, &[1.0, 2.0, 3.0, 5.0], false).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rank_eq_single_found() {
+        assert_close(rank_eq(5.0, &[5.0], false).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rank_eq_single_not_found() {
+        assert_eq!(rank_eq(3.0, &[5.0], false).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rank_eq_all_same() {
+        assert_close(rank_eq(5.0, &[5.0, 5.0, 5.0], false).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rank_eq_empty_returns_na() {
+        assert_eq!(rank_eq(1.0, &[], false).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rank_eq_duplicates_get_top_rank() {
+        assert_close(rank_eq(3.0, &[5.0, 3.0, 3.0, 1.0], false).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn rank_eq_negative_ascending() {
+        assert_close(rank_eq(-1.0, &[-3.0, -1.0, 0.0, 2.0], true).unwrap(), 2.0);
+    }
+
+    // exact f64 equality — no epsilon tolerance
+    #[test]
+    fn rank_eq_float_mismatch_returns_na() {
+        assert_eq!(rank_eq(0.1_f64 + 0.2, &[0.3, 0.5], false).unwrap_err(), CellError::Na);
+    }
+
+    // ===== RANK.AVG =====
+
+    #[test]
+    fn rank_avg_with_duplicates() {
+        assert_close(rank_avg(3.0, &[5.0, 3.0, 3.0, 1.0], false).unwrap(), 2.5);
+    }
+
+    #[test]
+    fn rank_avg_ascending_duplicates() {
+        assert_close(rank_avg(3.0, &[1.0, 3.0, 3.0, 5.0], true).unwrap(), 2.5);
+    }
+
+    #[test]
+    fn rank_avg_no_duplicates() {
+        assert_close(rank_avg(5.0, &[5.0, 3.0, 1.0], false).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rank_avg_all_same() {
+        assert_close(rank_avg(5.0, &[5.0, 5.0, 5.0], false).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn rank_avg_not_found() {
+        assert_eq!(rank_avg(4.0, &[1.0, 2.0, 3.0], false).unwrap_err(), CellError::Na);
     }
 }
