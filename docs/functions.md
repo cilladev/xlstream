@@ -187,8 +187,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | MODE.SNGL | x | yes | v0.3 | x | x | |
 | MODE.MULT | . | yes | v0.3 | | | |
 | NEGBINOM.DIST | . | yes | v0.3 | | | |
-| NORM.DIST | . | yes | v0.3 | | | |
-| NORM.INV | . | yes | v0.3 | | | |
+| NORM.DIST | x | yes | v0.3 | x | x | |
+| NORM.INV | x | yes | v0.3 | x | x | |
 | NORM.S.DIST | . | yes | v0.3 | | | |
 | NORM.S.INV | . | yes | v0.3 | | | |
 | PEARSON | . | yes | v0.3 | | | |
