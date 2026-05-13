@@ -61,7 +61,7 @@ pip install xlstream
 import xlstream
 
 result = xlstream.evaluate("input.xlsx", "output.xlsx")
-# {'rows_processed': 700001, 'formulas_evaluated': 7000000, 'duration_ms': 48000}
+# {'rows_processed': 100000, 'formulas_evaluated': 2999970, 'duration_ms': 23000}
 
 # Parallel (row-sharded across cores)
 result = xlstream.evaluate("input.xlsx", "output.xlsx", workers=8)

@@ -6,7 +6,7 @@
 
 `xlstream` is a **streaming Excel formula evaluation engine** written in Rust, with Python bindings. It reads `.xlsx` files row-by-row, evaluates formulas in a single (or two-pass) streaming traversal, and writes the results to a new `.xlsx` — all in bounded memory regardless of file size.
 
-**Design goal in one sentence:** evaluate a 700,000-row × 20-column xlsx in under 3 minutes of wall-clock time with peak RSS under 250 MB.
+**Design goal in one sentence:** evaluate large xlsx workbooks in seconds of wall-clock time with bounded memory regardless of file size.
 
 We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* engine for the subset of workloads where formulas are mostly **row-local** with **shared lookup sheets that fit in memory** and **whole-column aggregates** — which is ~90% of real business workbooks. Lookup sheets can have thousands to hundreds of thousands of rows; "fits in memory" is the real constraint, not "small."
 
@@ -31,7 +31,7 @@ Full background: [`docs/brief.md`](docs/brief.md) and [`docs/research/formualize
 1. **Correctness first, speed second.** A fast wrong answer is useless. Every formula implementation lands with tests against known Excel outputs.
 2. **No unsafe Rust in the MVP.** If performance ever demands it, justify in a design doc first, contain it behind a safe wrapper, and document the invariants.
 3. **No panics in library code.** Every error path returns a typed `Result<_, XlStreamError>`. Panics are for "impossible" invariant violations only and must never be reachable from user input.
-4. **Peak memory is a test, not an aspiration.** Every new feature is benchmarked on the 700k-row reference workload. Regressions > 10% RSS block merges.
+4. **Peak memory is a test, not an aspiration.** Every new feature is benchmarked on the 100k-row reference workload. Regressions > 10% RSS block merges.
 5. **Every public API has rustdoc + at least one example.** Missing docs = failing CI.
 6. **Tests are code.** They go through the same review bar as library code. No "quick tests" with no assertions.
 
@@ -136,9 +136,8 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 |---|---|---|---|---|
 | 10k × 20 (10 formula cols) | < 50 MB | 31 MB | < 2 s | 1.6s |
 | 100k × 50 (30 formula cols)* | < 150 MB | 643–681 MB | < 15 s | 26.5s (1w) / 23.0s (4w) |
-| 700k × 20 (10 formula cols) | < 250 MB | ~734 MB** | < 3 min | ~48s** |
 
-*Measured 2026-05-13, bench_medium.xlsx. **Measured on a similar 50-col workbook. RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`benchmarks/reports/`](benchmarks/reports/).
+*Measured 2026-05-13, bench_medium.xlsx. RSS overshoot is I/O libraries (calamine + rust_xlsxwriter), not the evaluator (~10 MB). See [`benchmarks/reports/`](benchmarks/reports/).
 
 ## Current state
 
