@@ -199,7 +199,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | PERMUT | . | yes | v0.3 | | | |
 | PERMUTATIONA | . | yes | v0.3 | | | |
 | PHI | . | yes | v0.3 | | | |
-| POISSON.DIST | . | yes | v0.3 | | | |
+| POISSON.DIST | x | yes | v0.3 | | | |
 | PROB | . | yes | v0.3 | | | |
 | QUARTILE.EXC | x | yes | v0.3 | | | |
 | QUARTILE.INC | x | yes | v0.3 | | | |
