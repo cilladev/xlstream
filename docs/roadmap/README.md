@@ -4,10 +4,11 @@ Each version gets its own folder with a checklist. When a version ships, its fol
 
 ## Current version
 
-**v0.2** — See [`v0.2/README.md`](v0.2/README.md).
+**v0.3** — See [`v0.3/README.md`](v0.3/README.md).
 
 ## Archive
 
+- [v0.2](archive/v0.2/README.md) — shipped 2026-05-11
 - [v0.1](archive/v0.1/README.md) — shipped 2026-04-20
 
 ## Rules for agents

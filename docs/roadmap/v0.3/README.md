@@ -1,6 +1,6 @@
 # v0.3 Roadmap
 
-**Status:** planning
+**Status:** in progress
 **Target:** 2026 Q3
 **Theme:** statistical + engineering functions, infrastructure improvements
 
