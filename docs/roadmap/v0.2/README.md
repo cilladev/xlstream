@@ -22,7 +22,7 @@
 
 ### Performance
 
-- [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 700k-row workbook (currently 734 MB).
+- [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 100k-row workbook (currently 643 MB).
 
 
 ### Documentation

@@ -9,7 +9,7 @@
 These didn't ship with v0.2:
 
 - [ ] **MID empty string workaround** — `rust_xlsxwriter` drops empty string writes. Patch upstream or work around. ~1 hour.
-- [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 700k-row workbook (currently 734 MB).
+- [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 100k-row workbook (currently 643 MB).
 
 ## Infrastructure
 
