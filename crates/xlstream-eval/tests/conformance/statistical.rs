@@ -44,3 +44,8 @@ fn rank() {
 fn expon_dist() {
     run_conformance("statistical/expon_dist.xlsx");
 }
+
+#[test]
+fn poisson_dist() {
+    run_conformance("statistical/poisson_dist.xlsx");
+}
