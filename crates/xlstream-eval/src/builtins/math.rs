@@ -500,7 +500,7 @@ pub(crate) fn builtin_atan2(args: &[Value]) -> Value {
 
 /// Truncate f64 to i64, returning `#NUM!` for non-finite, out-of-range, or NaN.
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-fn to_int(v: f64) -> Result<i64, CellError> {
+pub(crate) fn to_int(v: f64) -> Result<i64, CellError> {
     let t = v.trunc();
     if !t.is_finite() || t > i64::MAX as f64 || t < i64::MIN as f64 {
         return Err(CellError::Num);
