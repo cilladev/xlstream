@@ -2,7 +2,7 @@
 
 **Status:** planning
 **Target:** 2026 Q4
-**Theme:** LET variable binding + advanced financial functions
+**Theme:** LET variable binding, advanced financial functions, multi-format I/O
 
 ## LET
 
@@ -58,6 +58,17 @@ High-value functions that appear in real business workbooks.
 - [ ] **ISPMT** — interest for a specific period (straight-line). ~1 hour.
 - [ ] **PDURATION** — periods required for investment to reach a value. ~1 hour.
 - [ ] **RRI** — equivalent interest rate for growth of an investment. ~1 hour.
+
+## Input format support
+
+- [ ] **Accept .xlsm** — macro-enabled workbooks. Calamine already reads via the xlsx code path. Accept the extension, ignore VBA macros. ~10 lines.
+- [ ] **Accept .xltx / .xltm / .xlam** — templates and add-ins. Same as xlsm — calamine reads them as xlsx. Accept extensions. ~10 lines.
+- [ ] **Accept .xlsb** — binary xlsx. Calamine has a streaming reader (`XlsbCellsReader`) with `next_cell()` and `next_formula()`. Wire into `xlstream-io::Reader`. Note: no `load_tables()` for xlsb — table references will error. Output is always xlsx (format conversion). ~1-2 days.
+
+## Output format support
+
+- [ ] **CSV output** — `--output-format csv` flag. Bypass rust_xlsxwriter, write computed values row-by-row via `csv::Writer`. No formulas, no formatting — pure data extraction. Add `csv` crate dependency. ~0.5 day.
+- [ ] **XLSM output** — when input is .xlsm, copy `vbaProject.bin` from input zip to output via `rust_xlsxwriter::add_vba_project()`. Preserves macros alongside recalculated formulas. ~0.5 day.
 
 ## Out of scope (v0.5+)
 

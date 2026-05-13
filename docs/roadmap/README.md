@@ -35,7 +35,7 @@ The goal is to support **every formula that fits the streaming model** — ~465 
 v0.1  ✓  Core engine (103 functions, streaming, Python bindings)
 v0.2     Coverage + fidelity (named ranges, table refs, keep-formulas)
 v0.3     Statistical + engineering (STDEV, VAR, NORM.DIST, CONVERT, HEX2DEC)
-v0.4     LET + advanced financial (38 functions: XNPV, XIRR, NPER, SLN, bonds)
+v0.4     LET + financial (38 functions) + multi-format I/O (xlsm, xlsb, csv)
 v0.5     Compatibility aliases (39) + database functions (12)
 v1.0     API stability — no breaking changes after this
 ```
@@ -54,11 +54,13 @@ Excel has 109 statistical and 78 engineering functions. Most are pure math — n
 
 All row-local (pure functions of their args). No streaming concerns. Mostly math formulas from reference implementations.
 
-### v0.4 — LET + advanced financial
+### v0.4 — LET + financial + multi-format I/O
 
 **LET** is scoped variable binding: `=LET(x, A2*1.1, y, B2*0.9, IF(x>y, x, y))`. No spill, no closures, no recursion — just name substitution. Compatible with streaming.
 
-**Financial (37 functions):** XNPV, XIRR, NPER, SLN, DDB, DB, EFFECT, NOMINAL, CUMIPMT, CUMPRINC, PPMT, IPMT, DISC, PRICE, YIELD, DURATION, MDURATION, ACCRINT, TBILLEQ, TBILLPRICE, VDB, MIRR, FVSCHEDULE, DOLLARDE, DOLLARFR, PDURATION, RRI, and more. All row-local. Some iterative (XIRR uses Newton's method). See [`v0.4/README.md`](v0.4/README.md).
+**Financial (37 functions):** XNPV, XIRR, NPER, SLN, DDB, DB, EFFECT, NOMINAL, CUMIPMT, CUMPRINC, PPMT, IPMT, DISC, PRICE, YIELD, DURATION, MDURATION, ACCRINT, TBILLEQ, TBILLPRICE, VDB, MIRR, FVSCHEDULE, DOLLARDE, DOLLARFR, PDURATION, RRI, and more. All row-local. Some iterative (XIRR uses Newton's method).
+
+**Input formats:** .xlsm (free — same reader as xlsx), .xltx/.xltm/.xlam (free), .xlsb (calamine has streaming reader). **Output formats:** .csv (data extraction), .xlsm (macro passthrough). See [`v0.4/README.md`](v0.4/README.md).
 
 ### v0.5 — Compatibility + database
 
