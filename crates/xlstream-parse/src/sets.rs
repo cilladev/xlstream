@@ -141,6 +141,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "VAR.S", "VAR.P", "STDEV.S", "STDEV.P",
     "SKEW", "SKEW.P", "KURT", "AVEDEV",
     "MODE.SNGL",
+    "PERCENTILE.INC", "PERCENTILE.EXC", "QUARTILE.INC", "QUARTILE.EXC",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
@@ -267,8 +268,16 @@ mod tests {
         assert!(is_range_expanding("SKEW"));
         assert!(is_range_expanding("SKEW.P"));
         assert!(is_range_expanding("KURT"));
+<<<<<<< HEAD
         assert!(is_range_expanding("MODE.SNGL"));
         assert!(is_range_expanding("mode.sngl"));
+||||||| parent of d11b7c3 (xlstream-parse: add PERCENTILE/QUARTILE to range-expanding set)
+=======
+        assert!(is_range_expanding("PERCENTILE.INC"));
+        assert!(is_range_expanding("PERCENTILE.EXC"));
+        assert!(is_range_expanding("QUARTILE.INC"));
+        assert!(is_range_expanding("QUARTILE.EXC"));
+>>>>>>> d11b7c3 (xlstream-parse: add PERCENTILE/QUARTILE to range-expanding set)
         assert!(!is_range_expanding("SUM"));
     }
 
