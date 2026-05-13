@@ -89,3 +89,8 @@ fn slope_intercept_rsq() {
 fn forecast_linear() {
     run_conformance("statistical/forecast_linear.xlsx");
 }
+
+#[test]
+fn permut_permutationa() {
+    run_conformance("statistical/permut.xlsx");
+}

@@ -26,11 +26,6 @@ fn trigonometry() {
 }
 
 #[test]
-fn permut_permutationa() {
-    run_conformance("math/permut.xlsx");
-}
-
-#[test]
 fn combin_combina() {
     run_conformance("math/combin.xlsx");
 }
