@@ -1,10 +1,11 @@
 //! Statistical builtin functions.
 //!
-//! AVEDEV, VAR.S, VAR.P, STDEV.S, STDEV.P, SKEW, SKEW.P, KURT,
-//! MODE.SNGL and future functions share common helpers:
+//! AVEDEV, VAR.S/P, STDEV.S/P, SKEW, SKEW.P, KURT, MODE.SNGL,
+//! PERCENTILE.INC/EXC, QUARTILE.INC/EXC. Common helpers:
 //! [`collect_numerics`] extracts `f64` values from a `&[Value]` slice,
-//! and [`mean_and_variance`] computes the mean and variance in a single
-//! pass over the collected numbers.
+//! [`mean_and_variance`] computes mean and variance, and
+//! [`sorted_numerics`] collects, rejects non-finite, and sorts for
+//! percentile/quartile functions.
 
 use std::collections::HashMap;
 
