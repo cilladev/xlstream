@@ -64,3 +64,8 @@ fn binom_dist() {
 fn norm_dist() {
     run_conformance("statistical/norm_dist.xlsx");
 }
+
+#[test]
+fn norm_s_dist() {
+    run_conformance("statistical/norm_s_dist.xlsx");
+}
