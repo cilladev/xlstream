@@ -241,6 +241,9 @@ pub(crate) fn dispatch(
         "VAR.P" => Some(builtin_var_p(args, interp, scope)),
         "STDEV.S" => Some(builtin_stdev_s(args, interp, scope)),
         "STDEV.P" => Some(builtin_stdev_p(args, interp, scope)),
+        "SKEW" => Some(builtin_skew(args, interp, scope)),
+        "SKEW.P" => Some(builtin_skew_p(args, interp, scope)),
+        "KURT" => Some(builtin_kurt(args, interp, scope)),
         _ => None,
     }
 }
@@ -297,4 +300,22 @@ fn builtin_stdev_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSc
     }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::stdev_p(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `SKEW(range, ...)` — sample skewness. Range-expanding.
+fn builtin_skew(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::skew(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `SKEW.P(range, ...)` — population skewness. Range-expanding.
+fn builtin_skew_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::skew_p(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `KURT(range, ...)` — excess kurtosis. Range-expanding.
+fn builtin_kurt(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::kurt(&values).map_or_else(Value::Error, Value::Number)
 }
