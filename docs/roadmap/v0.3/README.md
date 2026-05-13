@@ -46,7 +46,7 @@ All row-local. Pure math — no streaming concerns. Implement in `builtins/stati
 ### Regression / correlation
 - [x] **CORREL** — Pearson correlation coefficient. ~2 hours.
 - [ ] **COVARIANCE.P / COVARIANCE.S** — covariance. ~2 hours.
-- [ ] **SLOPE / INTERCEPT / RSQ** — linear regression stats. ~0.5 day.
+- [x] **SLOPE / INTERCEPT / RSQ** — linear regression stats. ~0.5 day.
 - [ ] **FORECAST.LINEAR** — predict Y from X via linear regression. ~2 hours.
 
 ### Combinatorics

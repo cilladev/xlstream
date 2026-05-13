@@ -21,6 +21,7 @@ Semver.
 - NORM.DIST, NORM.INV normal distribution (CDF, PDF, inverse CDF)
 - NORM.S.DIST, NORM.S.INV standard normal distribution and inverse
 - CORREL Pearson correlation coefficient
+- SLOPE, INTERCEPT, RSQ linear regression statistics
 
 ## [0.2.1] - 2026-05-11
 

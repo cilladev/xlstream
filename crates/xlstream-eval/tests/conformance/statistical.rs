@@ -74,3 +74,8 @@ fn norm_s_dist() {
 fn correl() {
     run_conformance("statistical/correl.xlsx");
 }
+
+#[test]
+fn slope_intercept_rsq() {
+    run_conformance("statistical/slope_intercept_rsq.xlsx");
+}

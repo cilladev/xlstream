@@ -431,6 +431,142 @@ pub fn correl(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
     finite_or_num(sum_cross / denom)
 }
 
+/// Intermediate sums for linear regression on paired (x, y) data.
+struct RegressionSums {
+    sum_xy: f64,
+    sum_xx: f64,
+    sum_yy: f64,
+    mean_x: f64,
+    mean_y: f64,
+}
+
+/// Compute regression sums from paired numeric vectors.
+///
+/// Returns `Err(CellError::Div0)` if empty, `Err(CellError::Num)` if
+/// means or intermediate sums overflow to non-finite.
+#[allow(clippy::similar_names)]
+fn linear_regression_sums(pairs: &[(f64, f64)]) -> Result<RegressionSums, CellError> {
+    if pairs.is_empty() {
+        return Err(CellError::Div0);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let n = pairs.len() as f64;
+    let mean_x = pairs.iter().map(|(x, _)| x).sum::<f64>() / n;
+    let mean_y = pairs.iter().map(|(_, y)| y).sum::<f64>() / n;
+    if !mean_x.is_finite() || !mean_y.is_finite() {
+        return Err(CellError::Num);
+    }
+    let mut sum_xy = 0.0_f64;
+    let mut sum_xx = 0.0_f64;
+    let mut sum_yy = 0.0_f64;
+    for &(x, y) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        sum_xy += dx * dy;
+        sum_xx += dx * dx;
+        sum_yy += dy * dy;
+    }
+    if !sum_xy.is_finite() || !sum_xx.is_finite() || !sum_yy.is_finite() {
+        return Err(CellError::Num);
+    }
+    debug_assert_eq!(pairs.len(), pairs.len());
+    Ok(RegressionSums { sum_xy, sum_xx, sum_yy, mean_x, mean_y })
+}
+
+/// `SLOPE(known_ys, known_xs)` — slope of the least-squares regression line.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain after
+/// filtering, or if `Sxx = 0` (constant X values).
+/// Returns `Err(CellError::Num)` if intermediate sums overflow or
+/// the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::slope;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!((slope(&ys, &xs).unwrap() - 2.0).abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn slope(known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs)?;
+    if sums.sum_xx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    finite_or_num(sums.sum_xy / sums.sum_xx)
+}
+
+/// `INTERCEPT(known_ys, known_xs)` — y-intercept of the least-squares line.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain after
+/// filtering, or if `Sxx = 0` (constant X values).
+/// Returns `Err(CellError::Num)` if intermediate sums overflow or
+/// the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::intercept;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!(intercept(&ys, &xs).unwrap().abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn intercept(known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs)?;
+    if sums.sum_xx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    let m = sums.sum_xy / sums.sum_xx;
+    finite_or_num(sums.mean_y - m * sums.mean_x)
+}
+
+/// `RSQ(known_ys, known_xs)` — coefficient of determination (R-squared).
+///
+/// Equals CORREL(ys, xs) squared. Returns a value in [0, 1].
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain after
+/// filtering, or if either `Sxx` or `Syy` is zero.
+/// Returns `Err(CellError::Num)` if intermediate sums overflow or
+/// the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::rsq;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!((rsq(&ys, &xs).unwrap() - 1.0).abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn rsq(known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs)?;
+    let denom = sums.sum_xx * sums.sum_yy;
+    if denom == 0.0 {
+        return Err(CellError::Div0);
+    }
+    finite_or_num(sums.sum_xy * sums.sum_xy / denom)
+}
+
 /// Compute the mean and variance of a `&[f64]` slice.
 ///
 /// `ddof` is the delta degrees of freedom: 0 for population, 1 for sample.
@@ -4327,5 +4463,257 @@ mod tests {
         let xs = [Value::Integer(1), Value::Integer(2), Value::Date(date)];
         let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
         assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    fn nv(v: f64) -> Value {
+        Value::Number(v)
+    }
+
+    // ===== SLOPE =====
+
+    #[test]
+    fn slope_perfect_positive() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn slope_perfect_negative() {
+        let ys = [nv(10.0), nv(8.0), nv(6.0), nv(4.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(slope(&ys, &xs).unwrap(), -2.0);
+    }
+
+    #[test]
+    fn slope_imperfect_fit() {
+        let ys = [nv(3.0), nv(5.0), nv(4.0), nv(6.0), nv(8.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        let s = slope(&ys, &xs).unwrap();
+        assert!((s - 1.1).abs() < 0.01, "got {s}");
+    }
+
+    #[test]
+    fn slope_two_points() {
+        let ys = [nv(1.0), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn slope_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn slope_constant_y_returns_zero() {
+        let ys = [nv(5.0), nv(5.0), nv(5.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn slope_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn slope_empty_returns_div0() {
+        assert_eq!(slope(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn slope_text_skipped_pairwise() {
+        let ys = [nv(1.0), Value::Text("x".into()), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(2.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn slope_error_propagation() {
+        let ys = [nv(1.0), Value::Error(CellError::Na), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn slope_nan_input() {
+        let ys = [nv(1.0), nv(f64::NAN), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn slope_overflow_returns_num() {
+        let xs = [nv(1e154), nv(2e154), nv(3e154)];
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Num);
+    }
+
+    // ===== INTERCEPT =====
+
+    #[test]
+    fn intercept_through_origin() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(intercept(&ys, &xs).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn intercept_offset() {
+        let ys = [nv(3.0), nv(5.0), nv(7.0), nv(9.0), nv(11.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(intercept(&ys, &xs).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn intercept_negative_slope() {
+        let ys = [
+            nv(20.0),
+            nv(18.0),
+            nv(16.0),
+            nv(14.0),
+            nv(12.0),
+            nv(10.0),
+            nv(8.0),
+            nv(6.0),
+            nv(4.0),
+            nv(2.0),
+        ];
+        let xs = [
+            nv(1.0),
+            nv(2.0),
+            nv(3.0),
+            nv(4.0),
+            nv(5.0),
+            nv(6.0),
+            nv(7.0),
+            nv(8.0),
+            nv(9.0),
+            nv(10.0),
+        ];
+        assert_close(intercept(&ys, &xs).unwrap(), 22.0);
+    }
+
+    #[test]
+    fn intercept_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn intercept_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn intercept_empty_returns_div0() {
+        assert_eq!(intercept(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn intercept_error_propagation() {
+        let ys = [nv(1.0), Value::Error(CellError::Na), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn intercept_text_skipped_pairwise() {
+        let ys = [nv(1.0), Value::Text("x".into()), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(2.0)];
+        assert_close(intercept(&ys, &xs).unwrap(), -1.0);
+    }
+
+    #[test]
+    fn intercept_nan_input() {
+        let ys = [nv(1.0), nv(f64::NAN), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn intercept_overflow_returns_num() {
+        let xs = [nv(1e154), nv(2e154), nv(3e154)];
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Num);
+    }
+
+    // ===== RSQ =====
+
+    #[test]
+    fn rsq_perfect_positive() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(rsq(&ys, &xs).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rsq_perfect_negative() {
+        let ys = [nv(10.0), nv(8.0), nv(6.0), nv(4.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(rsq(&ys, &xs).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rsq_imperfect_fit() {
+        let ys = [nv(3.0), nv(5.0), nv(4.0), nv(6.0), nv(8.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        let r = rsq(&ys, &xs).unwrap();
+        assert!((r - 0.818).abs() < 0.01, "got {r}");
+    }
+
+    #[test]
+    fn rsq_constant_both_returns_div0() {
+        let ys = [nv(5.0), nv(5.0), nv(5.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_constant_y_returns_div0() {
+        let ys = [nv(5.0), nv(5.0), nv(5.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rsq_empty_returns_div0() {
+        assert_eq!(rsq(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_error_propagation() {
+        let ys = [Value::Error(CellError::Na), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rsq_overflow_returns_num() {
+        let xs = [nv(1e154), nv(2e154), nv(3e154)];
+        let ys = [nv(1e154), nv(2e154), nv(3e154)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Num);
     }
 }
