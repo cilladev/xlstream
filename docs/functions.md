@@ -211,8 +211,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SLOPE | . | yes | v0.3 | | | |
 | SMALL | . | yes | v0.3 | | | |
 | STANDARDIZE | . | yes | v0.3 | | | |
-| STDEV.P | . | yes | v0.3 | | | |
-| STDEV.S | . | yes | v0.3 | | | |
+| STDEV.P | x | yes | v0.3 | | | |
+| STDEV.S | x | yes | v0.3 | | | |
 | STDEVA | . | yes | v0.3 | | | |
 | STDEVPA | . | yes | v0.3 | | | |
 | STEYX | . | yes | v0.3 | | | |
@@ -224,8 +224,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | T.TEST | . | yes | v0.3 | | | |
 | TREND | . | yes | v0.3 | | | |
 | TRIMMEAN | . | yes | v0.3 | | | |
-| VAR.P | . | yes | v0.3 | | | |
-| VAR.S | . | yes | v0.3 | | | |
+| VAR.P | x | yes | v0.3 | | | |
+| VAR.S | x | yes | v0.3 | | | |
 | VARA | . | yes | v0.3 | | | |
 | VARPA | . | yes | v0.3 | | | |
 | WEIBULL.DIST | . | yes | v0.3 | | | |

@@ -22,8 +22,8 @@ These didn't ship with v0.2:
 All row-local. Pure math — no streaming concerns. Implement in `builtins/statistical.rs`.
 
 ### Descriptive statistics
-- [ ] **STDEV.S / STDEV.P** — sample and population standard deviation. ~0.5 day.
-- [ ] **VAR.S / VAR.P** — sample and population variance. ~0.5 day.
+- [x] **STDEV.S / STDEV.P** — sample and population standard deviation. ~0.5 day.
+- [x] **VAR.S / VAR.P** — sample and population variance. ~0.5 day.
 - [ ] **AVEDEV** — average absolute deviation. ~2 hours.
 - [ ] **SKEW / SKEW.P** — skewness. ~2 hours.
 - [ ] **KURT** — kurtosis. ~2 hours.
