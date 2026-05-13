@@ -246,6 +246,50 @@ pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
     Ok(m3 / nf)
 }
 
+/// `KURT` — excess kurtosis (sample-adjusted).
+///
+/// Formula: `[(n(n+1)) / ((n-1)(n-2)(n-3))] * sum[(xi - mean) / stdev_s]^4
+///           - [3(n-1)^2 / ((n-2)(n-3))]`
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Div0)` if fewer than 4 numeric values,
+/// if standard deviation is zero, or if any input is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::kurt;
+/// let vals = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0),
+///             Value::Number(4.0), Value::Number(5.0)];
+/// let result = kurt(&vals).unwrap();
+/// assert!((result - (-1.2)).abs() < 1e-10);
+/// ```
+pub fn kurt(values: &[Value]) -> Result<f64, CellError> {
+    let nums = collect_numerics(values)?;
+    let n = nums.len();
+    if n < 4 {
+        return Err(CellError::Div0);
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let mean = nums.iter().sum::<f64>() / nf;
+
+    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (nf - 1.0);
+    let stdev = variance.sqrt();
+    if stdev == 0.0 {
+        return Err(CellError::Div0);
+    }
+
+    let m4: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(4)).sum();
+    let term1 = (nf * (nf + 1.0)) / ((nf - 1.0) * (nf - 2.0) * (nf - 3.0));
+    let term2 = (3.0 * (nf - 1.0).powi(2)) / ((nf - 2.0) * (nf - 3.0));
+
+    Ok(term1 * m4 - term2)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -590,5 +634,77 @@ mod tests {
     fn skew_p_all_same_returns_div0() {
         let vals: Vec<Value> = [5.0, 5.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
         assert_eq!(skew_p(&vals).unwrap_err(), CellError::Div0);
+    }
+
+    // ===== KURT =====
+
+    #[test]
+    fn kurt_uniform_is_negative_1_2() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_close(kurt(&vals).unwrap(), -1.2);
+    }
+
+    #[test]
+    fn kurt_right_skewed_is_positive() {
+        let vals: Vec<Value> =
+            [1.0, 2.0, 3.0, 4.0, 100.0].iter().map(|&n| Value::Number(n)).collect();
+        assert!(kurt(&vals).unwrap() > 0.0);
+    }
+
+    #[test]
+    fn kurt_uniform_ten_values() {
+        let vals: Vec<Value> = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0]
+            .iter()
+            .map(|&n| Value::Number(n))
+            .collect();
+        assert_close(kurt(&vals).unwrap(), -1.2);
+    }
+
+    #[test]
+    fn kurt_minimum_n_four() {
+        let vals: Vec<Value> = [1.0, 2.0, 3.0, 4.0].iter().map(|&n| Value::Number(n)).collect();
+        kurt(&vals).unwrap();
+    }
+
+    #[test]
+    fn kurt_below_minimum_returns_div0() {
+        let vals: Vec<Value> = [1.0, 2.0, 3.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(kurt(&vals).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn kurt_empty_returns_div0() {
+        assert_eq!(kurt(&[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn kurt_all_same_returns_div0() {
+        let vals: Vec<Value> = [5.0, 5.0, 5.0, 5.0].iter().map(|&n| Value::Number(n)).collect();
+        assert_eq!(kurt(&vals).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn kurt_skips_bool() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Bool(true),
+            Value::Number(3.0),
+            Value::Number(5.0),
+            Value::Number(7.0),
+        ];
+        assert_close(kurt(&vals).unwrap(), -1.2);
+    }
+
+    #[test]
+    fn kurt_propagates_error() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Error(CellError::Na),
+            Value::Number(3.0),
+            Value::Number(5.0),
+            Value::Number(7.0),
+        ];
+        assert_eq!(kurt(&vals).unwrap_err(), CellError::Na);
     }
 }
