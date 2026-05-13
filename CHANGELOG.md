@@ -3,6 +3,11 @@
 All notable changes to xlstream. Format: [Keep a Changelog](https://keepachangelog.com/).
 Semver.
 
+## [Unreleased]
+
+### Added
+- ROW, COLUMN, ROWS, COLUMNS: return positional metadata from cell/range references (lazy dispatch, no cell reads)
+
 ## [0.2.1] - 2026-05-11
 
 ### Added
