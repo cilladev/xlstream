@@ -1,9 +1,10 @@
 //! Statistical builtin functions.
 //!
-//! VAR.S, VAR.P, STDEV.S, STDEV.P, SKEW, SKEW.P, KURT and future
-//! functions (AVEDEV, etc.) share a common [`collect_numerics`] helper
-//! that extracts `f64` values from a `&[Value]` slice using range
-//! semantics.
+//! AVEDEV, VAR.S, VAR.P, STDEV.S, STDEV.P, SKEW, SKEW.P, KURT and
+//! future functions share common helpers: [`collect_numerics`] extracts
+//! `f64` values from a `&[Value]` slice, and [`mean_and_variance`]
+//! computes the mean and variance in a single pass over the collected
+//! numbers.
 
 use xlstream_core::{CellError, Value};
 
@@ -50,6 +51,23 @@ pub fn collect_numerics(values: &[Value]) -> Result<Vec<f64>, CellError> {
     Ok(nums)
 }
 
+/// Compute the mean and variance of a `&[f64]` slice.
+///
+/// `ddof` is the delta degrees of freedom: 0 for population, 1 for sample.
+/// Returns `None` if `nums.len() <= ddof` (too few values).
+fn mean_and_variance(nums: &[f64], ddof: usize) -> Option<(f64, f64)> {
+    let n = nums.len();
+    if n <= ddof {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let mean = nums.iter().sum::<f64>() / nf;
+    #[allow(clippy::cast_precision_loss)]
+    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - ddof) as f64;
+    Some((mean, variance))
+}
+
 /// `VAR.S` — sample variance (divides by n-1).
 ///
 /// Requires at least 2 numeric values. Returns `#DIV/0!` otherwise.
@@ -72,14 +90,7 @@ pub fn collect_numerics(values: &[Value]) -> Result<Vec<f64>, CellError> {
 /// ```
 pub fn var_s(values: &[Value]) -> Result<f64, CellError> {
     let nums = collect_numerics(values)?;
-    let n = nums.len();
-    if n < 2 {
-        return Err(CellError::Div0);
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let mean = nums.iter().sum::<f64>() / n as f64;
-    #[allow(clippy::cast_precision_loss)]
-    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+    let (_, variance) = mean_and_variance(&nums, 1).ok_or(CellError::Div0)?;
     finite_or_num(variance)
 }
 
@@ -105,14 +116,7 @@ pub fn var_s(values: &[Value]) -> Result<f64, CellError> {
 /// ```
 pub fn var_p(values: &[Value]) -> Result<f64, CellError> {
     let nums = collect_numerics(values)?;
-    let n = nums.len();
-    if n == 0 {
-        return Err(CellError::Div0);
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let mean = nums.iter().sum::<f64>() / n as f64;
-    #[allow(clippy::cast_precision_loss)]
-    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
+    let (_, variance) = mean_and_variance(&nums, 0).ok_or(CellError::Div0)?;
     finite_or_num(variance)
 }
 
@@ -187,21 +191,17 @@ pub fn stdev_p(values: &[Value]) -> Result<f64, CellError> {
 /// ```
 pub fn skew(values: &[Value]) -> Result<f64, CellError> {
     let nums = collect_numerics(values)?;
-    let n = nums.len();
-    if n < 3 {
+    if nums.len() < 3 {
         return Err(CellError::Div0);
     }
-
-    #[allow(clippy::cast_precision_loss)]
-    let nf = n as f64;
-    let mean = nums.iter().sum::<f64>() / nf;
-
-    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (nf - 1.0);
+    let (mean, variance) = mean_and_variance(&nums, 1).ok_or(CellError::Div0)?;
     let stdev = variance.sqrt();
     if stdev == 0.0 {
         return Err(CellError::Div0);
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    let nf = nums.len() as f64;
     let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
     let adjustment = nf / ((nf - 1.0) * (nf - 2.0));
 
@@ -231,21 +231,14 @@ pub fn skew(values: &[Value]) -> Result<f64, CellError> {
 /// ```
 pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
     let nums = collect_numerics(values)?;
-    let n = nums.len();
-    if n == 0 {
-        return Err(CellError::Div0);
-    }
-
-    #[allow(clippy::cast_precision_loss)]
-    let nf = n as f64;
-    let mean = nums.iter().sum::<f64>() / nf;
-
-    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / nf;
+    let (mean, variance) = mean_and_variance(&nums, 0).ok_or(CellError::Div0)?;
     let stdev = variance.sqrt();
     if stdev == 0.0 {
         return Err(CellError::Div0);
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    let nf = nums.len() as f64;
     let m3: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(3)).sum();
 
     finite_or_num(m3 / nf)
@@ -275,26 +268,56 @@ pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
 /// ```
 pub fn kurt(values: &[Value]) -> Result<f64, CellError> {
     let nums = collect_numerics(values)?;
-    let n = nums.len();
-    if n < 4 {
+    if nums.len() < 4 {
         return Err(CellError::Div0);
     }
-
-    #[allow(clippy::cast_precision_loss)]
-    let nf = n as f64;
-    let mean = nums.iter().sum::<f64>() / nf;
-
-    let variance = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (nf - 1.0);
+    let (mean, variance) = mean_and_variance(&nums, 1).ok_or(CellError::Div0)?;
     let stdev = variance.sqrt();
     if stdev == 0.0 {
         return Err(CellError::Div0);
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    let nf = nums.len() as f64;
     let m4: f64 = nums.iter().map(|x| ((x - mean) / stdev).powi(4)).sum();
     let term1 = (nf * (nf + 1.0)) / ((nf - 1.0) * (nf - 2.0) * (nf - 3.0));
     let term2 = (3.0 * (nf - 1.0).powi(2)) / ((nf - 2.0) * (nf - 3.0));
 
     finite_or_num(term1 * m4 - term2)
+}
+
+/// `AVEDEV` — average of absolute deviations from the mean.
+///
+/// `AVEDEV(values)` = `(1/n) * Σ|xi - mean|`
+///
+/// Skips text, booleans, and empty cells. Propagates errors. Returns
+/// `#DIV/0!` if no numeric values remain, `#NUM!` if the result is
+/// non-finite.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Div0)` if no numeric values exist.
+/// Returns `Err(CellError::Num)` if the result is NaN or infinite.
+/// Returns `Err(CellError)` if any value is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_eval::builtins::statistical::builtin_avedev;
+/// use xlstream_core::Value;
+/// let vals = [Value::Number(2.0), Value::Number(4.0), Value::Number(8.0), Value::Number(16.0)];
+/// assert_eq!(builtin_avedev(&vals), Ok(4.5));
+/// ```
+pub fn builtin_avedev(values: &[Value]) -> Result<f64, CellError> {
+    let nums = collect_numerics(values)?;
+    if nums.is_empty() {
+        return Err(CellError::Div0);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let n = nums.len() as f64;
+    let mean = nums.iter().sum::<f64>() / n;
+    let dev_sum: f64 = nums.iter().map(|x| (x - mean).abs()).sum();
+    finite_or_num(dev_sum / n)
 }
 
 #[cfg(test)]
@@ -772,5 +795,115 @@ mod tests {
             Value::Number(2.0),
         ];
         assert_eq!(kurt(&vals).unwrap_err(), CellError::Num);
+    }
+
+    // ===== mean_and_variance =====
+
+    #[test]
+    fn mean_and_variance_sample() {
+        let nums = [2.0, 4.0, 6.0, 8.0];
+        let (mean, var) = mean_and_variance(&nums, 1).unwrap();
+        assert_close(mean, 5.0);
+        assert_close(var, 6.666_666_666_666_667);
+    }
+
+    #[test]
+    fn mean_and_variance_population() {
+        let nums = [2.0, 4.0, 6.0, 8.0];
+        let (mean, var) = mean_and_variance(&nums, 0).unwrap();
+        assert_close(mean, 5.0);
+        assert_close(var, 5.0);
+    }
+
+    #[test]
+    fn mean_and_variance_too_few_returns_none() {
+        assert!(mean_and_variance(&[5.0], 1).is_none());
+        assert!(mean_and_variance(&[], 0).is_none());
+    }
+
+    // ===== AVEDEV =====
+
+    #[test]
+    fn avedev_four_positive_values() {
+        let vals =
+            [Value::Number(2.0), Value::Number(4.0), Value::Number(8.0), Value::Number(16.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 4.5);
+    }
+
+    #[test]
+    fn avedev_sequential_values() {
+        let vals = [
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+            Value::Number(5.0),
+        ];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 1.2);
+    }
+
+    #[test]
+    fn avedev_negative_values() {
+        let vals = [
+            Value::Number(-2.0),
+            Value::Number(-1.0),
+            Value::Number(0.0),
+            Value::Number(1.0),
+            Value::Number(2.0),
+        ];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 1.2);
+    }
+
+    #[test]
+    fn avedev_single_value_returns_zero() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn avedev_two_values() {
+        let vals = [Value::Number(0.0), Value::Number(10.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn avedev_all_same_returns_zero() {
+        let vals = [Value::Number(7.0), Value::Number(7.0), Value::Number(7.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn avedev_empty_returns_div0() {
+        assert_eq!(builtin_avedev(&[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn avedev_all_text_returns_div0() {
+        let vals = [Value::Text("a".into()), Value::Text("b".into())];
+        assert_eq!(builtin_avedev(&vals).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn avedev_skips_text() {
+        let vals = [Value::Number(1.0), Value::Text("text".into()), Value::Number(3.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn avedev_skips_bool() {
+        let vals = [Value::Number(1.0), Value::Bool(true), Value::Number(3.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn avedev_propagates_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn avedev_large_numbers() {
+        let vals = [Value::Number(1e10), Value::Number(1e10 + 2.0)];
+        assert_eq!(builtin_avedev(&vals).unwrap(), 1.0);
     }
 }

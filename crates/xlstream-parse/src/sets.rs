@@ -139,7 +139,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "IRR", "NPV", "CONCAT", "CONCATENATE", "TEXTJOIN",
     "NETWORKDAYS", "WORKDAY", "AND", "OR", "SUMPRODUCT",
     "VAR.S", "VAR.P", "STDEV.S", "STDEV.P",
-    "SKEW", "SKEW.P", "KURT",
+    "SKEW", "SKEW.P", "KURT", "AVEDEV",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).

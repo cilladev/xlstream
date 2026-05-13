@@ -237,6 +237,7 @@ pub(crate) fn dispatch(
         // -- range-expanding aggregate --
         "SUMPRODUCT" => Some(builtin_sumproduct(args, interp, scope)),
         // -- statistical builtins (range-expanding) --
+        "AVEDEV" => Some(builtin_avedev(args, interp, scope)),
         "VAR.S" => Some(builtin_var_s(args, interp, scope)),
         "VAR.P" => Some(builtin_var_p(args, interp, scope)),
         "STDEV.S" => Some(builtin_stdev_s(args, interp, scope)),
@@ -327,4 +328,10 @@ fn builtin_kurt(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope
     }
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::kurt(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `AVEDEV(range, ...)` — average absolute deviation. Range-expanding.
+fn builtin_avedev(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::builtin_avedev(&values).map_or_else(Value::Error, Value::Number)
 }
