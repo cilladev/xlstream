@@ -9,3 +9,8 @@ fn hex2dec_dec2hex() {
 fn complex() {
     run_conformance("engineering/complex.xlsx");
 }
+
+#[test]
+fn bitwise() {
+    run_conformance("engineering/bitwise.xlsx");
+}
