@@ -47,12 +47,177 @@ fn ln_gamma(x: f64) -> f64 {
     HALF_LN_2PI + (z + 0.5) * t.ln() - t + sum.ln()
 }
 
+use super::math::{bool_arg_ce, num_arg_ce};
+
 fn finite_or_num(v: f64) -> Result<f64, CellError> {
     if v.is_finite() {
         Ok(v)
     } else {
         Err(CellError::Num)
     }
+}
+
+/// Approximation of the error function erf(x).
+///
+/// Uses the Chebyshev fitting from Numerical Recipes. Max absolute error
+/// ~1.2e-7 — sufficient for Excel-compatible normal distribution at 1e-6
+/// conformance tolerance.
+fn erf_approx(x: f64) -> f64 {
+    let t = 1.0 / (1.0 + 0.5 * x.abs());
+    let tau = t
+        * (-x * x - 1.265_512_23
+            + t * (1.000_023_68
+                + t * (0.374_091_96
+                    + t * (0.096_784_18
+                        + t * (-0.186_288_06
+                            + t * (0.278_868_07
+                                + t * (-1.135_203_98
+                                    + t * (1.488_515_87
+                                        + t * (-0.822_152_23 + t * 0.170_872_77)))))))))
+            .exp();
+    if x >= 0.0 {
+        1.0 - tau
+    } else {
+        tau - 1.0
+    }
+}
+
+const SQRT_2: f64 = std::f64::consts::SQRT_2;
+const SQRT_2PI: f64 = 2.506_628_274_631_000_5;
+
+/// `NORM.DIST(x, mean, standard_dev, cumulative)` — normal distribution.
+///
+/// When `cumulative` is true, returns the CDF: P(X <= x).
+/// When false, returns the PDF: density at x.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Value)` if arg count != 4.
+/// Returns `Err(CellError::Num)` if `standard_dev` <= 0 or non-finite.
+/// Returns `Err(CellError)` if any arg is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_norm_dist;
+/// let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+/// let result = builtin_norm_dist(&args).unwrap();
+/// assert!((result - 0.5).abs() < 1e-6);
+/// ```
+pub fn builtin_norm_dist(args: &[Value]) -> Result<f64, CellError> {
+    if args.len() != 4 {
+        return Err(CellError::Value);
+    }
+    let x = num_arg_ce(args, 0)?;
+    let mean = num_arg_ce(args, 1)?;
+    let stdev = num_arg_ce(args, 2)?;
+    let cumulative = bool_arg_ce(args, 3)?;
+
+    if !stdev.is_finite() || stdev <= 0.0 {
+        return Err(CellError::Num);
+    }
+
+    let z = (x - mean) / stdev;
+    if cumulative {
+        finite_or_num(0.5 * (1.0 + erf_approx(z / SQRT_2)))
+    } else {
+        finite_or_num((-0.5 * z * z).exp() / (stdev * SQRT_2PI))
+    }
+}
+
+/// Standard normal inverse CDF (quantile function).
+///
+/// Uses Peter Acklam's rational approximation. Accurate to ~1e-9 across
+/// (0, 1), well within the 1e-6 conformance tolerance.
+#[allow(clippy::excessive_precision)]
+fn norm_inv_standard(p: f64) -> f64 {
+    const A: [f64; 6] = [
+        -3.969_683_028_665_376e1,
+        2.209_460_984_245_205e2,
+        -2.759_285_104_469_687e2,
+        1.383_577_518_672_690e2,
+        -3.066_479_806_614_716e1,
+        2.506_628_277_459_239e0,
+    ];
+    const B: [f64; 5] = [
+        -5.447_609_879_822_406e1,
+        1.615_858_368_580_409e2,
+        -1.556_989_798_598_866e2,
+        6.680_131_188_771_972e1,
+        -1.328_068_155_288_572e1,
+    ];
+    const C: [f64; 6] = [
+        -7.784_894_002_430_293e-3,
+        -3.223_964_580_411_365e-1,
+        -2.400_758_277_161_838e0,
+        -2.549_732_539_343_734e0,
+        4.374_664_141_464_968e0,
+        2.938_163_982_698_783e0,
+    ];
+    const D: [f64; 4] = [
+        7.784_695_709_041_462e-3,
+        3.224_671_290_700_398e-1,
+        2.445_134_137_142_996e0,
+        3.754_408_661_907_416e0,
+    ];
+
+    const P_LOW: f64 = 0.024_25;
+    const P_HIGH: f64 = 1.0 - P_LOW;
+
+    if p < P_LOW {
+        let q = (-2.0 * p.ln()).sqrt();
+        (((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5])
+            / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1.0)
+    } else if p <= P_HIGH {
+        let q = p - 0.5;
+        let r = q * q;
+        (((((A[0] * r + A[1]) * r + A[2]) * r + A[3]) * r + A[4]) * r + A[5]) * q
+            / (((((B[0] * r + B[1]) * r + B[2]) * r + B[3]) * r + B[4]) * r + 1.0)
+    } else {
+        let q = (-2.0 * (1.0 - p).ln()).sqrt();
+        -(((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5])
+            / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1.0)
+    }
+}
+
+/// `NORM.INV(probability, mean, standard_dev)` — inverse normal CDF.
+///
+/// Returns the value x such that `NORM.DIST(x, mean, stdev, TRUE) = probability`.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Value)` if arg count != 3.
+/// Returns `Err(CellError::Num)` if probability <= 0 or >= 1, stdev <= 0,
+/// or any numeric arg is non-finite.
+/// Returns `Err(CellError)` if any arg is an error.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::builtin_norm_inv;
+/// let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(1.0)];
+/// let result = builtin_norm_inv(&args).unwrap();
+/// assert!(result.abs() < 1e-9);
+/// ```
+pub fn builtin_norm_inv(args: &[Value]) -> Result<f64, CellError> {
+    if args.len() != 3 {
+        return Err(CellError::Value);
+    }
+    let p = num_arg_ce(args, 0)?;
+    let mean = num_arg_ce(args, 1)?;
+    let stdev = num_arg_ce(args, 2)?;
+
+    if !stdev.is_finite() || stdev <= 0.0 {
+        return Err(CellError::Num);
+    }
+    if !p.is_finite() || p <= 0.0 || p >= 1.0 {
+        return Err(CellError::Num);
+    }
+
+    let z = norm_inv_standard(p);
+    finite_or_num(mean + stdev * z)
 }
 
 /// Extract numeric values from a `&[Value]` slice using range semantics.
@@ -3358,5 +3523,239 @@ mod tests {
         let too_many =
             [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5), Value::Number(1.0)];
         assert_eq!(builtin_binom_inv(&too_many).unwrap_err(), CellError::Value);
+    }
+
+    // ===== erf_approx =====
+
+    // ===== NORM.DIST =====
+
+    #[test]
+    fn norm_dist_cdf_at_mean() {
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!((v - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_dist_cdf_positive_z() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!((v - 0.841_344_746_068_543).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_dist_cdf_negative_z() {
+        let args = [Value::Number(-1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!((v - 0.158_655_253_931_457).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_dist_pdf_at_mean() {
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
+        assert_close(builtin_norm_dist(&args).unwrap(), 0.398_942_280_401_433);
+    }
+
+    #[test]
+    fn norm_dist_pdf_symmetry() {
+        let left =
+            [Value::Number(-1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
+        let right =
+            [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
+        let l = builtin_norm_dist(&left).unwrap();
+        let r = builtin_norm_dist(&right).unwrap();
+        assert_close(l, r);
+    }
+
+    #[test]
+    fn norm_dist_nonstandard_mean_stdev() {
+        let args =
+            [Value::Number(42.0), Value::Number(40.0), Value::Number(1.5), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!((v - 0.908_788_780_274_132).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_dist_stdev_zero_returns_num() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(0.0), Value::Bool(true)];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_dist_stdev_negative_returns_num() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(-1.0), Value::Bool(true)];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_dist_large_z_cdf_near_one() {
+        let args = [Value::Number(5.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!(v > 0.999_999);
+    }
+
+    #[test]
+    fn norm_dist_large_negative_z_cdf_near_zero() {
+        let args = [Value::Number(-5.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!(v < 0.000_001);
+    }
+
+    #[test]
+    fn norm_dist_propagates_error() {
+        let args = [
+            Value::Error(CellError::Na),
+            Value::Number(0.0),
+            Value::Number(1.0),
+            Value::Bool(true),
+        ];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Na));
+    }
+
+    #[test]
+    fn norm_dist_wrong_arg_count_returns_value() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Value));
+    }
+
+    #[test]
+    fn norm_dist_cumulative_true_gives_cdf() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!(v > 0.5 && v < 1.0);
+    }
+
+    #[test]
+    fn norm_dist_cumulative_false_gives_pdf() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
+        let v = builtin_norm_dist(&args).unwrap();
+        assert!(v > 0.0 && v < 0.5);
+    }
+
+    #[test]
+    fn norm_dist_nan_input_returns_num() {
+        let args =
+            [Value::Number(f64::NAN), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
+        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+    }
+
+    // ===== NORM.INV =====
+
+    #[test]
+    fn norm_inv_median() {
+        let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(1.0)];
+        let v = builtin_norm_inv(&args).unwrap();
+        assert!(v.abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_inv_round_trip() {
+        let x = 1.5_f64;
+        let mean = 10.0;
+        let stdev = 3.0;
+        let cdf_args =
+            [Value::Number(x), Value::Number(mean), Value::Number(stdev), Value::Bool(true)];
+        let p = builtin_norm_dist(&cdf_args).unwrap();
+        let inv_args = [Value::Number(p), Value::Number(mean), Value::Number(stdev)];
+        let recovered = builtin_norm_inv(&inv_args).unwrap();
+        assert!((recovered - x).abs() < 1e-6, "round-trip failed: {recovered} != {x}");
+    }
+
+    #[test]
+    fn norm_inv_nonstandard_mean() {
+        let args = [Value::Number(0.5), Value::Number(100.0), Value::Number(15.0)];
+        let v = builtin_norm_inv(&args).unwrap();
+        assert!((v - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_inv_lower_tail() {
+        let args = [Value::Number(0.025), Value::Number(0.0), Value::Number(1.0)];
+        let v = builtin_norm_inv(&args).unwrap();
+        assert!((v - (-1.959_963_984_540_054)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_inv_upper_tail() {
+        let args = [Value::Number(0.975), Value::Number(0.0), Value::Number(1.0)];
+        let v = builtin_norm_inv(&args).unwrap();
+        assert!((v - 1.959_963_984_540_054).abs() < 1e-6);
+    }
+
+    #[test]
+    fn norm_inv_p_zero_returns_num() {
+        let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_inv_p_one_returns_num() {
+        let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_inv_p_negative_returns_num() {
+        let args = [Value::Number(-0.1), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_inv_p_above_one_returns_num() {
+        let args = [Value::Number(1.5), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_inv_stdev_zero_returns_num() {
+        let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(0.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_inv_stdev_negative_returns_num() {
+        let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(-1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+    }
+
+    #[test]
+    fn norm_inv_propagates_error() {
+        let args = [Value::Error(CellError::Na), Value::Number(0.0), Value::Number(1.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Na));
+    }
+
+    #[test]
+    fn norm_inv_wrong_arg_count_returns_value() {
+        let args = [Value::Number(0.5), Value::Number(0.0)];
+        assert_eq!(builtin_norm_inv(&args), Err(CellError::Value));
+    }
+
+    fn assert_erf_close(actual: f64, expected: f64) {
+        assert!((actual - expected).abs() < 1e-7, "expected {expected}, got {actual}");
+    }
+
+    #[test]
+    fn erf_zero_is_zero() {
+        assert_erf_close(erf_approx(0.0), 0.0);
+    }
+
+    #[test]
+    fn erf_positive() {
+        assert_erf_close(erf_approx(1.0), 0.842_700_792_949_715);
+    }
+
+    #[test]
+    fn erf_negative_is_antisymmetric() {
+        assert_erf_close(erf_approx(-1.0), -0.842_700_792_949_715);
+    }
+
+    #[test]
+    fn erf_large_positive_near_one() {
+        assert!((erf_approx(5.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn erf_large_negative_near_neg_one() {
+        assert!((erf_approx(-5.0) + 1.0).abs() < 1e-6);
     }
 }

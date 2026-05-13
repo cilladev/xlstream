@@ -273,6 +273,14 @@ pub(crate) fn dispatch(
             statistical::builtin_binom_inv(&eval_args(args, interp, scope))
                 .map_or_else(Value::Error, Value::Number),
         ),
+        "NORM.DIST" => Some(
+            statistical::builtin_norm_dist(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
+        "NORM.INV" => Some(
+            statistical::builtin_norm_inv(&eval_args(args, interp, scope))
+                .map_or_else(Value::Error, Value::Number),
+        ),
         _ => None,
     }
 }
