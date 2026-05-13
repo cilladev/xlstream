@@ -158,7 +158,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | F.TEST | . | yes | v0.3 | | | |
 | FISHER | . | yes | v0.3 | | | |
 | FISHERINV | . | yes | v0.3 | | | |
-| FORECAST.LINEAR | . | yes | v0.3 | | | |
+| FORECAST.LINEAR | x | yes | v0.3 | | | |
 | FREQUENCY | . | yes | v0.3 | | | |
 | GAMMA | . | yes | v0.3 | | | |
 | GAMMA.DIST | . | yes | v0.3 | | | |
@@ -170,7 +170,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | GROWTH | . | yes | v0.3 | | | |
 | HARMEAN | . | yes | v0.3 | | | |
 | HYPGEOM.DIST | . | yes | v0.3 | | | |
-| INTERCEPT | . | yes | v0.3 | | | |
+| INTERCEPT | x | yes | v0.3 | | | |
 | KURT | x | yes | v0.3 | | | |
 | LARGE | x | yes | v0.3 | | | |
 | LINEST | . | yes | v0.3 | | | |
@@ -205,10 +205,10 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | QUARTILE.INC | x | yes | v0.3 | | | |
 | RANK.AVG | x | yes | v0.3 | | | |
 | RANK.EQ | x | yes | v0.3 | | | |
-| RSQ | . | yes | v0.3 | | | |
+| RSQ | x | yes | v0.3 | | | |
 | SKEW | x | yes | v0.3 | | | |
 | SKEW.P | x | yes | v0.3 | | | |
-| SLOPE | . | yes | v0.3 | | | |
+| SLOPE | x | yes | v0.3 | | | |
 | SMALL | x | yes | v0.3 | | | |
 | STANDARDIZE | . | yes | v0.3 | | | |
 | STDEV.P | x | yes | v0.3 | | | |

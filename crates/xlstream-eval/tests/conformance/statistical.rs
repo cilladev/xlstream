@@ -79,3 +79,13 @@ fn correl() {
 fn covariance() {
     run_conformance("statistical/covariance.xlsx");
 }
+
+#[test]
+fn slope_intercept_rsq() {
+    run_conformance("statistical/slope_intercept_rsq.xlsx");
+}
+
+#[test]
+fn forecast_linear() {
+    run_conformance("statistical/forecast_linear.xlsx");
+}

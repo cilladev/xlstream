@@ -22,6 +22,8 @@ Semver.
 - NORM.S.DIST, NORM.S.INV standard normal distribution and inverse
 - CORREL Pearson correlation coefficient
 - COVARIANCE.P, COVARIANCE.S covariance (population and sample)
+- SLOPE, INTERCEPT, RSQ linear regression statistics
+- FORECAST.LINEAR linear prediction via regression
 
 ## [0.2.1] - 2026-05-11
 

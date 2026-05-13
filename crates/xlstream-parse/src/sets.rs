@@ -146,6 +146,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "RANK.EQ", "RANK.AVG",
     "CORREL",
     "COVARIANCE.P", "COVARIANCE.S",
+    "SLOPE", "INTERCEPT", "RSQ", "FORECAST.LINEAR",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
