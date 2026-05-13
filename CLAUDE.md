@@ -6,7 +6,7 @@
 
 `xlstream` is a **streaming Excel formula evaluation engine** written in Rust, with Python bindings. It reads `.xlsx` files row-by-row, evaluates formulas in a single (or two-pass) streaming traversal, and writes the results to a new `.xlsx` — all in bounded memory regardless of file size.
 
-**Design goal in one sentence:** evaluate large xlsx workbooks in seconds of wall-clock time with bounded memory regardless of file size.
+**Design goal in one sentence:** evaluate a 100k-row × 50-column xlsx in under 15 seconds of wall-clock time with peak RSS under 250 MB.
 
 We are not building a general-purpose spreadsheet engine. We are building the *fastest, leanest* engine for the subset of workloads where formulas are mostly **row-local** with **shared lookup sheets that fit in memory** and **whole-column aggregates** — which is ~90% of real business workbooks. Lookup sheets can have thousands to hundreds of thousands of rows; "fits in memory" is the real constraint, not "small."
 
