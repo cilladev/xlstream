@@ -320,6 +320,57 @@ pub fn collect_numerics(values: &[Value]) -> Result<Vec<f64>, CellError> {
     Ok(nums)
 }
 
+/// Collect paired numeric values from two equal-length arrays.
+///
+/// Iterates both arrays in lockstep. Includes a pair only when BOTH
+/// elements are numeric (`Number`, `Integer`, `Date`). Skips pairs
+/// where either element is `Text`, `Bool`, or `Empty`. Propagates
+/// errors immediately from either array.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError)` if any element is an error value.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::collect_paired_numerics;
+/// let xs = [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0)];
+/// let ys = [Value::Number(2.0), Value::Text("y".into()), Value::Number(4.0)];
+/// let pairs = collect_paired_numerics(&xs, &ys).unwrap();
+/// assert_eq!(pairs, vec![(1.0, 2.0), (3.0, 4.0)]);
+/// ```
+pub fn collect_paired_numerics(xs: &[Value], ys: &[Value]) -> Result<Vec<(f64, f64)>, CellError> {
+    if xs.len() != ys.len() {
+        return Err(CellError::Na);
+    }
+    let mut pairs = Vec::with_capacity(xs.len());
+    for (x, y) in xs.iter().zip(ys.iter()) {
+        if let Value::Error(e) = x {
+            return Err(*e);
+        }
+        if let Value::Error(e) = y {
+            return Err(*e);
+        }
+        if let (Some(xn), Some(yn)) = (to_numeric_opt(x), to_numeric_opt(y)) {
+            pairs.push((xn, yn));
+        }
+    }
+    Ok(pairs)
+}
+
+fn to_numeric_opt(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => Some(*n),
+        #[allow(clippy::cast_precision_loss)]
+        Value::Integer(i) => Some(*i as f64),
+        Value::Date(d) => Some(d.serial),
+        _ => None,
+    }
+}
+
 /// Compute the mean and variance of a `&[f64]` slice.
 ///
 /// `ddof` is the delta degrees of freedom: 0 for population, 1 for sample.
@@ -4002,5 +4053,75 @@ mod tests {
     #[test]
     fn norm_s_inv_nan_p_returns_num() {
         assert_eq!(builtin_norm_s_inv(&[Value::Number(f64::NAN)]).unwrap_err(), CellError::Num);
+    }
+
+    // ===== collect_paired_numerics =====
+
+    #[test]
+    fn collect_paired_numerics_basic() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(4.0), Value::Number(5.0), Value::Number(6.0)];
+        let pairs = collect_paired_numerics(&xs, &ys).unwrap();
+        assert_eq!(pairs, vec![(1.0, 4.0), (2.0, 5.0), (3.0, 6.0)]);
+    }
+
+    #[test]
+    fn collect_paired_numerics_skips_text_pairwise() {
+        let xs = [Value::Number(1.0), Value::Text("x".into()), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Text("y".into()), Value::Number(4.0)];
+        let pairs = collect_paired_numerics(&xs, &ys).unwrap();
+        assert_eq!(pairs, vec![(1.0, 2.0), (3.0, 4.0)]);
+    }
+
+    #[test]
+    fn collect_paired_numerics_skips_when_one_side_text() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(4.0), Value::Text("y".into()), Value::Number(6.0)];
+        let pairs = collect_paired_numerics(&xs, &ys).unwrap();
+        assert_eq!(pairs, vec![(1.0, 4.0), (3.0, 6.0)]);
+    }
+
+    #[test]
+    fn collect_paired_numerics_skips_bool_and_empty() {
+        let xs = [Value::Number(1.0), Value::Bool(true), Value::Number(3.0), Value::Empty];
+        let ys = [Value::Number(2.0), Value::Bool(false), Value::Number(4.0), Value::Empty];
+        let pairs = collect_paired_numerics(&xs, &ys).unwrap();
+        assert_eq!(pairs, vec![(1.0, 2.0), (3.0, 4.0)]);
+    }
+
+    #[test]
+    fn collect_paired_numerics_propagates_error_from_xs() {
+        let xs = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+        assert_eq!(collect_paired_numerics(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn collect_paired_numerics_propagates_error_from_ys() {
+        let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+        let ys = [Value::Number(2.0), Value::Error(CellError::Div0), Value::Number(6.0)];
+        assert_eq!(collect_paired_numerics(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn collect_paired_numerics_different_length_returns_na() {
+        let xs = [Value::Number(1.0), Value::Number(2.0)];
+        let ys = [Value::Number(3.0)];
+        assert_eq!(collect_paired_numerics(&xs, &ys).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn collect_paired_numerics_empty_arrays() {
+        let pairs = collect_paired_numerics(&[], &[]).unwrap();
+        assert!(pairs.is_empty());
+    }
+
+    #[test]
+    fn collect_paired_numerics_includes_integers_and_dates() {
+        let date = xlstream_core::ExcelDate { serial: 45000.0 };
+        let xs = [Value::Integer(10), Value::Date(date)];
+        let ys = [Value::Number(1.0), Value::Number(2.0)];
+        let pairs = collect_paired_numerics(&xs, &ys).unwrap();
+        assert_eq!(pairs, vec![(10.0, 1.0), (45000.0, 2.0)]);
     }
 }
