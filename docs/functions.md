@@ -172,7 +172,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | HYPGEOM.DIST | . | yes | v0.3 | | | |
 | INTERCEPT | . | yes | v0.3 | | | |
 | KURT | x | yes | v0.3 | | | |
-| LARGE | . | yes | v0.3 | | | Prelude: sorted |
+| LARGE | x | yes | v0.3 | | | |
 | LINEST | . | yes | v0.3 | | | |
 | LOGEST | . | yes | v0.3 | | | |
 | LOGNORM.DIST | . | yes | v0.3 | | | |
@@ -209,7 +209,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SKEW | x | yes | v0.3 | | | |
 | SKEW.P | x | yes | v0.3 | | | |
 | SLOPE | . | yes | v0.3 | | | |
-| SMALL | . | yes | v0.3 | | | |
+| SMALL | x | yes | v0.3 | | | |
 | STANDARDIZE | . | yes | v0.3 | | | |
 | STDEV.P | x | yes | v0.3 | | | |
 | STDEV.S | x | yes | v0.3 | | | |

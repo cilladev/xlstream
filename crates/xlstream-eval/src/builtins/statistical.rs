@@ -527,6 +527,77 @@ pub fn quartile_exc(values: &[Value], quart: i32) -> Result<f64, CellError> {
     percentile_exc(values, k)
 }
 
+/// Return the k-th value from a sorted data set.
+///
+/// Reuses [`sorted_numerics`] (collect, reject non-finite, sort
+/// ascending), validates k (1..=n), and indexes into the result.
+/// If `descending`, reverses before indexing.
+fn kth_value(values: &[Value], k_val: &Value, descending: bool) -> Result<f64, CellError> {
+    let mut nums = sorted_numerics(values)?;
+
+    let k_f64 = xlstream_core::coerce::to_number(k_val)?;
+    if !k_f64.is_finite() || k_f64 < 1.0 {
+        return Err(CellError::Num);
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let k = k_f64 as usize;
+    if k > nums.len() {
+        return Err(CellError::Num);
+    }
+
+    if descending {
+        nums.reverse();
+    }
+    Ok(nums[k - 1])
+}
+
+/// `LARGE` — k-th largest value from a data set.
+///
+/// Skips text, booleans, and empty cells. Propagates errors.
+/// k=1 returns the maximum.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Num)` if k < 1, k > n, or no numeric
+/// values exist.
+/// Returns `Err(CellError)` if any value is an error or k cannot
+/// be coerced.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::large;
+/// let vals = [Value::Number(3.0), Value::Number(1.0), Value::Number(5.0)];
+/// assert_eq!(large(&vals, &Value::Number(1.0)), Ok(5.0));
+/// ```
+pub fn large(values: &[Value], k_val: &Value) -> Result<f64, CellError> {
+    kth_value(values, k_val, true)
+}
+
+/// `SMALL` — k-th smallest value from a data set.
+///
+/// Skips text, booleans, and empty cells. Propagates errors.
+/// k=1 returns the minimum.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Num)` if k < 1, k > n, or no numeric
+/// values exist.
+/// Returns `Err(CellError)` if any value is an error or k cannot
+/// be coerced.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::small;
+/// let vals = [Value::Number(3.0), Value::Number(1.0), Value::Number(5.0)];
+/// assert_eq!(small(&vals, &Value::Number(1.0)), Ok(1.0));
+/// ```
+pub fn small(values: &[Value], k_val: &Value) -> Result<f64, CellError> {
+    kth_value(values, k_val, false)
+}
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -1449,5 +1520,145 @@ mod tests {
     fn quartile_exc_propagates_error() {
         let vals = [Value::Number(1.0), Value::Error(CellError::Na)];
         assert_eq!(quartile_exc(&vals, 1).unwrap_err(), CellError::Na);
+    }
+
+    // ===== LARGE =====
+
+    #[test]
+    fn large_k1_returns_max() {
+        let vals = n(&[3.0, 1.0, 4.0, 1.0, 5.0, 9.0]);
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap(), 9.0);
+    }
+
+    #[test]
+    fn large_k2_returns_second_largest() {
+        let vals = n(&[3.0, 1.0, 4.0, 1.0, 5.0, 9.0]);
+        assert_eq!(large(&vals, &Value::Number(2.0)).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn large_k_equals_n_returns_smallest() {
+        let vals = n(&[3.0, 1.0, 4.0, 1.0, 5.0, 9.0]);
+        assert_eq!(large(&vals, &Value::Number(6.0)).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn large_single_value() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn large_all_same() {
+        let vals = n(&[5.0, 5.0, 5.0]);
+        assert_eq!(large(&vals, &Value::Number(2.0)).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn large_k_exceeds_n_returns_num() {
+        let vals = n(&[1.0, 2.0, 3.0]);
+        assert_eq!(large(&vals, &Value::Number(4.0)).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn large_k_zero_returns_num() {
+        let vals = n(&[1.0, 2.0, 3.0]);
+        assert_eq!(large(&vals, &Value::Number(0.0)).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn large_k_negative_returns_num() {
+        let vals = n(&[1.0, 2.0, 3.0]);
+        assert_eq!(large(&vals, &Value::Number(-1.0)).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn large_k_fractional_truncates() {
+        let vals = n(&[1.0, 2.0, 3.0]);
+        assert_eq!(large(&vals, &Value::Number(1.9)).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn large_empty_returns_num() {
+        assert_eq!(large(&[], &Value::Number(1.0)).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn large_all_text_returns_num() {
+        let vals = [Value::Text("a".into()), Value::Text("b".into())];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn large_skips_text() {
+        let vals = [Value::Number(1.0), Value::Text("text".into()), Value::Number(3.0)];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn large_skips_bool() {
+        let vals = [Value::Number(1.0), Value::Bool(true), Value::Number(3.0)];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn large_propagates_error() {
+        let vals = [Value::Number(1.0), Value::Error(CellError::Na), Value::Number(3.0)];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn large_nan_input_returns_num() {
+        let vals = [Value::Number(f64::NAN), Value::Number(1.0)];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn large_infinity_input_returns_num() {
+        let vals = [Value::Number(f64::INFINITY), Value::Number(1.0)];
+        assert_eq!(large(&vals, &Value::Number(1.0)).unwrap_err(), CellError::Num);
+    }
+
+    // ===== SMALL =====
+
+    #[test]
+    fn small_k1_returns_min() {
+        let vals = n(&[3.0, 1.0, 4.0, 1.0, 5.0, 9.0]);
+        assert_eq!(small(&vals, &Value::Number(1.0)).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn small_k2_returns_duplicate() {
+        let vals = n(&[3.0, 1.0, 4.0, 1.0, 5.0, 9.0]);
+        assert_eq!(small(&vals, &Value::Number(2.0)).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn small_k3() {
+        let vals = n(&[3.0, 1.0, 4.0, 1.0, 5.0, 9.0]);
+        assert_eq!(small(&vals, &Value::Number(3.0)).unwrap(), 3.0);
+    }
+
+    #[test]
+    fn small_single_value() {
+        let vals = [Value::Number(5.0)];
+        assert_eq!(small(&vals, &Value::Number(1.0)).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn small_negative_values() {
+        let vals = n(&[-5.0, -3.0, -1.0]);
+        assert_eq!(small(&vals, &Value::Number(1.0)).unwrap(), -5.0);
+    }
+
+    #[test]
+    fn small_k_exceeds_n_returns_num() {
+        let vals = n(&[1.0, 2.0, 3.0]);
+        assert_eq!(small(&vals, &Value::Number(4.0)).unwrap_err(), CellError::Num);
+    }
+
+    /// Helper: build `Vec<Value::Number>` from f64 slice.
+    fn n(vals: &[f64]) -> Vec<Value> {
+        vals.iter().map(|&v| Value::Number(v)).collect()
     }
 }

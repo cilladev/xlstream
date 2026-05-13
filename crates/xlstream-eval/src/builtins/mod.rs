@@ -238,6 +238,8 @@ pub(crate) fn dispatch(
         "SUMPRODUCT" => Some(builtin_sumproduct(args, interp, scope)),
         // -- statistical builtins (range-expanding) --
         "AVEDEV" => Some(builtin_avedev(args, interp, scope)),
+        "LARGE" => Some(builtin_large_small(args, interp, scope, true)),
+        "SMALL" => Some(builtin_large_small(args, interp, scope, false)),
         "VAR.S" => Some(builtin_var_s(args, interp, scope)),
         "VAR.P" => Some(builtin_var_p(args, interp, scope)),
         "STDEV.S" => Some(builtin_stdev_s(args, interp, scope)),
@@ -430,4 +432,20 @@ fn builtin_quartile_exc(
     #[allow(clippy::cast_possible_truncation)]
     let quart = q as i32;
     statistical::quartile_exc(&values, quart).map_or_else(Value::Error, Value::Number)
+}
+
+/// `LARGE(array, k)` / `SMALL(array, k)` — k-th largest or smallest.
+fn builtin_large_small(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+    descending: bool,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let values: Vec<Value> = expand_range(args[0], interp, scope);
+    let k_val = interp.eval(args[1], scope);
+    let f = if descending { statistical::large } else { statistical::small };
+    f(&values, &k_val).map_or_else(Value::Error, Value::Number)
 }
