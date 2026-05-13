@@ -2,11 +2,12 @@
 //!
 //! AVEDEV, VAR.S/P, STDEV.S/P, SKEW, SKEW.P, KURT, MODE.SNGL,
 //! PERCENTILE.INC/EXC, QUARTILE.INC/EXC, RANK.EQ, RANK.AVG,
-//! EXPON.DIST.
+//! EXPON.DIST, POISSON.DIST.
 //! Common helpers: [`collect_numerics`] extracts `f64` values from a
 //! `&[Value]` slice, [`mean_and_variance`] computes mean and variance,
 //! and [`sorted_numerics`] collects, rejects non-finite, and sorts for
-//! percentile/quartile functions.
+//! percentile/quartile functions. Distribution functions use `ln_gamma`
+//! (Lanczos approximation) for log-space arithmetic.
 
 use std::collections::HashMap;
 
@@ -2123,6 +2124,72 @@ mod tests {
     fn poisson_wrong_arg_count() {
         let args = [Value::Number(3.0), Value::Number(5.0)];
         assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Value);
+    }
+
+    #[test]
+    fn poisson_nan_x_returns_num() {
+        let args = [Value::Number(f64::NAN), Value::Number(5.0), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn poisson_infinity_x_returns_num() {
+        let args = [Value::Number(f64::INFINITY), Value::Number(5.0), Value::Bool(true)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn poisson_nan_mean_returns_num() {
+        let args = [Value::Number(3.0), Value::Number(f64::NAN), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn poisson_infinity_mean_returns_num() {
+        let args = [Value::Number(3.0), Value::Number(f64::INFINITY), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn poisson_coerces_text_x_to_number() {
+        let args = [Value::Text("3".into()), Value::Number(5.0), Value::Bool(false)];
+        let expected = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
+        assert_close(
+            builtin_poisson_dist(&args).unwrap(),
+            builtin_poisson_dist(&expected).unwrap(),
+        );
+    }
+
+    #[test]
+    fn poisson_coerces_bool_mean_to_number() {
+        let args = [Value::Number(0.0), Value::Bool(true), Value::Bool(false)];
+        let expected = [Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
+        assert_close(
+            builtin_poisson_dist(&args).unwrap(),
+            builtin_poisson_dist(&expected).unwrap(),
+        );
+    }
+
+    #[test]
+    fn poisson_coerces_number_cumulative_to_bool() {
+        let args = [Value::Number(3.0), Value::Number(5.0), Value::Number(1.0)];
+        let expected = [Value::Number(3.0), Value::Number(5.0), Value::Bool(true)];
+        assert_close(
+            builtin_poisson_dist(&args).unwrap(),
+            builtin_poisson_dist(&expected).unwrap(),
+        );
+    }
+
+    #[test]
+    fn poisson_non_numeric_text_returns_value() {
+        let args = [Value::Text("abc".into()), Value::Number(5.0), Value::Bool(false)];
+        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Value);
+    }
+
+    #[test]
+    fn poisson_very_large_x_cdf_returns_one() {
+        let args = [Value::Number(1e7), Value::Number(100.0), Value::Bool(true)];
+        assert_close(builtin_poisson_dist(&args).unwrap(), 1.0);
     }
 
     // ===== ln_gamma =====

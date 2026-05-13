@@ -528,7 +528,7 @@ Old function names. Thin wrappers over modern equivalents (implemented in v0.3/v
 | NORMSINV | . | v0.5 | NORM.S.INV |
 | PERCENTILE | . | v0.5 | PERCENTILE.INC |
 | PERCENTRANK | . | v0.5 | PERCENTRANK.INC |
-| POISSON | . | v0.5 | POISSON.DIST |
+| POISSON | x | v0.3 | POISSON.DIST |
 | QUARTILE | . | v0.5 | QUARTILE.INC |
 | RANK | . | v0.5 | RANK.EQ |
 | STDEV | . | v0.5 | STDEV.S |
