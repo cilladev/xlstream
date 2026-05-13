@@ -402,6 +402,9 @@ fn builtin_quartile_inc(
         Ok(v) => v,
         Err(e) => return Value::Error(e),
     };
+    if !(0.0..=4.0).contains(&q) {
+        return Value::Error(CellError::Num);
+    }
     #[allow(clippy::cast_possible_truncation)]
     let quart = q as i32;
     statistical::quartile_inc(&values, quart).map_or_else(Value::Error, Value::Number)
@@ -421,6 +424,9 @@ fn builtin_quartile_exc(
         Ok(v) => v,
         Err(e) => return Value::Error(e),
     };
+    if !(1.0..=3.0).contains(&q) {
+        return Value::Error(CellError::Num);
+    }
     #[allow(clippy::cast_possible_truncation)]
     let quart = q as i32;
     statistical::quartile_exc(&values, quart).map_or_else(Value::Error, Value::Number)
