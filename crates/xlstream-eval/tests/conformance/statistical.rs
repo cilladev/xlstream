@@ -29,3 +29,8 @@ fn percentile() {
 fn quartile() {
     run_conformance("statistical/quartile.xlsx");
 }
+
+#[test]
+fn large_small() {
+    run_conformance("statistical/large_small.xlsx");
+}
