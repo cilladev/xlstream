@@ -13,6 +13,7 @@ Semver.
 - MODE.SNGL most frequent value (tie-broken by first occurrence)
 - PERCENTILE.INC, PERCENTILE.EXC, QUARTILE.INC, QUARTILE.EXC
 - LARGE, SMALL k-th largest/smallest value
+- RANK.EQ, RANK.AVG rank functions
 
 ## [0.2.1] - 2026-05-11
 

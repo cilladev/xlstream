@@ -203,8 +203,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | PROB | . | yes | v0.3 | | | |
 | QUARTILE.EXC | x | yes | v0.3 | | | |
 | QUARTILE.INC | x | yes | v0.3 | | | |
-| RANK.AVG | . | yes | v0.3 | | | |
-| RANK.EQ | . | yes | v0.3 | | | |
+| RANK.AVG | x | yes | v0.3 | | | |
+| RANK.EQ | x | yes | v0.3 | | | |
 | RSQ | . | yes | v0.3 | | | |
 | SKEW | x | yes | v0.3 | | | |
 | SKEW.P | x | yes | v0.3 | | | |

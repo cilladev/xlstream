@@ -14,6 +14,7 @@ fn skew_kurt() {
 fn avedev() {
     run_conformance("statistical/avedev.xlsx");
 }
+<<<<<<< HEAD
 
 #[test]
 fn mode_sngl() {
@@ -33,4 +34,9 @@ fn quartile() {
 #[test]
 fn large_small() {
     run_conformance("statistical/large_small.xlsx");
+}
+
+#[test]
+fn rank() {
+    run_conformance("statistical/rank.xlsx");
 }
