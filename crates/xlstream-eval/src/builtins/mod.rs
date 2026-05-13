@@ -246,6 +246,10 @@ pub(crate) fn dispatch(
         "SKEW.P" => Some(builtin_skew_p(args, interp, scope)),
         "KURT" => Some(builtin_kurt(args, interp, scope)),
         "MODE.SNGL" => Some(builtin_mode_sngl(args, interp, scope)),
+        "PERCENTILE.INC" => Some(builtin_percentile_inc(args, interp, scope)),
+        "PERCENTILE.EXC" => Some(builtin_percentile_exc(args, interp, scope)),
+        "QUARTILE.INC" => Some(builtin_quartile_inc(args, interp, scope)),
+        "QUARTILE.EXC" => Some(builtin_quartile_exc(args, interp, scope)),
         _ => None,
     }
 }
@@ -348,4 +352,76 @@ fn builtin_mode_sngl(
 fn builtin_avedev(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::builtin_avedev(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `PERCENTILE.INC(range, k)` — inclusive percentile. Two-arg: range + scalar.
+fn builtin_percentile_inc(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let values: Vec<Value> = expand_range(args[0], interp, scope);
+    let k = match xlstream_core::coerce::to_number(&interp.eval(args[1], scope)) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    statistical::percentile_inc(&values, k).map_or_else(Value::Error, Value::Number)
+}
+
+/// `PERCENTILE.EXC(range, k)` — exclusive percentile. Two-arg: range + scalar.
+fn builtin_percentile_exc(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let values: Vec<Value> = expand_range(args[0], interp, scope);
+    let k = match xlstream_core::coerce::to_number(&interp.eval(args[1], scope)) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    statistical::percentile_exc(&values, k).map_or_else(Value::Error, Value::Number)
+}
+
+/// `QUARTILE.INC(range, quart)` — inclusive quartile. Two-arg: range + scalar.
+fn builtin_quartile_inc(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let values: Vec<Value> = expand_range(args[0], interp, scope);
+    let q = match xlstream_core::coerce::to_number(&interp.eval(args[1], scope)) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    #[allow(clippy::cast_possible_truncation)]
+    let quart = q as i32;
+    statistical::quartile_inc(&values, quart).map_or_else(Value::Error, Value::Number)
+}
+
+/// `QUARTILE.EXC(range, quart)` — exclusive quartile. Two-arg: range + scalar.
+fn builtin_quartile_exc(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let values: Vec<Value> = expand_range(args[0], interp, scope);
+    let q = match xlstream_core::coerce::to_number(&interp.eval(args[1], scope)) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    #[allow(clippy::cast_possible_truncation)]
+    let quart = q as i32;
+    statistical::quartile_exc(&values, quart).map_or_else(Value::Error, Value::Number)
 }
