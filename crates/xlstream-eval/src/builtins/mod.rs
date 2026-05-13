@@ -290,6 +290,8 @@ pub(crate) fn dispatch(
                 .map_or_else(Value::Error, Value::Number),
         ),
         "CORREL" => Some(builtin_correl(args, interp, scope)),
+        "COVARIANCE.P" => Some(builtin_covariance_p(args, interp, scope)),
+        "COVARIANCE.S" => Some(builtin_covariance_s(args, interp, scope)),
         _ => None,
     }
 }
@@ -571,4 +573,32 @@ fn builtin_correl(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSco
     let xs = expand_range(args[0], interp, scope);
     let ys = expand_range(args[1], interp, scope);
     statistical::correl(&xs, &ys).map_or_else(Value::Error, Value::Number)
+}
+
+/// `COVARIANCE.P(array1, array2)` — population covariance. Two-arg range-expanding.
+fn builtin_covariance_p(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let xs = expand_range(args[0], interp, scope);
+    let ys = expand_range(args[1], interp, scope);
+    statistical::covariance_p(&xs, &ys).map_or_else(Value::Error, Value::Number)
+}
+
+/// `COVARIANCE.S(array1, array2)` — sample covariance. Two-arg range-expanding.
+fn builtin_covariance_s(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let xs = expand_range(args[0], interp, scope);
+    let ys = expand_range(args[1], interp, scope);
+    statistical::covariance_s(&xs, &ys).map_or_else(Value::Error, Value::Number)
 }
