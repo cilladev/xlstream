@@ -131,9 +131,9 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | AVEDEV | x | yes | v0.3 | | | |
 | BETA.DIST | . | yes | v0.3 | | | |
 | BETA.INV | . | yes | v0.3 | | | |
-| BINOM.DIST | . | yes | v0.3 | | | |
+| BINOM.DIST | x | yes | v0.3 | | | |
 | BINOM.DIST.RANGE | . | yes | v0.3 | | | |
-| BINOM.INV | . | yes | v0.3 | | | |
+| BINOM.INV | x | yes | v0.3 | | | |
 | CHISQ.DIST | . | yes | v0.3 | | | |
 | CHISQ.DIST.RT | . | yes | v0.3 | | | |
 | CHISQ.INV | . | yes | v0.3 | | | |
