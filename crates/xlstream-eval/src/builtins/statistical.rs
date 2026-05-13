@@ -3,6 +3,8 @@
 //! Aggregate stats (AVEDEV, VAR, STDEV, SKEW, KURT, MODE, PERCENTILE,
 //! QUARTILE, RANK) use [`collect_numerics`] and [`mean_and_variance`].
 //! Paired-array stats (CORREL, COVARIANCE) use [`collect_paired_numerics`].
+//! Regression functions (SLOPE, INTERCEPT, RSQ, FORECAST.LINEAR) use
+//! [`collect_paired_numerics`] and `linear_regression_sums`.
 //! Distribution functions (NORM.DIST, NORM.INV, T.DIST, EXPON.DIST,
 //! POISSON.DIST, BINOM.DIST) use `num_arg_ce` + `specfn` primitives.
 
@@ -1617,6 +1619,171 @@ pub fn builtin_binom_inv(args: &[Value]) -> Result<f64, CellError> {
     finite_or_num(n)
 }
 
+/// Intermediate sums for linear regression on paired (x, y) data.
+struct RegressionSums {
+    sum_xy: f64,
+    sum_xx: f64,
+    sum_yy: f64,
+    mean_x: f64,
+    mean_y: f64,
+}
+
+/// Compute regression sums from pre-collected numeric pairs.
+///
+/// Assumes pairs are produced by [`collect_paired_numerics`].
+/// Returns `None` if the input is empty.
+#[allow(clippy::similar_names)]
+fn linear_regression_sums(pairs: &[(f64, f64)]) -> Option<RegressionSums> {
+    let n = pairs.len();
+    if n == 0 {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let nf = n as f64;
+    let mean_x = pairs.iter().map(|(x, _)| x).sum::<f64>() / nf;
+    let mean_y = pairs.iter().map(|(_, y)| y).sum::<f64>() / nf;
+    let mut sum_xy = 0.0;
+    let mut sum_xx = 0.0;
+    let mut sum_yy = 0.0;
+    for &(x, y) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
+        sum_xy += dx * dy;
+        sum_xx += dx * dx;
+        sum_yy += dy * dy;
+    }
+    Some(RegressionSums { sum_xy, sum_xx, sum_yy, mean_x, mean_y })
+}
+
+/// `SLOPE(known_ys, known_xs)` — slope of the least-squares regression line.
+///
+/// Note: Excel argument order is Y first, X second.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain, or if
+/// `Sxx = 0` (constant X values).
+/// Returns `Err(CellError::Num)` if the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::slope;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!((slope(&ys, &xs).unwrap() - 2.0).abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn slope(known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs).ok_or(CellError::Div0)?;
+    if sums.sum_xx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    finite_or_num(sums.sum_xy / sums.sum_xx)
+}
+
+/// `INTERCEPT(known_ys, known_xs)` — y-intercept of the least-squares line.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain, or if
+/// `Sxx = 0` (constant X values).
+/// Returns `Err(CellError::Num)` if the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::intercept;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!(intercept(&ys, &xs).unwrap().abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn intercept(known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs).ok_or(CellError::Div0)?;
+    if sums.sum_xx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    let m = sums.sum_xy / sums.sum_xx;
+    finite_or_num(sums.mean_y - m * sums.mean_x)
+}
+
+/// `RSQ(known_ys, known_xs)` — coefficient of determination (R-squared).
+///
+/// Equals `CORREL(ys, xs)` squared.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length.
+/// Returns `Err(CellError::Div0)` if no numeric pairs remain, or if
+/// `Sxx * Syy = 0` (zero variance in either array).
+/// Returns `Err(CellError::Num)` if the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::rsq;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!((rsq(&ys, &xs).unwrap() - 1.0).abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn rsq(known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs).ok_or(CellError::Div0)?;
+    let denom = sums.sum_xx * sums.sum_yy;
+    if denom == 0.0 {
+        return Err(CellError::Div0);
+    }
+    finite_or_num(sums.sum_xy * sums.sum_xy / denom)
+}
+
+/// `FORECAST.LINEAR(x, known_ys, known_xs)` — predict Y from X via linear regression.
+///
+/// Returns `intercept + slope * x`.
+///
+/// # Errors
+///
+/// Returns `Err(CellError::Na)` if arrays differ in length or have no
+/// numeric pairs.
+/// Returns `Err(CellError::Div0)` if `Sxx = 0` (constant X values).
+/// Returns `Err(CellError::Num)` if `x` or the result is non-finite.
+/// Returns `Err(CellError)` if any element is an error variant.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_core::Value;
+/// use xlstream_eval::builtins::statistical::forecast_linear;
+/// let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
+/// let xs = [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)];
+/// assert!((forecast_linear(6.0, &ys, &xs).unwrap() - 12.0).abs() < 1e-9);
+/// ```
+#[allow(clippy::similar_names)]
+pub fn forecast_linear(x: f64, known_ys: &[Value], known_xs: &[Value]) -> Result<f64, CellError> {
+    if !x.is_finite() {
+        return Err(CellError::Num);
+    }
+    let pairs = collect_paired_numerics(known_xs, known_ys)?;
+    let sums = linear_regression_sums(&pairs).ok_or(CellError::Na)?;
+    if sums.sum_xx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    let m = sums.sum_xy / sums.sum_xx;
+    let b = sums.mean_y - m * sums.mean_x;
+    finite_or_num(b + m * x)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -1624,6 +1791,10 @@ mod tests {
     use xlstream_core::{CellError, Value};
 
     use super::*;
+
+    fn nv(v: f64) -> Value {
+        Value::Number(v)
+    }
 
     fn assert_close(actual: f64, expected: f64) {
         assert!((actual - expected).abs() < 1e-9, "expected {expected}, got {actual}");
@@ -4556,5 +4727,321 @@ mod tests {
         let xs = [Value::Number(1.0), Value::Text("x".into())];
         let ys = [Value::Number(2.0), Value::Number(4.0)];
         assert_eq!(covariance_s(&xs, &ys).unwrap_err(), CellError::Div0);
+    }
+
+    // ===== SLOPE =====
+
+    #[test]
+    fn slope_perfect_positive() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn slope_perfect_negative() {
+        let ys = [nv(10.0), nv(8.0), nv(6.0), nv(4.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(slope(&ys, &xs).unwrap(), -2.0);
+    }
+
+    #[test]
+    fn slope_imperfect_fit() {
+        let ys = [nv(3.0), nv(5.0), nv(4.0), nv(6.0), nv(8.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 1.1);
+    }
+
+    #[test]
+    fn slope_two_points() {
+        let ys = [nv(1.0), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn slope_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn slope_constant_y_returns_zero() {
+        let ys = [nv(5.0), nv(5.0), nv(5.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn slope_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn slope_empty_returns_div0() {
+        assert_eq!(slope(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn slope_text_skipped_pairwise() {
+        let ys = [nv(1.0), Value::Text("x".into()), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(2.0)];
+        assert_close(slope(&ys, &xs).unwrap(), 2.0);
+    }
+
+    #[test]
+    fn slope_error_propagation() {
+        let ys = [nv(1.0), Value::Error(CellError::Na), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(slope(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    // ===== INTERCEPT =====
+
+    #[test]
+    fn intercept_through_origin() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(intercept(&ys, &xs).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn intercept_offset() {
+        let ys = [nv(3.0), nv(5.0), nv(7.0), nv(9.0), nv(11.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(intercept(&ys, &xs).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn intercept_negative_slope() {
+        let ys = [
+            nv(20.0),
+            nv(18.0),
+            nv(16.0),
+            nv(14.0),
+            nv(12.0),
+            nv(10.0),
+            nv(8.0),
+            nv(6.0),
+            nv(4.0),
+            nv(2.0),
+        ];
+        let xs = [
+            nv(1.0),
+            nv(2.0),
+            nv(3.0),
+            nv(4.0),
+            nv(5.0),
+            nv(6.0),
+            nv(7.0),
+            nv(8.0),
+            nv(9.0),
+            nv(10.0),
+        ];
+        assert_close(intercept(&ys, &xs).unwrap(), 22.0);
+    }
+
+    #[test]
+    fn intercept_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn intercept_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn intercept_empty_returns_div0() {
+        assert_eq!(intercept(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn intercept_error_propagation() {
+        let ys = [nv(1.0), Value::Error(CellError::Na), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(intercept(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn intercept_text_skipped_pairwise() {
+        let ys = [nv(1.0), Value::Text("x".into()), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(2.0)];
+        assert_close(intercept(&ys, &xs).unwrap(), -1.0);
+    }
+
+    // ===== RSQ =====
+
+    #[test]
+    fn rsq_perfect_positive() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(rsq(&ys, &xs).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rsq_perfect_negative() {
+        let ys = [nv(10.0), nv(8.0), nv(6.0), nv(4.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(rsq(&ys, &xs).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn rsq_imperfect_fit() {
+        let ys = [nv(3.0), nv(5.0), nv(4.0), nv(6.0), nv(8.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(rsq(&ys, &xs).unwrap(), 0.817_567_567_567_567_6);
+    }
+
+    #[test]
+    fn rsq_constant_both_returns_div0() {
+        let ys = [nv(5.0), nv(5.0), nv(5.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_constant_y_returns_div0() {
+        let ys = [nv(5.0), nv(5.0), nv(5.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rsq_empty_returns_div0() {
+        assert_eq!(rsq(&[], &[]).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn rsq_error_propagation() {
+        let ys = [Value::Error(CellError::Na), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(rsq(&ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn rsq_text_skipped_pairwise() {
+        let ys = [nv(2.0), Value::Text("x".into()), nv(6.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0)];
+        assert_close(rsq(&ys, &xs).unwrap(), 1.0);
+    }
+
+    // ===== FORECAST.LINEAR =====
+
+    #[test]
+    fn forecast_linear_perfect_positive() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(forecast_linear(6.0, &ys, &xs).unwrap(), 12.0);
+    }
+
+    #[test]
+    fn forecast_linear_at_zero() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(forecast_linear(0.0, &ys, &xs).unwrap(), 0.0);
+    }
+
+    #[test]
+    fn forecast_linear_negative_slope() {
+        let ys = [nv(10.0), nv(8.0), nv(6.0), nv(4.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(forecast_linear(10.0, &ys, &xs).unwrap(), -8.0);
+    }
+
+    #[test]
+    fn forecast_linear_extrapolate_far() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(forecast_linear(100.0, &ys, &xs).unwrap(), 200.0);
+    }
+
+    #[test]
+    fn forecast_linear_negative_x() {
+        let ys = [nv(2.0), nv(4.0), nv(6.0), nv(8.0), nv(10.0)];
+        let xs = [nv(1.0), nv(2.0), nv(3.0), nv(4.0), nv(5.0)];
+        assert_close(forecast_linear(-1.0, &ys, &xs).unwrap(), -2.0);
+    }
+
+    #[test]
+    fn forecast_linear_two_pairs() {
+        let ys = [nv(1.0), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_close(forecast_linear(3.0, &ys, &xs).unwrap(), 5.0);
+    }
+
+    #[test]
+    fn forecast_linear_constant_x_returns_div0() {
+        let ys = [nv(1.0), nv(2.0), nv(3.0)];
+        let xs = [nv(5.0), nv(5.0), nv(5.0)];
+        assert_eq!(forecast_linear(5.0, &ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn forecast_linear_empty_returns_na() {
+        assert_eq!(forecast_linear(1.0, &[], &[]).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn forecast_linear_different_length_returns_na() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0)];
+        assert_eq!(forecast_linear(1.0, &ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn forecast_linear_nan_x_returns_num() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(forecast_linear(f64::NAN, &ys, &xs).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn forecast_linear_inf_x_returns_num() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(forecast_linear(f64::INFINITY, &ys, &xs).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn forecast_linear_error_propagation_ys() {
+        let ys = [Value::Error(CellError::Na), nv(2.0)];
+        let xs = [nv(1.0), nv(2.0)];
+        assert_eq!(forecast_linear(1.0, &ys, &xs).unwrap_err(), CellError::Na);
+    }
+
+    #[test]
+    fn forecast_linear_error_propagation_xs() {
+        let ys = [nv(1.0), nv(2.0)];
+        let xs = [nv(1.0), Value::Error(CellError::Div0)];
+        assert_eq!(forecast_linear(1.0, &ys, &xs).unwrap_err(), CellError::Div0);
+    }
+
+    #[test]
+    fn forecast_linear_text_skipped_pairwise() {
+        let ys = [nv(1.0), Value::Text("x".into()), nv(3.0)];
+        let xs = [nv(1.0), nv(2.0), nv(2.0)];
+        assert_close(forecast_linear(3.0, &ys, &xs).unwrap(), 5.0);
     }
 }

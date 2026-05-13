@@ -292,6 +292,10 @@ pub(crate) fn dispatch(
         "CORREL" => Some(builtin_correl(args, interp, scope)),
         "COVARIANCE.P" => Some(builtin_covariance_p(args, interp, scope)),
         "COVARIANCE.S" => Some(builtin_covariance_s(args, interp, scope)),
+        "SLOPE" => Some(builtin_slope(args, interp, scope)),
+        "INTERCEPT" => Some(builtin_intercept(args, interp, scope)),
+        "RSQ" => Some(builtin_rsq(args, interp, scope)),
+        "FORECAST.LINEAR" => Some(builtin_forecast_linear(args, interp, scope)),
         _ => None,
     }
 }
@@ -601,4 +605,56 @@ fn builtin_covariance_s(
     let xs = expand_range(args[0], interp, scope);
     let ys = expand_range(args[1], interp, scope);
     statistical::covariance_s(&xs, &ys).map_or_else(Value::Error, Value::Number)
+}
+
+/// `SLOPE(known_ys, known_xs)` — slope of least-squares regression line.
+fn builtin_slope(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let ys = expand_range(args[0], interp, scope);
+    let xs = expand_range(args[1], interp, scope);
+    statistical::slope(&ys, &xs).map_or_else(Value::Error, Value::Number)
+}
+
+/// `INTERCEPT(known_ys, known_xs)` — y-intercept of least-squares line.
+fn builtin_intercept(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let ys = expand_range(args[0], interp, scope);
+    let xs = expand_range(args[1], interp, scope);
+    statistical::intercept(&ys, &xs).map_or_else(Value::Error, Value::Number)
+}
+
+/// `RSQ(known_ys, known_xs)` — coefficient of determination.
+fn builtin_rsq(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let ys = expand_range(args[0], interp, scope);
+    let xs = expand_range(args[1], interp, scope);
+    statistical::rsq(&ys, &xs).map_or_else(Value::Error, Value::Number)
+}
+
+/// `FORECAST.LINEAR(x, known_ys, known_xs)` — predict Y from X.
+fn builtin_forecast_linear(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if args.len() != 3 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match coerce::to_number(&interp.eval(args[0], scope)) {
+        Ok(v) => v,
+        Err(e) => return Value::Error(e),
+    };
+    let ys = expand_range(args[1], interp, scope);
+    let xs = expand_range(args[2], interp, scope);
+    statistical::forecast_linear(x, &ys, &xs).map_or_else(Value::Error, Value::Number)
 }
