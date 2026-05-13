@@ -216,11 +216,11 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | STDEVA | . | yes | v0.3 | | | |
 | STDEVPA | . | yes | v0.3 | | | |
 | STEYX | . | yes | v0.3 | | | |
-| T.DIST | . | yes | v0.3 | | | |
-| T.DIST.2T | . | yes | v0.3 | | | |
-| T.DIST.RT | . | yes | v0.3 | | | |
-| T.INV | . | yes | v0.3 | | | |
-| T.INV.2T | . | yes | v0.3 | | | |
+| T.DIST | x | yes | v0.3 | | | |
+| T.DIST.2T | x | yes | v0.3 | | | |
+| T.DIST.RT | x | yes | v0.3 | | | |
+| T.INV | x | yes | v0.3 | | | |
+| T.INV.2T | x | yes | v0.3 | | | |
 | T.TEST | . | yes | v0.3 | | | |
 | TREND | . | yes | v0.3 | | | |
 | TRIMMEAN | . | yes | v0.3 | | | |

@@ -16,6 +16,7 @@ Semver.
 - RANK.EQ, RANK.AVG rank functions
 - EXPON.DIST exponential distribution (PDF and CDF)
 - POISSON.DIST Poisson probability distribution (PMF and CDF)
+- T.DIST, T.DIST.RT, T.DIST.2T, T.INV, T.INV.2T Student's t-distribution functions
 
 ## [0.2.1] - 2026-05-11
 
