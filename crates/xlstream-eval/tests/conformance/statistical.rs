@@ -39,3 +39,8 @@ fn large_small() {
 fn rank() {
     run_conformance("statistical/rank.xlsx");
 }
+
+#[test]
+fn expon_dist() {
+    run_conformance("statistical/expon_dist.xlsx");
+}
