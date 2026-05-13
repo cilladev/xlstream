@@ -67,8 +67,8 @@ All row-local. Implement in `builtins/engineering.rs`.
 - [x] **COMPLEX / IMREAL / IMAGINARY** — complex number create/extract. ~0.5 day.
 
 ### Comparison / special
-- [ ] **DELTA / GESTEP** — Kronecker delta, unit step. ~1 hour.
-- [ ] **ERF / ERFC** — error function and complement. ~2 hours.
+- [x] **DELTA / GESTEP** — Kronecker delta, unit step. ~1 hour.
+- [x] **ERF / ERFC** — error function and complement. ~2 hours.
 - [ ] **CONVERT** — unit conversion (length, weight, temperature, etc.). ~1 day.
 - [x] **BITAND / BITOR / BITXOR / BITLSHIFT / BITRSHIFT** — bitwise operations. ~2 hours.
 
