@@ -34,3 +34,13 @@ fn cross_base() {
 fn base() {
     run_conformance("engineering/base.xlsx");
 }
+
+#[test]
+fn delta_gestep() {
+    run_conformance("engineering/delta_gestep.xlsx");
+}
+
+#[test]
+fn erf_erfc() {
+    run_conformance("engineering/erf_erfc.xlsx");
+}
