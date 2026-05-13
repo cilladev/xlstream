@@ -327,6 +327,9 @@ pub fn collect_numerics(values: &[Value]) -> Result<Vec<f64>, CellError> {
 /// where either element is `Text`, `Bool`, or `Empty`. Propagates
 /// errors immediately from either array.
 ///
+/// NaN and Infinity values inside `Number` variants pass through
+/// unchanged — callers must guard non-finite results.
+///
 /// # Errors
 ///
 /// Returns `Err(CellError::Na)` if arrays differ in length.
@@ -367,7 +370,7 @@ fn to_numeric_opt(v: &Value) -> Option<f64> {
         #[allow(clippy::cast_precision_loss)]
         Value::Integer(i) => Some(*i as f64),
         Value::Date(d) => Some(d.serial),
-        _ => None,
+        Value::Text(_) | Value::Bool(_) | Value::Empty | Value::Error(_) => None,
     }
 }
 
@@ -379,10 +382,12 @@ fn to_numeric_opt(v: &Value) -> Option<f64> {
 ///
 /// # Errors
 ///
-/// Returns `Err(CellError::Na)` if arrays differ in length or have
-/// fewer than 1 numeric pair.
+/// Returns `Err(CellError::Na)` if arrays differ in length or no
+/// numeric pairs remain after filtering.
 /// Returns `Err(CellError::Div0)` if either array has zero variance
 /// (constant values).
+/// Returns `Err(CellError::Num)` if intermediate sums overflow or
+/// the result is non-finite.
 /// Returns `Err(CellError)` if any element is an error value.
 ///
 /// # Examples
@@ -416,6 +421,9 @@ pub fn correl(xs: &[Value], ys: &[Value]) -> Result<f64, CellError> {
         sum_sq_y += dy * dy;
     }
 
+    if !sum_sq_x.is_finite() || !sum_sq_y.is_finite() || !sum_cross.is_finite() {
+        return Err(CellError::Num);
+    }
     let denom = (sum_sq_x * sum_sq_y).sqrt();
     if denom <= 0.0 {
         return Err(CellError::Div0);
@@ -4303,6 +4311,21 @@ mod tests {
     fn correl_large_values_stability() {
         let xs = [Value::Number(1e10), Value::Number(1e10 + 1.0), Value::Number(1e10 + 2.0)];
         let ys = [Value::Number(1e10), Value::Number(1e10 + 1.0), Value::Number(1e10 + 2.0)];
+        assert_close(correl(&xs, &ys).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn correl_overflow_returns_num() {
+        let xs = [Value::Number(1e154), Value::Number(2e154), Value::Number(3e154)];
+        let ys = [Value::Number(1e154), Value::Number(3e154), Value::Number(2e154)];
+        assert_eq!(correl(&xs, &ys).unwrap_err(), CellError::Num);
+    }
+
+    #[test]
+    fn correl_integers_and_dates_coerce_to_numeric() {
+        let date = xlstream_core::ExcelDate { serial: 3.0 };
+        let xs = [Value::Integer(1), Value::Integer(2), Value::Date(date)];
+        let ys = [Value::Number(2.0), Value::Number(4.0), Value::Number(6.0)];
         assert_close(correl(&xs, &ys).unwrap(), 1.0);
     }
 }
