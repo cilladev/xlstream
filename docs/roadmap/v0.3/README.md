@@ -64,7 +64,7 @@ All row-local. Implement in `builtins/engineering.rs`.
 - [ ] **BASE** — convert number to text in given base. ~2 hours.
 
 ### Complex numbers
-- [ ] **COMPLEX / IMREAL / IMAGINARY** — complex number create/extract. ~0.5 day.
+- [x] **COMPLEX / IMREAL / IMAGINARY** — complex number create/extract. ~0.5 day.
 
 ### Comparison / special
 - [ ] **DELTA / GESTEP** — Kronecker delta, unit step. ~1 hour.
