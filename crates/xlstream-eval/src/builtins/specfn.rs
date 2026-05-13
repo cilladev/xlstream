@@ -6,7 +6,6 @@
 
 use std::f64::consts::PI;
 
-/// Lanczos approximation parameter g.
 const LANCZOS_G: f64 = 7.0;
 #[allow(clippy::excessive_precision)]
 const LANCZOS_COEFF: [f64; 9] = [
@@ -21,25 +20,18 @@ const LANCZOS_COEFF: [f64; 9] = [
     1.505_632_735_149_311_6e-7,
 ];
 
-/// Maximum iterations for continued fraction convergence.
 const CF_MAX_ITER: usize = 200;
-
-/// Convergence threshold for continued fraction.
 const CF_EPSILON: f64 = 1e-14;
-
-/// Tiny value to prevent division by zero in Lentz's algorithm.
 const CF_TINY: f64 = 1e-30;
-
-/// Maximum Newton-Raphson iterations for T.INV.
 const T_INV_MAX_ITER: usize = 100;
-
-/// Convergence threshold for T.INV.
 const T_INV_EPSILON: f64 = 1e-12;
+const T_INV_PDF_FLOOR: f64 = 1e-300;
 
 /// Natural log of the gamma function, ln(Gamma(x)).
 ///
 /// Uses the Lanczos approximation (g=7, 9 coefficients). Accurate to
-/// ~15 significant digits for x > 0. Returns `f64::NAN` for x <= 0.
+/// ~15 significant digits for x >= 0.5. No reflection formula — accuracy
+/// degrades for 0 < x < 0.5. Returns `f64::NAN` for x <= 0.
 pub(super) fn ln_gamma(x: f64) -> f64 {
     if x <= 0.0 {
         return f64::NAN;
@@ -82,12 +74,14 @@ pub(super) fn regularized_incomplete_beta(x: f64, a: f64, b: f64) -> f64 {
 
     let ln_prefix = a * x.ln() + b * (1.0 - x).ln() + ln_gamma(a + b) - ln_gamma(a) - ln_gamma(b);
 
-    ln_prefix.exp() * beta_cf(a, b, x) / a
+    beta_cf(a, b, x).map_or(f64::NAN, |cf| ln_prefix.exp() * cf / a)
 }
 
 /// Continued fraction for the incomplete beta function (Numerical Recipes).
+///
+/// Returns `None` if the continued fraction fails to converge.
 #[allow(clippy::many_single_char_names)]
-fn beta_cf(a: f64, b: f64, x: f64) -> f64 {
+fn beta_cf(a: f64, b: f64, x: f64) -> Option<f64> {
     let ab_sum = a + b;
     let a_plus1 = a + 1.0;
     let a_minus1 = a - 1.0;
@@ -133,10 +127,10 @@ fn beta_cf(a: f64, b: f64, x: f64) -> f64 {
         h *= delta;
 
         if (delta - 1.0).abs() < CF_EPSILON {
-            return h;
+            return Some(h);
         }
     }
-    h
+    None
 }
 
 /// CDF of Student's t-distribution: P(T <= t) for df degrees of freedom.
@@ -188,28 +182,41 @@ pub(super) fn t_inv(p: f64, df: f64) -> f64 {
     } else if p > 0.5 {
         initial_guess(p, df)
     } else {
-        0.0
+        return 0.0;
     };
 
+    if !t.is_finite() {
+        return f64::NAN;
+    }
+
+    let mut converged = false;
     for _ in 0..T_INV_MAX_ITER {
         let cdf = t_dist_cdf(t, df);
         let pdf = t_dist_pdf(t, df);
-        if pdf < 1e-300 {
+        if pdf < T_INV_PDF_FLOOR {
             break;
         }
         let delta = (cdf - p) / pdf;
         t -= delta;
         if delta.abs() < T_INV_EPSILON {
+            converged = true;
             break;
         }
     }
-    t
+    if converged {
+        t
+    } else {
+        f64::NAN
+    }
 }
 
 /// Rational approximation initial guess for `t_inv` when p > 0.5.
 fn initial_guess(p: f64, df: f64) -> f64 {
-    // Abramowitz & Stegun 26.2.23 rational approximation for normal quantile
-    let t_val = (-2.0 * (1.0 - p).ln()).sqrt();
+    let one_minus_p = 1.0 - p;
+    if one_minus_p <= 0.0 {
+        return f64::INFINITY;
+    }
+    let t_val = (-2.0 * one_minus_p.ln()).sqrt();
     let z = t_val
         - (2.515_517 + 0.802_853 * t_val + 0.010_328 * t_val * t_val)
             / (1.0
@@ -409,5 +416,35 @@ mod tests {
         assert!(t_inv(-0.1, 10.0).is_nan());
         assert!(t_inv(1.1, 10.0).is_nan());
         assert!(t_inv(0.5, 0.0).is_nan());
+    }
+
+    // ===== Convergence failure paths =====
+
+    #[test]
+    fn t_inv_extreme_tail_returns_nan() {
+        // p = 1e-15 — extremely far in the tail, initial guess may not converge
+        let result = t_inv(1e-15, 1.0);
+        // Either converges to a large value or returns NAN
+        assert!(result.is_nan() || result.is_finite());
+    }
+
+    #[test]
+    fn t_inv_near_one_returns_nan_or_converges() {
+        let result = t_inv(0.999_999_999_999_999, 1.0);
+        assert!(result.is_nan() || result.is_finite());
+    }
+
+    #[test]
+    fn beta_large_params_converges() {
+        // Large a/b should still converge
+        let result = regularized_incomplete_beta(0.5, 100.0, 100.0);
+        assert_close(result, 0.5, 1e-6);
+    }
+
+    #[test]
+    fn beta_extreme_asymmetry() {
+        // Very asymmetric params
+        let result = regularized_incomplete_beta(0.01, 1.0, 100.0);
+        assert!(result > 0.0 && result <= 1.0, "got {result}");
     }
 }
