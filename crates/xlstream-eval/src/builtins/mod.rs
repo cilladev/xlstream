@@ -236,6 +236,11 @@ pub(crate) fn dispatch(
         "RATE" => Some(financial::builtin_rate(&eval_args(args, interp, scope))),
         // -- range-expanding aggregate --
         "SUMPRODUCT" => Some(builtin_sumproduct(args, interp, scope)),
+        // -- statistical builtins (range-expanding) --
+        "VAR.S" => Some(builtin_var_s(args, interp, scope)),
+        "VAR.P" => Some(builtin_var_p(args, interp, scope)),
+        "STDEV.S" => Some(builtin_stdev_s(args, interp, scope)),
+        "STDEV.P" => Some(builtin_stdev_p(args, interp, scope)),
         _ => None,
     }
 }
@@ -256,4 +261,28 @@ fn builtin_sumproduct(
     let arrays: Vec<Vec<Value>> = args.iter().map(|&a| expand_range(a, interp, scope)).collect();
     let slices: Vec<&[Value]> = arrays.iter().map(Vec::as_slice).collect();
     aggregate::sumproduct(&slices).unwrap_or_else(Value::Error)
+}
+
+/// `VAR.S(range, ...)` — sample variance. Range-expanding.
+fn builtin_var_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::var_s(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `VAR.P(range, ...)` — population variance. Range-expanding.
+fn builtin_var_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::var_p(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `STDEV.S(range, ...)` — sample standard deviation. Range-expanding.
+fn builtin_stdev_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::stdev_s(&values).map_or_else(Value::Error, Value::Number)
+}
+
+/// `STDEV.P(range, ...)` — population standard deviation. Range-expanding.
+fn builtin_stdev_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+    let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
+    statistical::stdev_p(&values).map_or_else(Value::Error, Value::Number)
 }
