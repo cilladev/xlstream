@@ -7,6 +7,8 @@ mod conformance;
 mod aggregate;
 #[path = "conformance/date.rs"]
 mod date;
+#[path = "conformance/engineering.rs"]
+mod engineering;
 #[path = "conformance/financial.rs"]
 mod financial;
 #[path = "conformance/info.rs"]
