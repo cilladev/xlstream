@@ -16,7 +16,7 @@ Unit conversion — converts a number from one measurement unit to another.
 =CONVERT(1, "gal", "l")         → 3.78541178
 =CONVERT(100, "km", "mi")       → 62.13711922
 =CONVERT(1, "day", "hr")        → 24
-=CONVERT(1024, "byte", "kbyte") → 1          (SI prefix on "byte")
+=CONVERT(1024, "byte", "kbyte") → 1.024      (SI prefix "k" = 1000)
 =CONVERT(1, "m", "km")          → 0.001      (SI prefix on "m")
 ```
 
@@ -330,7 +330,7 @@ Temperature units do NOT accept SI prefixes. An attempt like `"kC"` → `#N/A`.
 - `convert(1.0, "MW", "W")` → 1000000.0
 
 **Binary prefixes:**
-- `convert(1024.0, "byte", "kbyte")` → 1.0
+- `convert(1024.0, "byte", "kbyte")` → 1.024 (SI prefix "k" = 1000, not 1024)
 - `convert(1.0, "Mibyte", "byte")` → 1048576.0
 - `convert(1.0, "Gibit", "bit")` → 1073741824.0
 
@@ -383,7 +383,7 @@ Basic conversions (6):
 2. `=CONVERT(A3, B3, C3)` → ~62.137119 (100 km → mi)
 3. `=CONVERT(A4, B4, C4)` → 20 (68 F → C)
 4. `=CONVERT(A5, B5, C5)` → 32 (0 C → F)
-5. `=CONVERT(A6, B6, C6)` → 1 (1024 byte → kbyte)
+5. `=CONVERT(A6, B6, C6)` → 1.024 (1024 byte → kbyte, SI "k" = 1000)
 6. `=CONVERT(A7, B7, C7)` → 42 (42 m → m, same unit)
 
 Temperature (5):
