@@ -877,7 +877,7 @@ pub fn percentile_exc(values: &[Value], k: f64) -> Result<f64, CellError> {
     let nf = n as f64;
     let lower = 1.0 / (nf + 1.0);
     let upper = nf / (nf + 1.0);
-    if lower >= upper || k < lower || k > upper {
+    if k < lower || k > upper {
         return Err(CellError::Num);
     }
     let rank = k * (nf + 1.0);
