@@ -96,10 +96,13 @@ pub fn run_conformance_with_options(
         std::collections::HashSet::new();
     for sheet_name in &sheet_names {
         if let Ok(formula_range) = expected_wb.worksheet_formula(sheet_name) {
+            let (start_row, start_col) = formula_range.start().unwrap_or((0, 0));
             for (row_idx, row) in formula_range.rows().enumerate() {
                 for (col_idx, cell) in row.iter().enumerate() {
                     if !cell.is_empty() {
-                        formula_cells.insert((sheet_name.clone(), row_idx as u32, col_idx as u32));
+                        let abs_row = start_row + row_idx as u32;
+                        let abs_col = start_col + col_idx as u32;
+                        formula_cells.insert((sheet_name.clone(), abs_row, abs_col));
                     }
                 }
             }
@@ -111,7 +114,10 @@ pub fn run_conformance_with_options(
 
     let mut actual_wb: Xlsx<_> = open_workbook(output.path()).unwrap();
 
+    eprintln!("[conformance] {fixture_rel_path}: {} formula cells found", formula_cells.len());
+
     let mut mismatches = Vec::new();
+    let mut compared = 0u32;
 
     for sheet_name in &sheet_names {
         let expected_range = match expected_wb.worksheet_range(sheet_name) {
@@ -140,6 +146,14 @@ pub fn run_conformance_with_options(
                 if !formula_cells.contains(&(sheet_name.clone(), row_idx as u32, col_idx as u32)) {
                     continue;
                 }
+                compared += 1;
+                eprintln!(
+                    "  [{sheet_name}] {}{}: expected {:?}  actual {:?}",
+                    col_letter(col_idx),
+                    row_idx + 1,
+                    exp_row[col_idx],
+                    act_row[col_idx],
+                );
                 if !values_match(&exp_row[col_idx], &act_row[col_idx]) {
                     mismatches.push(format!(
                         "  [{sheet_name}] {}{}: expected {:?}  actual {:?}",
@@ -152,6 +166,16 @@ pub fn run_conformance_with_options(
             }
         }
     }
+
+    eprintln!(
+        "[conformance] {fixture_rel_path}: {compared} cells compared, {} mismatches",
+        mismatches.len()
+    );
+
+    assert!(
+        compared > 0,
+        "no formula cells compared in {fixture_rel_path} — fixture may have no formulas or index alignment is broken"
+    );
 
     let count = mismatches.len();
     let detail = mismatches.join("\n");
