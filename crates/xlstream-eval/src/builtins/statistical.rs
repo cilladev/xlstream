@@ -646,6 +646,9 @@ pub fn skew(values: &[Value]) -> Result<f64, CellError> {
 /// ```
 pub fn skew_p(values: &[Value]) -> Result<f64, CellError> {
     let nums = collect_numerics(values)?;
+    if nums.len() < 3 {
+        return Err(CellError::Div0);
+    }
     let (mean, variance) = mean_and_variance(&nums, 0).ok_or(CellError::Div0)?;
     let stdev = variance.sqrt();
     if stdev == 0.0 {
