@@ -409,6 +409,9 @@ pub(crate) fn builtin_dec2hex(args: &[Value]) -> Value {
     if args.is_empty() || args.len() > 2 {
         return Value::Error(CellError::Value);
     }
+    if matches!(args[0], Value::Bool(_)) {
+        return Value::Error(CellError::Value);
+    }
     let num = match coerce::to_number(&args[0]) {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
@@ -682,6 +685,9 @@ pub(crate) fn builtin_dec2bin(args: &[Value]) -> Value {
     if args.is_empty() || args.len() > 2 {
         return Value::Error(CellError::Value);
     }
+    if matches!(args[0], Value::Bool(_)) {
+        return Value::Error(CellError::Value);
+    }
     let num = match coerce::to_number(&args[0]) {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
@@ -734,6 +740,9 @@ pub(crate) fn builtin_oct2dec(args: &[Value]) -> Value {
 /// `#VALUE!` for wrong arity. `#NUM!` for out-of-range, invalid places.
 pub(crate) fn builtin_dec2oct(args: &[Value]) -> Value {
     if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    if matches!(args[0], Value::Bool(_)) {
         return Value::Error(CellError::Value);
     }
     let num = match coerce::to_number(&args[0]) {
