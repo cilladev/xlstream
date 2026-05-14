@@ -44,3 +44,8 @@ fn delta_gestep() {
 fn erf_erfc() {
     run_conformance("engineering/erf_erfc.xlsx");
 }
+
+#[test]
+fn convert() {
+    run_conformance("engineering/convert.xlsx");
+}
