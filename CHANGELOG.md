@@ -6,6 +6,7 @@ Semver.
 ## [Unreleased]
 
 ### Added
+- CONVERT unit conversion (~100 base units, SI/binary prefixes, 13 categories)
 - DELTA, GESTEP Kronecker delta and unit step
 - ERF, ERFC, ERF.PRECISE, ERFC.PRECISE error function and complement
 - BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT bitwise operations (48-bit non-negative integers)
