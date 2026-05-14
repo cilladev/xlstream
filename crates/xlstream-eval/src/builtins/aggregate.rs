@@ -369,7 +369,12 @@ pub fn sumproduct(arrays: &[&[Value]]) -> Result<Value, CellError> {
     for i in 0..len {
         let mut product = 1.0_f64;
         for arr in arrays {
-            product *= xlstream_core::coerce::to_number(&arr[i])?;
+            let n = match &arr[i] {
+                Value::Bool(_) | Value::Text(_) | Value::Empty => 0.0,
+                Value::Error(e) => return Err(*e),
+                v => xlstream_core::coerce::to_number(v)?,
+            };
+            product *= n;
         }
         total += product;
     }
@@ -738,10 +743,10 @@ mod tests {
     }
 
     #[test]
-    fn sumproduct_bool_coerces_to_numeric() {
+    fn sumproduct_bool_treated_as_zero() {
         let a = [Value::Bool(true), Value::Bool(false), Value::Bool(true)];
         let b = [Value::Number(10.0), Value::Number(20.0), Value::Number(30.0)];
-        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap(), Value::Number(40.0));
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap(), Value::Number(0.0));
     }
 
     #[test]
@@ -759,9 +764,9 @@ mod tests {
     }
 
     #[test]
-    fn sumproduct_text_returns_value_error() {
+    fn sumproduct_text_treated_as_zero() {
         let a = [Value::Number(1.0), Value::Text("x".into())];
         let b = [Value::Number(2.0), Value::Number(3.0)];
-        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap_err(), CellError::Value);
+        assert_eq!(sumproduct(&[&a[..], &b[..]]).unwrap(), Value::Number(2.0));
     }
 }
