@@ -103,8 +103,20 @@ pub(crate) fn builtin_roundup(args: &[Value]) -> Value {
     let Some(d) = to_decimal(x) else {
         return Value::Number(x);
     };
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let dp = digits.round().max(0.0) as u32;
+    #[allow(clippy::cast_possible_truncation)]
+    let di = digits.round() as i32;
+    if di < 0 {
+        #[allow(clippy::cast_sign_loss)]
+        let factor = Decimal::from(10i64.pow((-di) as u32));
+        let rounded = if x >= 0.0 {
+            (d / factor).round_dp_with_strategy(0, RoundingStrategy::AwayFromZero) * factor
+        } else {
+            -(-d / factor).round_dp_with_strategy(0, RoundingStrategy::AwayFromZero) * factor
+        };
+        return Value::Number(rounded.to_f64().unwrap_or(x));
+    }
+    #[allow(clippy::cast_sign_loss)]
+    let dp = di as u32;
     let rounded = if x >= 0.0 {
         d.round_dp_with_strategy(dp, RoundingStrategy::AwayFromZero)
     } else {
@@ -129,8 +141,16 @@ pub(crate) fn builtin_rounddown(args: &[Value]) -> Value {
     let Some(d) = to_decimal(x) else {
         return Value::Number(x);
     };
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let dp = digits.round().max(0.0) as u32;
+    #[allow(clippy::cast_possible_truncation)]
+    let di = digits.round() as i32;
+    if di < 0 {
+        #[allow(clippy::cast_sign_loss)]
+        let factor = Decimal::from(10i64.pow((-di) as u32));
+        let rounded = (d / factor).round_dp_with_strategy(0, RoundingStrategy::ToZero) * factor;
+        return Value::Number(rounded.to_f64().unwrap_or(x));
+    }
+    #[allow(clippy::cast_sign_loss)]
+    let dp = di as u32;
     let rounded = d.round_dp_with_strategy(dp, RoundingStrategy::ToZero);
     Value::Number(rounded.to_f64().unwrap_or(x))
 }
