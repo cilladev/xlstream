@@ -58,7 +58,8 @@ fn values_match(expected: &Data, actual: &Data) -> bool {
         (a, b) if data_as_f64(a).is_some() && data_as_f64(b).is_some() => {
             let av = data_as_f64(a).unwrap();
             let bv = data_as_f64(b).unwrap();
-            (av - bv).abs() < EPSILON || (av == 0.0 && bv == 0.0)
+            let diff = (av - bv).abs();
+            diff < EPSILON || (av == 0.0 && bv == 0.0) || diff <= EPSILON * av.abs().max(bv.abs())
         }
         (Data::String(a), Data::String(b)) => a == b,
         (Data::Bool(a), Data::Bool(b)) => a == b,

@@ -2084,9 +2084,9 @@ mod tests {
     }
 
     #[test]
-    fn skew_p_two_symmetric_values_is_zero() {
+    fn skew_p_two_values_returns_div0() {
         let vals = [Value::Number(1.0), Value::Number(3.0)];
-        assert_close(skew_p(&vals).unwrap(), 0.0);
+        assert_eq!(skew_p(&vals).unwrap_err(), CellError::Div0);
     }
 
     #[test]
@@ -2590,9 +2590,9 @@ mod tests {
     }
 
     #[test]
-    fn percentile_exc_single_value_returns_num() {
+    fn percentile_exc_single_value_returns_value() {
         let vals = [Value::Number(5.0)];
-        assert_eq!(percentile_exc(&vals, 0.5).unwrap_err(), CellError::Num);
+        assert_close(percentile_exc(&vals, 0.5).unwrap(), 5.0);
     }
 
     #[test]

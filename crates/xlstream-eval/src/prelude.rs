@@ -444,6 +444,9 @@ impl Prelude {
             if let Some(v) = inner.get(composite_key) {
                 return v.clone();
             }
+            if let Some(result) = try_operator_criteria(key, inner, composite_key) {
+                return result;
+            }
         }
         match key.kind {
             AggKind::Average => Value::Error(CellError::Div0),
@@ -564,6 +567,33 @@ impl Prelude {
             ExcelDate::from_serial(0.0)
         }
     }
+}
+
+fn try_operator_criteria(
+    key: &MultiConditionalAggKey,
+    inner: &HashMap<String, Value>,
+    composite_key: &str,
+) -> Option<Value> {
+    let parts: Vec<&str> = composite_key.split('\0').collect();
+    let criteria: Vec<crate::Criteria> = parts.iter().map(|p| crate::Criteria::parse(p)).collect();
+    if criteria.iter().all(|c| matches!(c, crate::Criteria::Equals(_))) {
+        return None;
+    }
+    let mut fold = crate::prelude_plan::FoldState::new();
+    for (stored_key, stored_val) in inner {
+        let stored_parts: Vec<&str> = stored_key.split('\0').collect();
+        if stored_parts.len() != criteria.len() {
+            continue;
+        }
+        let all_match = stored_parts.iter().zip(&criteria).all(|(sp, crit)| {
+            let val = crate::criteria::parse_criteria_value(sp);
+            crit.matches(&val)
+        });
+        if all_match {
+            fold.feed(stored_val);
+        }
+    }
+    Some(fold.finish(key.kind))
 }
 
 #[cfg(test)]

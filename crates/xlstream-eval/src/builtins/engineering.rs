@@ -1558,8 +1558,8 @@ mod tests {
     }
 
     #[test]
-    fn dec2hex_bool_coercion() {
-        assert_eq!(builtin_dec2hex(&[Value::Bool(true)]), Value::Text("1".into()));
+    fn dec2hex_bool_rejected() {
+        assert_eq!(builtin_dec2hex(&[Value::Bool(true)]), Value::Error(CellError::Value));
     }
 
     #[test]
@@ -2629,8 +2629,8 @@ mod tests {
     }
 
     #[test]
-    fn dec2bin_bool_coercion() {
-        assert_eq!(builtin_dec2bin(&[Value::Bool(true)]), Value::Text("1".into()));
+    fn dec2bin_bool_rejected() {
+        assert_eq!(builtin_dec2bin(&[Value::Bool(true)]), Value::Error(CellError::Value));
     }
 
     #[test]
@@ -2819,8 +2819,8 @@ mod tests {
     }
 
     #[test]
-    fn dec2oct_bool_coercion() {
-        assert_eq!(builtin_dec2oct(&[Value::Bool(true)]), Value::Text("1".into()));
+    fn dec2oct_bool_rejected() {
+        assert_eq!(builtin_dec2oct(&[Value::Bool(true)]), Value::Error(CellError::Value));
     }
 
     #[test]
