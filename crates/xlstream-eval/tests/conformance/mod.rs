@@ -147,21 +147,16 @@ pub fn run_conformance_with_options(
                     continue;
                 }
                 compared += 1;
-                eprintln!(
-                    "  [{sheet_name}] {}{}: expected {:?}  actual {:?}",
-                    col_letter(col_idx),
-                    row_idx + 1,
-                    exp_row[col_idx],
-                    act_row[col_idx],
-                );
                 if !values_match(&exp_row[col_idx], &act_row[col_idx]) {
-                    mismatches.push(format!(
+                    let msg = format!(
                         "  [{sheet_name}] {}{}: expected {:?}  actual {:?}",
                         col_letter(col_idx),
                         row_idx + 1,
                         exp_row[col_idx],
                         act_row[col_idx],
-                    ));
+                    );
+                    eprintln!("{msg}");
+                    mismatches.push(msg);
                 }
             }
         }
