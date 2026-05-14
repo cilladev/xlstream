@@ -261,7 +261,8 @@ fn is_blank(v: &Value) -> bool {
 
 /// Parse a criteria value string into a [`Value`]. Tries number first, then
 /// falls back to text.
-fn parse_criteria_value(s: &str) -> Value {
+#[must_use]
+pub fn parse_criteria_value(s: &str) -> Value {
     let trimmed = s.trim();
     if trimmed.is_empty() {
         return Value::Empty;
