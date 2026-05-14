@@ -469,13 +469,17 @@ pub fn builtin_rate(args: &[Value]) -> Value {
         let step = f / df;
         rate -= step;
 
+        if !rate.is_finite() || rate <= -1.0 {
+            return Value::Error(CellError::Na);
+        }
+
         // If the step is negligible relative to rate, we've converged
         if step.abs() < 1e-10 * rate.abs().max(1e-10) {
             return Value::Number(rate);
         }
     }
 
-    Value::Error(CellError::Num)
+    Value::Error(CellError::Na)
 }
 
 #[cfg(test)]
