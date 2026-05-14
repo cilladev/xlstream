@@ -7,6 +7,7 @@
 pub mod aggregate;
 mod compatibility;
 mod conditional;
+pub mod convert;
 mod database;
 pub(crate) mod date;
 pub mod engineering;
@@ -330,6 +331,7 @@ pub(crate) fn dispatch(
         "ERFC" => Some(engineering::builtin_erfc(&eval_args(args, interp, scope))),
         "ERF.PRECISE" => Some(engineering::builtin_erf_precise(&eval_args(args, interp, scope))),
         "ERFC.PRECISE" => Some(engineering::builtin_erfc_precise(&eval_args(args, interp, scope))),
+        "CONVERT" => Some(convert::builtin_convert(&eval_args(args, interp, scope))),
         _ => None,
     }
 }
