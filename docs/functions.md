@@ -430,7 +430,7 @@ All row-local (pure math). No streaming concerns.
 | BITRSHIFT | x | yes | v0.3 | | | |
 | BITXOR | x | yes | v0.3 | | | |
 | COMPLEX | x | yes | v0.3 | | | |
-| CONVERT | . | yes | v0.3 | | | |
+| CONVERT | x | yes | v0.3 | | | |
 | DEC2BIN | x | yes | v0.3 | | x | |
 | DEC2HEX | x | yes | v0.3 | | x | |
 | DEC2OCT | x | yes | v0.3 | | x | |
