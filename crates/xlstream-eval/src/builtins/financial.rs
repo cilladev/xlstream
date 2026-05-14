@@ -459,7 +459,7 @@ pub fn builtin_rate(args: &[Value]) -> Value {
                     - type_factor * (pow - 1.0) / (rate * rate));
 
         if f.abs() < 1e-7 {
-            return Value::Number(rate);
+            return if rate > -1.0 { Value::Number(rate) } else { Value::Error(CellError::Num) };
         }
 
         if df == 0.0 {
@@ -469,17 +469,17 @@ pub fn builtin_rate(args: &[Value]) -> Value {
         let step = f / df;
         rate -= step;
 
-        if !rate.is_finite() || rate <= -1.0 {
-            return Value::Error(CellError::Na);
+        if !rate.is_finite() {
+            return Value::Error(CellError::Num);
         }
 
         // If the step is negligible relative to rate, we've converged
         if step.abs() < 1e-10 * rate.abs().max(1e-10) {
-            return Value::Number(rate);
+            return if rate > -1.0 { Value::Number(rate) } else { Value::Error(CellError::Num) };
         }
     }
 
-    Value::Error(CellError::Na)
+    Value::Error(CellError::Num)
 }
 
 #[cfg(test)]
