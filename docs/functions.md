@@ -52,8 +52,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ATANH | . | yes | v0.3 | x | | |
 | BASE | x | yes | v0.3 | | | |
 | CEILING | x | yes | v0.1 | x | x | |
-| CEILING.MATH | . | yes | v0.3 | | | |
-| CEILING.PRECISE | . | yes | v0.3 | | | |
+| CEILING.MATH | x | yes | v0.3 | x | x | |
+| CEILING.PRECISE | x | yes | v0.3 | x | x | |
 | COMBIN | x | yes | v0.3 | | | |
 | COMBINA | x | yes | v0.3 | | | |
 | COS | x | yes | v0.1 | x | | |
@@ -64,16 +64,16 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | CSCH | . | yes | v0.3 | | | |
 | DECIMAL | . | yes | v0.3 | | | |
 | DEGREES | . | yes | v0.3 | x | | |
-| EVEN | . | yes | v0.3 | x | | |
+| EVEN | x | yes | v0.3 | x | x | |
 | EXP | x | yes | v0.1 | x | | |
 | FACT | x | yes | v0.3 | | | |
 | FACTDOUBLE | x | yes | v0.3 | | | |
 | FLOOR | x | yes | v0.1 | x | x | |
-| FLOOR.MATH | . | yes | v0.3 | | | |
-| FLOOR.PRECISE | . | yes | v0.3 | | | |
+| FLOOR.MATH | x | yes | v0.3 | x | x | |
+| FLOOR.PRECISE | x | yes | v0.3 | x | x | |
 | GCD | . | yes | v0.3 | | | |
 | INT | x | yes | v0.1 | x | x | |
-| ISO.CEILING | . | yes | v0.3 | | | |
+| ISO.CEILING | x | yes | v0.3 | x | x | |
 | LCM | . | yes | v0.3 | | | |
 | LN | x | yes | v0.1 | x | x | |
 | LOG | x | yes | v0.1 | x | x | |
@@ -82,10 +82,10 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | MINVERSE | . | yes | v0.3 | | | |
 | MMULT | . | yes | v0.3 | | | |
 | MOD | x | yes | v0.1 | x | x | |
-| MROUND | . | yes | v0.3 | | | |
+| MROUND | x | yes | v0.3 | x | x | |
 | MULTINOMIAL | . | yes | v0.3 | | | |
 | MUNIT | . | yes | v0.3 | | | |
-| ODD | . | yes | v0.3 | x | | |
+| ODD | x | yes | v0.3 | x | x | |
 | PI | x | yes | v0.1 | x | x | |
 | POWER | x | yes | v0.1 | x | x | |
 | PRODUCT | x | yes | v0.1 | x | | |
@@ -118,7 +118,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SUMXMY2 | . | yes | v0.3 | | | |
 | TAN | x | yes | v0.1 | x | | |
 | TANH | . | yes | v0.3 | x | | |
-| TRUNC | . | yes | v0.3 | x | | |
+| TRUNC | x | yes | v0.3 | x | x | |
 
 ## Statistical
 

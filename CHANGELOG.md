@@ -37,6 +37,11 @@ Semver.
 - FACT, FACTDOUBLE factorial functions
 - PERMUT, PERMUTATIONA permutation functions
 - COMBIN, COMBINA combination functions
+- EVEN, ODD round to next even/odd integer (away from zero)
+- TRUNC truncation toward zero (1-2 args, Decimal-based)
+- MROUND round to nearest multiple
+- CEILING.MATH, FLOOR.MATH rounding with mode parameter
+- CEILING.PRECISE, FLOOR.PRECISE, ISO.CEILING direction-fixed rounding variants
 
 ## [0.2.1] - 2026-05-11
 

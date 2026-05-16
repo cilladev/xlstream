@@ -317,6 +317,264 @@ pub(crate) fn builtin_floor(args: &[Value]) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// EVEN / ODD
+// ---------------------------------------------------------------------------
+
+/// `EVEN(x)` — round away from zero to the next even integer.
+///
+/// `EVEN(0)` returns 0.
+pub(crate) fn builtin_even(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if x == 0.0 {
+        return Value::Number(0.0);
+    }
+    let result = x.signum() * (x.abs() / 2.0).ceil() * 2.0;
+    Value::Number(result)
+}
+
+/// `ODD(x)` — round away from zero to the next odd integer.
+///
+/// `ODD(0)` returns 1 (Excel convention).
+pub(crate) fn builtin_odd(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if x == 0.0 {
+        return Value::Number(1.0);
+    }
+    let result = x.signum() * ((x.abs() - 1.0) / 2.0).ceil().mul_add(2.0, 1.0);
+    Value::Number(result)
+}
+
+// ---------------------------------------------------------------------------
+// TRUNC
+// ---------------------------------------------------------------------------
+
+/// `TRUNC(number, [num_digits])` — truncate toward zero.
+///
+/// Default `num_digits` is 0. Uses Decimal-based truncation to avoid
+/// IEEE 754 artifacts.
+pub(crate) fn builtin_trunc(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let digits = if args.len() == 2 {
+        match num_arg(args, 1) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else {
+        0.0
+    };
+    let Some(d) = to_decimal(x) else {
+        return Value::Number(x);
+    };
+    #[allow(clippy::cast_possible_truncation)]
+    let di = digits.trunc() as i32;
+    if di < 0 {
+        #[allow(clippy::cast_sign_loss)]
+        let factor = Decimal::from(10i64.pow((-di) as u32));
+        let rounded = (d / factor).round_dp_with_strategy(0, RoundingStrategy::ToZero) * factor;
+        return Value::Number(rounded.to_f64().unwrap_or(x));
+    }
+    #[allow(clippy::cast_sign_loss)]
+    let dp = di as u32;
+    let rounded = d.round_dp_with_strategy(dp, RoundingStrategy::ToZero);
+    Value::Number(rounded.to_f64().unwrap_or(x))
+}
+
+// ---------------------------------------------------------------------------
+// MROUND
+// ---------------------------------------------------------------------------
+
+/// `MROUND(number, multiple)` — round to nearest multiple.
+///
+/// Different-sign arguments return `#NUM!`. `multiple = 0` returns 0.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_mround(args: &[Value]) -> Value {
+    if args.len() != 2 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let multiple = match num_arg(args, 1) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if multiple == 0.0 {
+        return Value::Number(0.0);
+    }
+    if (number > 0.0 && multiple < 0.0) || (number < 0.0 && multiple > 0.0) {
+        return Value::Error(CellError::Num);
+    }
+    let result = (number / multiple).round() * multiple;
+    Value::Number(result)
+}
+
+// ---------------------------------------------------------------------------
+// CEILING.MATH / FLOOR.MATH / CEILING.PRECISE / FLOOR.PRECISE / ISO.CEILING
+// ---------------------------------------------------------------------------
+
+/// `CEILING.MATH(number, [significance], [mode])` — round up.
+///
+/// Default significance: 1 if number >= 0, -1 if number < 0.
+/// Mode=0 (default): round toward positive infinity.
+/// Mode!=0 and number<0: round away from zero.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_ceiling_math(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let sig = if args.len() >= 2 {
+        match num_arg(args, 1) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else if number >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    if sig == 0.0 {
+        return Value::Number(0.0);
+    }
+    let mode = if args.len() == 3 {
+        match num_arg(args, 2) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else {
+        0.0
+    };
+    let abs_sig = sig.abs();
+    let result = if mode != 0.0 && number < 0.0 {
+        -(number.abs() / abs_sig).ceil() * abs_sig
+    } else {
+        (number / abs_sig).ceil() * abs_sig
+    };
+    Value::Number(result)
+}
+
+/// `FLOOR.MATH(number, [significance], [mode])` — round down.
+///
+/// Default significance: 1 if number >= 0, -1 if number < 0.
+/// Mode=0 (default): round toward negative infinity.
+/// Mode!=0 and number<0: round toward zero.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_floor_math(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 3 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let sig = if args.len() >= 2 {
+        match num_arg(args, 1) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else if number >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    if sig == 0.0 {
+        return Value::Number(0.0);
+    }
+    let mode = if args.len() == 3 {
+        match num_arg(args, 2) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else {
+        0.0
+    };
+    let abs_sig = sig.abs();
+    let result = if mode != 0.0 && number < 0.0 {
+        -(number.abs() / abs_sig).floor() * abs_sig
+    } else {
+        (number / abs_sig).floor() * abs_sig
+    };
+    Value::Number(result)
+}
+
+/// `CEILING.PRECISE(number, [significance])` — round toward positive infinity.
+///
+/// Sign of significance is always ignored (uses absolute value).
+/// Also dispatched as `ISO.CEILING`.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_ceiling_precise(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let sig = if args.len() == 2 {
+        match num_arg(args, 1) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else {
+        1.0
+    };
+    if sig == 0.0 {
+        return Value::Number(0.0);
+    }
+    let abs_sig = sig.abs();
+    Value::Number((number / abs_sig).ceil() * abs_sig)
+}
+
+/// `FLOOR.PRECISE(number, [significance])` — round toward negative infinity.
+///
+/// Sign of significance is always ignored (uses absolute value).
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_floor_precise(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let number = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let sig = if args.len() == 2 {
+        match num_arg(args, 1) {
+            Ok(n) => n,
+            Err(e) => return e,
+        }
+    } else {
+        1.0
+    };
+    if sig == 0.0 {
+        return Value::Number(0.0);
+    }
+    let abs_sig = sig.abs();
+    Value::Number((number / abs_sig).floor() * abs_sig)
+}
+
+// ---------------------------------------------------------------------------
 // PI
 // ---------------------------------------------------------------------------
 
@@ -2249,6 +2507,522 @@ mod tests {
         assert_eq!(
             builtin_combin(&[Value::Text("abc".into()), Value::Number(3.0)]),
             Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== EVEN =====
+
+    #[test]
+    fn even_positive_fraction() {
+        assert_eq!(builtin_even(&[Value::Number(1.5)]), Value::Number(2.0));
+    }
+
+    #[test]
+    fn even_positive_odd_integer() {
+        assert_eq!(builtin_even(&[Value::Number(3.0)]), Value::Number(4.0));
+    }
+
+    #[test]
+    fn even_already_even() {
+        assert_eq!(builtin_even(&[Value::Number(2.0)]), Value::Number(2.0));
+        assert_eq!(builtin_even(&[Value::Number(4.0)]), Value::Number(4.0));
+    }
+
+    #[test]
+    fn even_small_fraction() {
+        assert_eq!(builtin_even(&[Value::Number(0.5)]), Value::Number(2.0));
+    }
+
+    #[test]
+    fn even_negative() {
+        assert_eq!(builtin_even(&[Value::Number(-1.0)]), Value::Number(-2.0));
+        assert_eq!(builtin_even(&[Value::Number(-1.5)]), Value::Number(-2.0));
+        assert_eq!(builtin_even(&[Value::Number(-2.0)]), Value::Number(-2.0));
+        assert_eq!(builtin_even(&[Value::Number(-3.0)]), Value::Number(-4.0));
+    }
+
+    #[test]
+    fn even_zero() {
+        assert_eq!(builtin_even(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn even_error_propagation() {
+        assert_eq!(builtin_even(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn even_wrong_arg_count() {
+        assert_eq!(builtin_even(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_even(&[Value::Number(1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn even_coercion() {
+        assert_eq!(builtin_even(&[Value::Bool(true)]), Value::Number(2.0));
+    }
+
+    #[test]
+    fn even_type_mismatch() {
+        assert_eq!(builtin_even(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== ODD =====
+
+    #[test]
+    fn odd_positive_fraction() {
+        assert_eq!(builtin_odd(&[Value::Number(1.5)]), Value::Number(3.0));
+    }
+
+    #[test]
+    fn odd_already_odd() {
+        assert_eq!(builtin_odd(&[Value::Number(3.0)]), Value::Number(3.0));
+        assert_eq!(builtin_odd(&[Value::Number(1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn odd_positive_even() {
+        assert_eq!(builtin_odd(&[Value::Number(2.0)]), Value::Number(3.0));
+        assert_eq!(builtin_odd(&[Value::Number(4.0)]), Value::Number(5.0));
+    }
+
+    #[test]
+    fn odd_small_fraction() {
+        assert_eq!(builtin_odd(&[Value::Number(0.3)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn odd_negative() {
+        assert_eq!(builtin_odd(&[Value::Number(-1.0)]), Value::Number(-1.0));
+        assert_eq!(builtin_odd(&[Value::Number(-1.5)]), Value::Number(-3.0));
+        assert_eq!(builtin_odd(&[Value::Number(-2.0)]), Value::Number(-3.0));
+        assert_eq!(builtin_odd(&[Value::Number(-3.0)]), Value::Number(-3.0));
+    }
+
+    #[test]
+    fn odd_zero_returns_one() {
+        assert_eq!(builtin_odd(&[Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn odd_error_propagation() {
+        assert_eq!(builtin_odd(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn odd_wrong_arg_count() {
+        assert_eq!(builtin_odd(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn odd_coercion() {
+        assert_eq!(builtin_odd(&[Value::Text("3".into())]), Value::Number(3.0));
+    }
+
+    #[test]
+    fn odd_type_mismatch() {
+        assert_eq!(builtin_odd(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== TRUNC =====
+
+    #[test]
+    fn trunc_default_digits() {
+        assert_eq!(builtin_trunc(&[Value::Number(8.9)]), Value::Number(8.0));
+        assert_eq!(builtin_trunc(&[Value::Number(-8.9)]), Value::Number(-8.0));
+        assert_eq!(builtin_trunc(&[Value::Number(0.5)]), Value::Number(0.0));
+        assert_eq!(builtin_trunc(&[Value::Number(-0.5)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn trunc_positive_digits() {
+        assert_eq!(builtin_trunc(&[Value::Number(2.345), Value::Number(2.0)]), Value::Number(2.34));
+        assert_eq!(
+            builtin_trunc(&[Value::Number(-2.345), Value::Number(2.0)]),
+            Value::Number(-2.34)
+        );
+        assert_eq!(builtin_trunc(&[Value::Number(1.999), Value::Number(1.0)]), Value::Number(1.9));
+    }
+
+    #[test]
+    fn trunc_negative_digits() {
+        assert_eq!(
+            builtin_trunc(&[Value::Number(1234.0), Value::Number(-2.0)]),
+            Value::Number(1200.0)
+        );
+        assert_eq!(
+            builtin_trunc(&[Value::Number(1234.0), Value::Number(-3.0)]),
+            Value::Number(1000.0)
+        );
+        assert_eq!(
+            builtin_trunc(&[Value::Number(-1234.0), Value::Number(-2.0)]),
+            Value::Number(-1200.0)
+        );
+    }
+
+    #[test]
+    fn trunc_vs_int_negative() {
+        assert_eq!(builtin_trunc(&[Value::Number(-2.5)]), Value::Number(-2.0));
+        assert_eq!(builtin_int(&[Value::Number(-2.5)]), Value::Number(-3.0));
+    }
+
+    #[test]
+    fn trunc_edge_cases() {
+        assert_eq!(builtin_trunc(&[Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(builtin_trunc(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(5.0));
+        assert_eq!(builtin_trunc(&[Value::Number(5.5), Value::Number(10.0)]), Value::Number(5.5));
+    }
+
+    #[test]
+    fn trunc_error_propagation() {
+        assert_eq!(builtin_trunc(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+        assert_eq!(
+            builtin_trunc(&[Value::Number(1.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn trunc_wrong_arg_count() {
+        assert_eq!(builtin_trunc(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_trunc(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn trunc_coercion() {
+        assert_eq!(builtin_trunc(&[Value::Bool(true)]), Value::Number(1.0));
+        assert_eq!(builtin_trunc(&[Value::Text("8.9".into())]), Value::Number(8.0));
+    }
+
+    #[test]
+    fn trunc_type_mismatch() {
+        assert_eq!(builtin_trunc(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== MROUND =====
+
+    #[test]
+    fn mround_happy_path() {
+        assert_eq!(builtin_mround(&[Value::Number(10.0), Value::Number(3.0)]), Value::Number(9.0));
+        assert_eq!(builtin_mround(&[Value::Number(7.5), Value::Number(3.0)]), Value::Number(9.0));
+        assert_eq!(
+            builtin_mround(&[Value::Number(-10.0), Value::Number(-3.0)]),
+            Value::Number(-9.0)
+        );
+        assert_eq!(builtin_mround(&[Value::Number(6.0), Value::Number(3.0)]), Value::Number(6.0));
+    }
+
+    #[test]
+    fn mround_midpoint() {
+        assert_eq!(builtin_mround(&[Value::Number(4.5), Value::Number(3.0)]), Value::Number(6.0));
+        assert_eq!(builtin_mround(&[Value::Number(1.5), Value::Number(3.0)]), Value::Number(3.0));
+    }
+
+    #[test]
+    fn mround_multiple_zero() {
+        assert_eq!(builtin_mround(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(builtin_mround(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn mround_number_zero() {
+        assert_eq!(builtin_mround(&[Value::Number(0.0), Value::Number(3.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn mround_sign_mismatch() {
+        assert_eq!(
+            builtin_mround(&[Value::Number(5.0), Value::Number(-3.0)]),
+            Value::Error(CellError::Num)
+        );
+        assert_eq!(
+            builtin_mround(&[Value::Number(-5.0), Value::Number(3.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn mround_error_propagation() {
+        assert_eq!(
+            builtin_mround(&[Value::Error(CellError::Na), Value::Number(3.0)]),
+            Value::Error(CellError::Na)
+        );
+        assert_eq!(
+            builtin_mround(&[Value::Number(10.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn mround_wrong_arg_count() {
+        assert_eq!(builtin_mround(&[Value::Number(10.0)]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_mround(&[Value::Number(10.0), Value::Number(3.0), Value::Number(1.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn mround_coercion() {
+        assert_eq!(builtin_mround(&[Value::Bool(true), Value::Number(1.0)]), Value::Number(1.0));
+        assert_eq!(
+            builtin_mround(&[Value::Text("10".into()), Value::Number(3.0)]),
+            Value::Number(9.0)
+        );
+    }
+
+    #[test]
+    fn mround_type_mismatch() {
+        assert_eq!(
+            builtin_mround(&[Value::Text("abc".into()), Value::Number(3.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== CEILING.MATH =====
+
+    #[test]
+    fn ceiling_math_default_sig() {
+        assert_eq!(builtin_ceiling_math(&[Value::Number(6.3)]), Value::Number(7.0));
+        assert_eq!(builtin_ceiling_math(&[Value::Number(-6.3)]), Value::Number(-6.0));
+    }
+
+    #[test]
+    fn ceiling_math_with_sig() {
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Number(6.3), Value::Number(2.0)]),
+            Value::Number(8.0)
+        );
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Number(-6.7), Value::Number(2.0)]),
+            Value::Number(-6.0)
+        );
+    }
+
+    #[test]
+    fn ceiling_math_with_mode() {
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Number(-6.7), Value::Number(2.0), Value::Number(0.0)]),
+            Value::Number(-6.0)
+        );
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Number(-6.7), Value::Number(2.0), Value::Number(1.0)]),
+            Value::Number(-8.0)
+        );
+    }
+
+    #[test]
+    fn ceiling_math_zero() {
+        assert_eq!(builtin_ceiling_math(&[Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Number(5.0), Value::Number(0.0)]),
+            Value::Number(0.0)
+        );
+    }
+
+    #[test]
+    fn ceiling_math_error_propagation() {
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn ceiling_math_wrong_arg_count() {
+        assert_eq!(builtin_ceiling_math(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_ceiling_math(&[
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Number(3.0),
+                Value::Number(4.0)
+            ]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn ceiling_math_coercion() {
+        assert_eq!(builtin_ceiling_math(&[Value::Bool(true)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn ceiling_math_type_mismatch() {
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Text("abc".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== FLOOR.MATH =====
+
+    #[test]
+    fn floor_math_default_sig() {
+        assert_eq!(builtin_floor_math(&[Value::Number(6.7)]), Value::Number(6.0));
+        assert_eq!(builtin_floor_math(&[Value::Number(-6.7)]), Value::Number(-7.0));
+    }
+
+    #[test]
+    fn floor_math_with_sig() {
+        assert_eq!(
+            builtin_floor_math(&[Value::Number(6.7), Value::Number(2.0)]),
+            Value::Number(6.0)
+        );
+        assert_eq!(
+            builtin_floor_math(&[Value::Number(-6.7), Value::Number(2.0)]),
+            Value::Number(-8.0)
+        );
+    }
+
+    #[test]
+    fn floor_math_with_mode() {
+        assert_eq!(
+            builtin_floor_math(&[Value::Number(-6.7), Value::Number(2.0), Value::Number(0.0)]),
+            Value::Number(-8.0)
+        );
+        assert_eq!(
+            builtin_floor_math(&[Value::Number(-6.7), Value::Number(2.0), Value::Number(1.0)]),
+            Value::Number(-6.0)
+        );
+    }
+
+    #[test]
+    fn floor_math_zero() {
+        assert_eq!(builtin_floor_math(&[Value::Number(0.0)]), Value::Number(0.0));
+        assert_eq!(
+            builtin_floor_math(&[Value::Number(5.0), Value::Number(0.0)]),
+            Value::Number(0.0)
+        );
+    }
+
+    #[test]
+    fn floor_math_error_propagation() {
+        assert_eq!(builtin_floor_math(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn floor_math_wrong_arg_count() {
+        assert_eq!(builtin_floor_math(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== CEILING.PRECISE =====
+
+    #[test]
+    fn ceiling_precise_positive() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(4.1), Value::Number(2.0)]),
+            Value::Number(6.0)
+        );
+        assert_eq!(builtin_ceiling_precise(&[Value::Number(4.1)]), Value::Number(5.0));
+    }
+
+    #[test]
+    fn ceiling_precise_negative() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(-4.1), Value::Number(2.0)]),
+            Value::Number(-4.0)
+        );
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(-4.1), Value::Number(-2.0)]),
+            Value::Number(-4.0)
+        );
+    }
+
+    #[test]
+    fn ceiling_precise_sig_zero() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(4.1), Value::Number(0.0)]),
+            Value::Number(0.0)
+        );
+    }
+
+    #[test]
+    fn ceiling_precise_error_propagation() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Error(CellError::Na), Value::Number(2.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn ceiling_precise_wrong_arg_count() {
+        assert_eq!(builtin_ceiling_precise(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== FLOOR.PRECISE =====
+
+    #[test]
+    fn floor_precise_positive() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Number(4.1), Value::Number(2.0)]),
+            Value::Number(4.0)
+        );
+        assert_eq!(builtin_floor_precise(&[Value::Number(4.1)]), Value::Number(4.0));
+    }
+
+    #[test]
+    fn floor_precise_negative() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Number(-4.1), Value::Number(2.0)]),
+            Value::Number(-6.0)
+        );
+        assert_eq!(
+            builtin_floor_precise(&[Value::Number(-4.1), Value::Number(-2.0)]),
+            Value::Number(-6.0)
+        );
+    }
+
+    #[test]
+    fn floor_precise_sig_zero() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Number(4.1), Value::Number(0.0)]),
+            Value::Number(0.0)
+        );
+    }
+
+    #[test]
+    fn floor_precise_error_propagation() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Error(CellError::Na), Value::Number(2.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn floor_precise_wrong_arg_count() {
+        assert_eq!(builtin_floor_precise(&[]), Value::Error(CellError::Value));
+    }
+
+    // ===== ISO.CEILING (alias for CEILING.PRECISE) =====
+
+    #[test]
+    fn iso_ceiling_matches_ceiling_precise() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(4.1), Value::Number(2.0)]),
+            Value::Number(6.0)
+        );
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(-4.1), Value::Number(2.0)]),
+            Value::Number(-4.0)
+        );
+    }
+
+    #[test]
+    fn floor_precise_coercion() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Text("4.1".into()), Value::Number(2.0)]),
+            Value::Number(4.0)
         );
     }
 }

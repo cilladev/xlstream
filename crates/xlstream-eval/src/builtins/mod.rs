@@ -169,6 +169,16 @@ pub(crate) fn dispatch(
         "POWER" => Some(math::builtin_power(&eval_args(args, interp, scope))),
         "CEILING" => Some(math::builtin_ceiling(&eval_args(args, interp, scope))),
         "FLOOR" => Some(math::builtin_floor(&eval_args(args, interp, scope))),
+        "EVEN" => Some(math::builtin_even(&eval_args(args, interp, scope))),
+        "ODD" => Some(math::builtin_odd(&eval_args(args, interp, scope))),
+        "TRUNC" => Some(math::builtin_trunc(&eval_args(args, interp, scope))),
+        "MROUND" => Some(math::builtin_mround(&eval_args(args, interp, scope))),
+        "CEILING.MATH" => Some(math::builtin_ceiling_math(&eval_args(args, interp, scope))),
+        "FLOOR.MATH" => Some(math::builtin_floor_math(&eval_args(args, interp, scope))),
+        "CEILING.PRECISE" | "ISO.CEILING" => {
+            Some(math::builtin_ceiling_precise(&eval_args(args, interp, scope)))
+        }
+        "FLOOR.PRECISE" => Some(math::builtin_floor_precise(&eval_args(args, interp, scope))),
         "PI" => Some(math::builtin_pi(&eval_args(args, interp, scope))),
         "LN" => Some(math::builtin_ln(&eval_args(args, interp, scope))),
         "LOG" => Some(math::builtin_log(&eval_args(args, interp, scope))),

@@ -82,11 +82,11 @@ Row-local additions to `builtins/math.rs`.
 - [ ] **COSH / SINH / TANH** — hyperbolic trig. ~1 hour.
 - [ ] **COT / CSC / SEC / COTH / CSCH / SECH** — reciprocal trig. ~2 hours.
 - [ ] **DEGREES / RADIANS** — angle conversion. ~1 hour.
-- [ ] **EVEN / ODD** — round to even/odd integer. ~1 hour.
-- [ ] **TRUNC** — truncate to integer or decimal places. ~1 hour.
-- [ ] **MROUND** — round to nearest multiple. ~1 hour.
+- [x] **EVEN / ODD** — round to even/odd integer. ~1 hour.
+- [x] **TRUNC** — truncate to integer or decimal places. ~1 hour.
+- [x] **MROUND** — round to nearest multiple. ~1 hour.
 - [ ] **GCD / LCM** — greatest common divisor / least common multiple. ~1 hour.
-- [ ] **CEILING.MATH / FLOOR.MATH / CEILING.PRECISE / FLOOR.PRECISE / ISO.CEILING** — rounding variants. ~0.5 day.
+- [x] **CEILING.MATH / FLOOR.MATH / CEILING.PRECISE / FLOOR.PRECISE / ISO.CEILING** — rounding variants. ~0.5 day.
 - [ ] **ROMAN / ARABIC** — number to Roman numeral and back. ~2 hours.
 - [ ] **SUBTOTAL / AGGREGATE** — multi-mode aggregate (complex — may defer to v0.4). ~1-2 days.
 

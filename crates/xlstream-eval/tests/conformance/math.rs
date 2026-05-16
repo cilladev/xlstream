@@ -34,3 +34,23 @@ fn combin_combina() {
 fn fact_factdouble() {
     run_conformance("math/fact.xlsx");
 }
+
+#[test]
+fn even_odd() {
+    run_conformance("math/even_odd.xlsx");
+}
+
+#[test]
+fn trunc() {
+    run_conformance("math/trunc.xlsx");
+}
+
+#[test]
+fn mround() {
+    run_conformance("math/mround.xlsx");
+}
+
+#[test]
+fn ceiling_floor_variants() {
+    run_conformance("math/ceiling_floor_variants.xlsx");
+}
