@@ -147,6 +147,7 @@ pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
     "CORREL",
     "COVARIANCE.P", "COVARIANCE.S",
     "SLOPE", "INTERCEPT", "RSQ", "FORECAST.LINEAR",
+    "SUBTOTAL", "AGGREGATE",
 };
 
 /// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
@@ -285,6 +286,9 @@ mod tests {
         assert!(is_range_expanding("correl"));
         assert!(is_range_expanding("COVARIANCE.P"));
         assert!(is_range_expanding("COVARIANCE.S"));
+        assert!(is_range_expanding("SUBTOTAL"));
+        assert!(is_range_expanding("AGGREGATE"));
+        assert!(is_range_expanding("subtotal"));
         assert!(!is_range_expanding("SUM"));
     }
 
