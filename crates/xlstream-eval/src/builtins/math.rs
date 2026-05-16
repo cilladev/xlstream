@@ -812,6 +812,248 @@ pub(crate) fn builtin_atan2(args: &[Value]) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// ACOSH / ASINH / ATANH
+// ---------------------------------------------------------------------------
+
+/// `ACOSH(x)` — inverse hyperbolic cosine. Domain: x >= 1.
+pub(crate) fn builtin_acosh(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let result = x.acosh();
+    if result.is_nan() {
+        return Value::Error(CellError::Num);
+    }
+    Value::Number(result)
+}
+
+/// `ASINH(x)` — inverse hyperbolic sine. No domain restriction.
+pub(crate) fn builtin_asinh(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    Value::Number(x.asinh())
+}
+
+/// `ATANH(x)` — inverse hyperbolic tangent. Domain: -1 < x < 1.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_atanh(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if x.abs() >= 1.0 {
+        return Value::Error(CellError::Num);
+    }
+    Value::Number(x.atanh())
+}
+
+// ---------------------------------------------------------------------------
+// COSH / SINH / TANH
+// ---------------------------------------------------------------------------
+
+/// `COSH(x)` — hyperbolic cosine. Overflows for large |x|.
+pub(crate) fn builtin_cosh(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let result = x.cosh();
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `SINH(x)` — hyperbolic sine. Overflows for large |x|.
+pub(crate) fn builtin_sinh(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let result = x.sinh();
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `TANH(x)` — hyperbolic tangent. Always in (-1, 1).
+pub(crate) fn builtin_tanh(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    Value::Number(x.tanh())
+}
+
+// ---------------------------------------------------------------------------
+// COT / CSC / SEC / COTH / CSCH / SECH
+// ---------------------------------------------------------------------------
+
+/// `COT(x)` — cotangent: cos(x)/sin(x). COT(0) returns `#DIV/0!`.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_cot(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if x == 0.0 {
+        return Value::Error(CellError::Div0);
+    }
+    let result = x.cos() / x.sin();
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `CSC(x)` — cosecant: 1/sin(x). CSC(0) returns `#DIV/0!`.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_csc(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let s = x.sin();
+    if s == 0.0 {
+        return Value::Error(CellError::Div0);
+    }
+    let result = 1.0 / s;
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `SEC(x)` — secant: 1/cos(x). Returns `#DIV/0!` if cos(x) == 0.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_sec(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let c = x.cos();
+    if c == 0.0 {
+        return Value::Error(CellError::Div0);
+    }
+    let result = 1.0 / c;
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `COTH(x)` — hyperbolic cotangent: cosh(x)/sinh(x). COTH(0) returns `#DIV/0!`.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_coth(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if x == 0.0 {
+        return Value::Error(CellError::Div0);
+    }
+    let result = x.cosh() / x.sinh();
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `CSCH(x)` — hyperbolic cosecant: 1/sinh(x). CSCH(0) returns `#DIV/0!`.
+#[allow(clippy::float_cmp)]
+pub(crate) fn builtin_csch(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    if x == 0.0 {
+        return Value::Error(CellError::Div0);
+    }
+    let result = 1.0 / x.sinh();
+    match finite_or_num(result) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+/// `SECH(x)` — hyperbolic secant: 1/cosh(x). Always defined (cosh >= 1).
+pub(crate) fn builtin_sech(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    Value::Number(1.0 / x.cosh())
+}
+
+// ---------------------------------------------------------------------------
+// DEGREES / RADIANS
+// ---------------------------------------------------------------------------
+
+/// `DEGREES(angle)` — convert radians to degrees.
+pub(crate) fn builtin_degrees(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    Value::Number(x * 180.0 / std::f64::consts::PI)
+}
+
+/// `RADIANS(angle)` — convert degrees to radians.
+pub(crate) fn builtin_radians(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let x = match num_arg(args, 0) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    Value::Number(x * std::f64::consts::PI / 180.0)
+}
+
+// ---------------------------------------------------------------------------
 // Shared: safe f64 → i64 truncation
 // ---------------------------------------------------------------------------
 
@@ -3947,5 +4189,569 @@ mod tests {
     #[test]
     fn arabic_empty_value() {
         assert_eq!(builtin_arabic(&[Value::Empty]), Value::Number(0.0));
+    }
+
+    // ===== ACOSH =====
+
+    #[test]
+    fn acosh_one() {
+        assert_eq!(builtin_acosh(&[Value::Number(1.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn acosh_two() {
+        assert_approx(builtin_acosh(&[Value::Number(2.0)]), 1.316_957_896_924_817, 1e-12);
+    }
+
+    #[test]
+    fn acosh_ten() {
+        assert_approx(builtin_acosh(&[Value::Number(10.0)]), 2.993_222_846_126_381, 1e-12);
+    }
+
+    #[test]
+    fn acosh_below_one_returns_num() {
+        assert_eq!(builtin_acosh(&[Value::Number(0.99)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn acosh_zero_returns_num() {
+        assert_eq!(builtin_acosh(&[Value::Number(0.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn acosh_negative_returns_num() {
+        assert_eq!(builtin_acosh(&[Value::Number(-1.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn acosh_error_propagation() {
+        assert_eq!(builtin_acosh(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn acosh_wrong_arg_count() {
+        assert_eq!(builtin_acosh(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_acosh(&[Value::Number(1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn acosh_coercion_from_bool() {
+        assert_eq!(builtin_acosh(&[Value::Bool(true)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn acosh_type_mismatch() {
+        assert_eq!(builtin_acosh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== ASINH =====
+
+    #[test]
+    fn asinh_zero() {
+        assert_eq!(builtin_asinh(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn asinh_one() {
+        assert_approx(builtin_asinh(&[Value::Number(1.0)]), 0.881_373_587_019_543, 1e-12);
+    }
+
+    #[test]
+    fn asinh_negative() {
+        assert_approx(builtin_asinh(&[Value::Number(-2.5)]), -1.647_231_146_371_096_2, 1e-12);
+    }
+
+    #[test]
+    fn asinh_large() {
+        let result = builtin_asinh(&[Value::Number(-1000.0)]);
+        match result {
+            Value::Number(n) => assert!(n.is_finite()),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn asinh_error_propagation() {
+        assert_eq!(builtin_asinh(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn asinh_wrong_arg_count() {
+        assert_eq!(builtin_asinh(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn asinh_coercion_from_text() {
+        assert_eq!(builtin_asinh(&[Value::Text("0".into())]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn asinh_type_mismatch() {
+        assert_eq!(builtin_asinh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== ATANH =====
+
+    #[test]
+    fn atanh_zero() {
+        assert_eq!(builtin_atanh(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn atanh_half() {
+        assert_approx(builtin_atanh(&[Value::Number(0.5)]), 0.549_306_144_334_054_8, 1e-12);
+    }
+
+    #[test]
+    fn atanh_negative_half() {
+        assert_approx(builtin_atanh(&[Value::Number(-0.5)]), -0.549_306_144_334_054_8, 1e-12);
+    }
+
+    #[test]
+    fn atanh_near_boundary() {
+        assert_approx(builtin_atanh(&[Value::Number(0.99)]), 2.646_652_412_362_246, 1e-10);
+    }
+
+    #[test]
+    fn atanh_one_returns_num() {
+        assert_eq!(builtin_atanh(&[Value::Number(1.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn atanh_negative_one_returns_num() {
+        assert_eq!(builtin_atanh(&[Value::Number(-1.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn atanh_out_of_range_returns_num() {
+        assert_eq!(builtin_atanh(&[Value::Number(2.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn atanh_error_propagation() {
+        assert_eq!(builtin_atanh(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn atanh_wrong_arg_count() {
+        assert_eq!(builtin_atanh(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn atanh_type_mismatch() {
+        assert_eq!(builtin_atanh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== COSH =====
+
+    #[test]
+    fn cosh_zero() {
+        assert_eq!(builtin_cosh(&[Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn cosh_one() {
+        assert_approx(builtin_cosh(&[Value::Number(1.0)]), 1.543_080_634_815_243_7, 1e-12);
+    }
+
+    #[test]
+    fn cosh_symmetric() {
+        assert_approx(builtin_cosh(&[Value::Number(-1.0)]), 1.543_080_634_815_243_7, 1e-12);
+    }
+
+    #[test]
+    fn cosh_overflow() {
+        assert_eq!(builtin_cosh(&[Value::Number(711.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn cosh_error_propagation() {
+        assert_eq!(builtin_cosh(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn cosh_wrong_arg_count() {
+        assert_eq!(builtin_cosh(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn cosh_coercion_from_bool() {
+        assert_approx(builtin_cosh(&[Value::Bool(true)]), 1.543_080_634_815_243_7, 1e-12);
+    }
+
+    #[test]
+    fn cosh_type_mismatch() {
+        assert_eq!(builtin_cosh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== SINH =====
+
+    #[test]
+    fn sinh_zero() {
+        assert_eq!(builtin_sinh(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn sinh_one() {
+        assert_approx(builtin_sinh(&[Value::Number(1.0)]), 1.175_201_193_643_801_4, 1e-12);
+    }
+
+    #[test]
+    fn sinh_negative() {
+        assert_approx(builtin_sinh(&[Value::Number(-1.0)]), -1.175_201_193_643_801_4, 1e-12);
+    }
+
+    #[test]
+    fn sinh_overflow() {
+        assert_eq!(builtin_sinh(&[Value::Number(711.0)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn sinh_error_propagation() {
+        assert_eq!(builtin_sinh(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn sinh_wrong_arg_count() {
+        assert_eq!(builtin_sinh(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn sinh_coercion_from_text() {
+        assert_eq!(builtin_sinh(&[Value::Text("0".into())]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn sinh_type_mismatch() {
+        assert_eq!(builtin_sinh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== TANH =====
+
+    #[test]
+    fn tanh_zero() {
+        assert_eq!(builtin_tanh(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn tanh_half() {
+        assert_approx(builtin_tanh(&[Value::Number(0.5)]), 0.462_117_157_260_009_76, 1e-12);
+    }
+
+    #[test]
+    fn tanh_saturates_positive() {
+        assert_eq!(builtin_tanh(&[Value::Number(100.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn tanh_saturates_negative() {
+        assert_eq!(builtin_tanh(&[Value::Number(-100.0)]), Value::Number(-1.0));
+    }
+
+    #[test]
+    fn tanh_error_propagation() {
+        assert_eq!(builtin_tanh(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn tanh_wrong_arg_count() {
+        assert_eq!(builtin_tanh(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn tanh_type_mismatch() {
+        assert_eq!(builtin_tanh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== COT =====
+
+    #[test]
+    fn cot_one() {
+        assert_approx(builtin_cot(&[Value::Number(1.0)]), 0.642_092_615_934_330_7, 1e-12);
+    }
+
+    #[test]
+    fn cot_pi_over_four() {
+        assert_approx(builtin_cot(&[Value::Number(FRAC_PI_4)]), 1.0, 1e-12);
+    }
+
+    #[test]
+    fn cot_zero_returns_div0() {
+        assert_eq!(builtin_cot(&[Value::Number(0.0)]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn cot_error_propagation() {
+        assert_eq!(builtin_cot(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn cot_wrong_arg_count() {
+        assert_eq!(builtin_cot(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn cot_coercion_from_bool() {
+        assert_approx(builtin_cot(&[Value::Bool(true)]), 0.642_092_615_934_330_7, 1e-12);
+    }
+
+    #[test]
+    fn cot_type_mismatch() {
+        assert_eq!(builtin_cot(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== CSC =====
+
+    #[test]
+    fn csc_one() {
+        assert_approx(builtin_csc(&[Value::Number(1.0)]), 1.188_395_105_778_121_2, 1e-12);
+    }
+
+    #[test]
+    fn csc_pi_over_two() {
+        assert_approx(builtin_csc(&[Value::Number(FRAC_PI_2)]), 1.0, 1e-12);
+    }
+
+    #[test]
+    fn csc_zero_returns_div0() {
+        assert_eq!(builtin_csc(&[Value::Number(0.0)]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn csc_error_propagation() {
+        assert_eq!(builtin_csc(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn csc_wrong_arg_count() {
+        assert_eq!(builtin_csc(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn csc_coercion_from_text() {
+        assert_approx(builtin_csc(&[Value::Text("1".into())]), 1.188_395_105_778_121_2, 1e-12);
+    }
+
+    #[test]
+    fn csc_type_mismatch() {
+        assert_eq!(builtin_csc(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== SEC =====
+
+    #[test]
+    fn sec_zero() {
+        assert_eq!(builtin_sec(&[Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn sec_one() {
+        assert_approx(builtin_sec(&[Value::Number(1.0)]), 1.850_815_717_680_925_6, 1e-12);
+    }
+
+    #[test]
+    fn sec_error_propagation() {
+        assert_eq!(builtin_sec(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn sec_wrong_arg_count() {
+        assert_eq!(builtin_sec(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn sec_type_mismatch() {
+        assert_eq!(builtin_sec(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== COTH =====
+
+    #[test]
+    fn coth_one() {
+        assert_approx(builtin_coth(&[Value::Number(1.0)]), 1.313_035_285_499_331_3, 1e-12);
+    }
+
+    #[test]
+    fn coth_two() {
+        assert_approx(builtin_coth(&[Value::Number(2.0)]), 1.037_314_720_727_548, 1e-12);
+    }
+
+    #[test]
+    fn coth_zero_returns_div0() {
+        assert_eq!(builtin_coth(&[Value::Number(0.0)]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn coth_error_propagation() {
+        assert_eq!(builtin_coth(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn coth_wrong_arg_count() {
+        assert_eq!(builtin_coth(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn coth_type_mismatch() {
+        assert_eq!(builtin_coth(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== CSCH =====
+
+    #[test]
+    fn csch_one() {
+        assert_approx(builtin_csch(&[Value::Number(1.0)]), 0.850_918_128_239_321_5, 1e-12);
+    }
+
+    #[test]
+    fn csch_negative() {
+        assert_approx(builtin_csch(&[Value::Number(-1.0)]), -0.850_918_128_239_321_5, 1e-12);
+    }
+
+    #[test]
+    fn csch_zero_returns_div0() {
+        assert_eq!(builtin_csch(&[Value::Number(0.0)]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn csch_error_propagation() {
+        assert_eq!(builtin_csch(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn csch_wrong_arg_count() {
+        assert_eq!(builtin_csch(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn csch_type_mismatch() {
+        assert_eq!(builtin_csch(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== SECH =====
+
+    #[test]
+    fn sech_zero() {
+        assert_eq!(builtin_sech(&[Value::Number(0.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn sech_one() {
+        assert_approx(builtin_sech(&[Value::Number(1.0)]), 0.648_054_273_663_885_4, 1e-12);
+    }
+
+    #[test]
+    fn sech_large_approaches_zero() {
+        let result = builtin_sech(&[Value::Number(100.0)]);
+        match result {
+            Value::Number(n) => assert!((0.0..1e-40).contains(&n)),
+            other => panic!("expected Number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sech_error_propagation() {
+        assert_eq!(builtin_sech(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn sech_wrong_arg_count() {
+        assert_eq!(builtin_sech(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn sech_type_mismatch() {
+        assert_eq!(builtin_sech(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== DEGREES =====
+
+    #[test]
+    fn degrees_pi() {
+        assert_approx(builtin_degrees(&[Value::Number(PI)]), 180.0, 1e-10);
+    }
+
+    #[test]
+    fn degrees_zero() {
+        assert_eq!(builtin_degrees(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn degrees_one_radian() {
+        assert_approx(builtin_degrees(&[Value::Number(1.0)]), 57.295_779_513_082_32, 1e-10);
+    }
+
+    #[test]
+    fn degrees_negative() {
+        assert_approx(builtin_degrees(&[Value::Number(-PI)]), -180.0, 1e-10);
+    }
+
+    #[test]
+    fn degrees_error_propagation() {
+        assert_eq!(builtin_degrees(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn degrees_wrong_arg_count() {
+        assert_eq!(builtin_degrees(&[]), Value::Error(CellError::Value));
+        assert_eq!(
+            builtin_degrees(&[Value::Number(1.0), Value::Number(2.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn degrees_coercion_from_bool() {
+        assert_approx(builtin_degrees(&[Value::Bool(true)]), 57.295_779_513_082_32, 1e-10);
+    }
+
+    #[test]
+    fn degrees_type_mismatch() {
+        assert_eq!(builtin_degrees(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== RADIANS =====
+
+    #[test]
+    fn radians_180() {
+        assert_approx(builtin_radians(&[Value::Number(180.0)]), PI, 1e-12);
+    }
+
+    #[test]
+    fn radians_90() {
+        assert_approx(builtin_radians(&[Value::Number(90.0)]), FRAC_PI_2, 1e-12);
+    }
+
+    #[test]
+    fn radians_zero() {
+        assert_eq!(builtin_radians(&[Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn radians_negative() {
+        assert_approx(builtin_radians(&[Value::Number(-180.0)]), -PI, 1e-12);
+    }
+
+    #[test]
+    fn radians_error_propagation() {
+        assert_eq!(builtin_radians(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn radians_wrong_arg_count() {
+        assert_eq!(builtin_radians(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn radians_coercion_from_text() {
+        assert_approx(builtin_radians(&[Value::Text("180".into())]), PI, 1e-12);
+    }
+
+    #[test]
+    fn radians_type_mismatch() {
+        assert_eq!(builtin_radians(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
 }

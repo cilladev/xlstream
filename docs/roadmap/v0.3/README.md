@@ -78,10 +78,10 @@ Row-local additions to `builtins/math.rs`.
 
 - [x] **COMBIN / COMBINA** — combinations. ~2 hours.
 - [x] **FACT / FACTDOUBLE** — factorial. ~2 hours.
-- [ ] **ACOSH / ASINH / ATANH** — inverse hyperbolic trig. ~1 hour.
-- [ ] **COSH / SINH / TANH** — hyperbolic trig. ~1 hour.
-- [ ] **COT / CSC / SEC / COTH / CSCH / SECH** — reciprocal trig. ~2 hours.
-- [ ] **DEGREES / RADIANS** — angle conversion. ~1 hour.
+- [x] **ACOSH / ASINH / ATANH** — inverse hyperbolic trig. ~1 hour.
+- [x] **COSH / SINH / TANH** — hyperbolic trig. ~1 hour.
+- [x] **COT / CSC / SEC / COTH / CSCH / SECH** — reciprocal trig. ~2 hours.
+- [x] **DEGREES / RADIANS** — angle conversion. ~1 hour.
 - [x] **EVEN / ODD** — round to even/odd integer. ~1 hour.
 - [x] **TRUNC** — truncate to integer or decimal places. ~1 hour.
 - [x] **MROUND** — round to nearest multiple. ~1 hour.

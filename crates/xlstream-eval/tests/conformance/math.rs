@@ -64,3 +64,23 @@ fn gcd_lcm() {
 fn roman_arabic() {
     run_conformance("math/roman_arabic.xlsx");
 }
+
+#[test]
+fn inverse_hyperbolic() {
+    run_conformance("math/inverse_hyperbolic.xlsx");
+}
+
+#[test]
+fn hyperbolic() {
+    run_conformance("math/hyperbolic.xlsx");
+}
+
+#[test]
+fn reciprocal_trig() {
+    run_conformance("math/reciprocal_trig.xlsx");
+}
+
+#[test]
+fn degrees_radians() {
+    run_conformance("math/degrees_radians.xlsx");
+}
