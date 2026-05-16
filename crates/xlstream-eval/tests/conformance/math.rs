@@ -84,3 +84,8 @@ fn reciprocal_trig() {
 fn degrees_radians() {
     run_conformance("math/degrees_radians.xlsx");
 }
+
+#[test]
+fn subtotal_aggregate() {
+    run_conformance("math/subtotal_aggregate.xlsx");
+}
