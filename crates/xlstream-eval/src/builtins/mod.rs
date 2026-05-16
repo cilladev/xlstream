@@ -19,6 +19,7 @@ mod multi_conditional;
 mod specfn;
 pub mod statistical;
 pub(crate) mod string;
+mod subtotal;
 
 use xlstream_core::{coerce, CellError, Value};
 use xlstream_parse::{NodeRef, NodeView};
@@ -271,6 +272,8 @@ pub(crate) fn dispatch(
         "IRR" => Some(financial::builtin_irr(args, interp, scope)),
         "RATE" => Some(financial::builtin_rate(&eval_args(args, interp, scope))),
         // -- range-expanding aggregate --
+        "SUBTOTAL" => Some(subtotal::builtin_subtotal(args, interp, scope)),
+        "AGGREGATE" => Some(subtotal::builtin_aggregate(args, interp, scope)),
         "SUMPRODUCT" => Some(builtin_sumproduct(args, interp, scope)),
         // -- statistical builtins (range-expanding) --
         "AVEDEV" => Some(builtin_avedev(args, interp, scope)),
