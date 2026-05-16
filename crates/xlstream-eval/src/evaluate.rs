@@ -1049,7 +1049,10 @@ fn build_eval_plan(
 
     let formula_cols: HashSet<u32> = col_asts.keys().copied().collect();
     let mut self_referential_cols: HashSet<u32> = HashSet::new();
-    let deps: Vec<(u32, Vec<u32>)> = col_asts
+    // #129: sort deps deterministically so topo_sort produces the same
+    // column evaluation order on all platforms (HashMap/HashSet iteration
+    // order is non-deterministic).
+    let mut deps: Vec<(u32, Vec<u32>)> = col_asts
         .iter()
         .map(|(&col, ast)| {
             let mut dep_cols: HashSet<u32> = HashSet::new();
@@ -1070,9 +1073,12 @@ fn build_eval_plan(
             if dep_cols.remove(&col) {
                 self_referential_cols.insert(col);
             }
-            (col, dep_cols.into_iter().collect())
+            let mut dep_vec: Vec<u32> = dep_cols.into_iter().collect();
+            dep_vec.sort_unstable();
+            (col, dep_vec)
         })
         .collect();
+    deps.sort_by_key(|(col, _)| *col);
 
     let topo_order = topo_sort(&deps, &formula_cols)?;
     Ok(BuildPlanResult {

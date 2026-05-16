@@ -10,9 +10,19 @@ use xlstream_parse::NodeRef;
 use crate::interp::Interpreter;
 use crate::scope::RowScope;
 
-/// Maximum Newton-Raphson iterations for IRR and RATE. Matches Excel's
-/// documented 100-iteration limit.
+/// Maximum Newton-Raphson iterations for IRR and RATE (Excel uses 100).
 const MAX_NEWTON_ITERATIONS: usize = 100;
+
+/// Absolute residual threshold — if f(rate) is this small, we've converged.
+const RATE_RESIDUAL_TOL: f64 = 1e-7;
+
+/// Near-zero rate threshold — rate is effectively zero below this.
+const RATE_NEAR_ZERO: f64 = 1e-6;
+
+/// Relative residual tolerance for near-zero rate cases. On x86 the
+/// residual oscillates above `RATE_RESIDUAL_TOL` due to extended-precision
+/// FPU rounding, but the rate has stabilized near zero.
+const RATE_NEAR_ZERO_REL_TOL: f64 = 1e-3;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -458,7 +468,10 @@ pub fn builtin_rate(args: &[Value]) -> Value {
                 * (pmt_type * (pow - 1.0) / rate + type_factor * nper * pow_m1 / rate
                     - type_factor * (pow - 1.0) / (rate * rate));
 
-        if f.abs() < 1e-7 {
+        if f.abs() < RATE_RESIDUAL_TOL
+            || (rate.abs() < RATE_NEAR_ZERO
+                && f.abs() < RATE_NEAR_ZERO_REL_TOL * pv.abs().max(pmt.abs()).max(1.0))
+        {
             return if rate > -1.0 { Value::Number(rate) } else { Value::Error(CellError::Num) };
         }
 

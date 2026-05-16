@@ -255,3 +255,15 @@ clean-all: clean ## clean + venv
 .PHONY: ci-local
 ci-local: check py-test audit ## simulate the full CI pipeline locally
 	@echo "✓ ci-local complete."
+
+# -----------------------------------------------------------------------------
+# cross-platform (requires Docker)
+# -----------------------------------------------------------------------------
+
+## cross-platform — test on Linux x86_64 via Docker
+
+.PHONY: check-linux
+check-linux: ## run full test suite on Linux x86_64 (requires Docker)
+	@command -v docker >/dev/null || { echo "✗ docker not found" >&2; exit 1; }
+	docker run --rm -v "$$(pwd)":/work -w /work rust:1.88 cargo test -p xlstream-eval --test conformance
+	docker run --rm -v "$$(pwd)":/work -w /work rust:1.88 cargo test -p xlstream-eval --lib
