@@ -85,9 +85,9 @@ Row-local additions to `builtins/math.rs`.
 - [x] **EVEN / ODD** — round to even/odd integer. ~1 hour.
 - [x] **TRUNC** — truncate to integer or decimal places. ~1 hour.
 - [x] **MROUND** — round to nearest multiple. ~1 hour.
-- [ ] **GCD / LCM** — greatest common divisor / least common multiple. ~1 hour.
+- [x] **GCD / LCM** — greatest common divisor / least common multiple. ~1 hour.
 - [x] **CEILING.MATH / FLOOR.MATH / CEILING.PRECISE / FLOOR.PRECISE / ISO.CEILING** — rounding variants. ~0.5 day.
-- [ ] **ROMAN / ARABIC** — number to Roman numeral and back. ~2 hours.
+- [x] **ROMAN / ARABIC** — number to Roman numeral and back. ~2 hours.
 - [ ] **SUBTOTAL / AGGREGATE** — multi-mode aggregate (complex — may defer to v0.4). ~1-2 days.
 
 ## Out of scope (v0.4+)
