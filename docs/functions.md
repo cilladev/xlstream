@@ -43,7 +43,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ACOSH | x | yes | v0.3 | x | | |
 | ACOT | . | yes | v0.3 | | | |
 | ACOTH | . | yes | v0.3 | | | |
-| AGGREGATE | . | yes | v0.3 | | | Multi-mode aggregate |
+| AGGREGATE | x | yes | v0.3 | x | | Multi-mode aggregate (fn 1-13, options 0-7; hidden-row/nested-SUBTOTAL ignoring deferred) |
 | ARABIC | x | yes | v0.3 | | | |
 | ASIN | x | yes | v0.1 | x | | |
 | ASINH | x | yes | v0.3 | x | | |
@@ -107,7 +107,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SINH | x | yes | v0.3 | x | | |
 | SQRT | x | yes | v0.1 | x | x | |
 | SQRTPI | . | yes | v0.3 | | | |
-| SUBTOTAL | . | yes | v0.3 | | | |
+| SUBTOTAL | x | yes | v0.3 | x | | fn 1-11/101-111; hidden-row ignoring deferred |
 | SUM | x | yes | v0.1 | x | x | |
 | SUMIF | x | yes | v0.1 | x | x | |
 | SUMIFS | x | yes | v0.1 | x | | |

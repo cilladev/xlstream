@@ -48,6 +48,8 @@ Semver.
 - CEILING.PRECISE, FLOOR.PRECISE, ISO.CEILING direction-fixed rounding variants
 - GCD, LCM greatest common divisor / least common multiple (variadic)
 - ROMAN, ARABIC Roman numeral conversion (forms 0-4)
+- SUBTOTAL multi-mode aggregate (function_num 1-11, 101-111)
+- AGGREGATE extended multi-mode aggregate (function_num 1-13, options 0-7; hidden-row and nested-SUBTOTAL ignoring are no-ops)
 
 ## [0.2.1] - 2026-05-11
 
