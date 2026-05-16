@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778790814704,
+  "lastUpdate": 1778939166816,
   "repoUrl": "https://github.com/cilladev/xlstream",
   "entries": {
     "Benchmark": [
@@ -15797,6 +15797,336 @@ window.BENCHMARK_DATA = {
             "name": "string/textjoin",
             "value": 222,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "priscillaemasoga@gmail.com",
+            "name": "Priscilla Emasoga",
+            "username": "cilladev"
+          },
+          "committer": {
+            "email": "priscillaemasoga@gmail.com",
+            "name": "Priscilla Emasoga",
+            "username": "cilladev"
+          },
+          "distinct": true,
+          "id": "d92af95f8f78676f9b921ef19bd081b4ad0aa8f1",
+          "message": "docs: add feature specs for roadmap items",
+          "timestamp": "2026-05-16T14:34:28+01:00",
+          "tree_id": "c7dad7a65b193228d298ddf12ff4553048bcf543",
+          "url": "https://github.com/cilladev/xlstream/commit/d92af95f8f78676f9b921ef19bd081b4ad0aa8f1"
+        },
+        "date": 1778939166465,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arithmetic/add",
+            "value": 34,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/subtract",
+            "value": 34,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/multiply",
+            "value": 34,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/divide",
+            "value": 34,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/power",
+            "value": 54,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/negate",
+            "value": 23,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/percent",
+            "value": 23,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/concat",
+            "value": 212,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/compare_gt",
+            "value": 76,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arithmetic/compare_eq",
+            "value": 76,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "conditional/if",
+            "value": 117,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "conditional/ifs",
+            "value": 195,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "conditional/switch",
+            "value": 174,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "conditional/iferror",
+            "value": 79,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "conditional/and",
+            "value": 155,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "conditional/or",
+            "value": 208,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "date/year",
+            "value": 198,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "date/edate",
+            "value": 377,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "date/networkdays",
+            "value": 313,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "date/datedif",
+            "value": 398,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "financial/pmt",
+            "value": 160,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "financial/fv",
+            "value": 156,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "financial/rate",
+            "value": 2105,
+            "range": "± 22",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "financial/npv",
+            "value": 452,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "financial/irr",
+            "value": 1370,
+            "range": "± 8",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/isblank",
+            "value": 79,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/isnumber",
+            "value": 70,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/type",
+            "value": 77,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/istext",
+            "value": 111,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/iserror",
+            "value": 79,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/row_ref",
+            "value": 51,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/column_ref",
+            "value": 58,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/row_no_arg",
+            "value": 34,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/column_no_arg",
+            "value": 41,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/rows_range",
+            "value": 50,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "info/columns_range",
+            "value": 61,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lookup/vlookup_exact/1000",
+            "value": 197,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "lookup/vlookup_exact/10000",
+            "value": 196,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "math/round",
+            "value": 281,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "math/mod",
+            "value": 113,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "math/sqrt",
+            "value": 91,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "math/abs",
+            "value": 85,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "math/int",
+            "value": 86,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "math/power",
+            "value": 124,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse_30_formulas",
+            "value": 21639,
+            "range": "± 310",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "string/left",
+            "value": 136,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "string/concat",
+            "value": 196,
+            "range": "± 4",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "string/text",
+            "value": 804,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "string/substitute",
+            "value": 236,
+            "range": "± 3",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "string/find",
+            "value": 263,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "string/textjoin",
+            "value": 265,
+            "range": "± 4",
             "unit": "ns/iter"
           }
         ]
