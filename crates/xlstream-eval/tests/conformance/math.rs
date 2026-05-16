@@ -54,3 +54,13 @@ fn mround() {
 fn ceiling_floor_variants() {
     run_conformance("math/ceiling_floor_variants.xlsx");
 }
+
+#[test]
+fn gcd_lcm() {
+    run_conformance("math/gcd_lcm.xlsx");
+}
+
+#[test]
+fn roman_arabic() {
+    run_conformance("math/roman_arabic.xlsx");
+}

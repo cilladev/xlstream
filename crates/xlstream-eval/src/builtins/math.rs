@@ -1077,6 +1077,301 @@ pub(crate) fn builtin_combina(args: &[Value]) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// GCD / LCM
+// ---------------------------------------------------------------------------
+
+/// Euclidean GCD for two non-negative integers.
+fn gcd_pair(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
+}
+
+/// `GCD(number1, [number2], ...)` — greatest common divisor.
+///
+/// Variadic (1-255 args). Each arg truncated to integer.
+/// Negative values return `#NUM!`.
+#[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
+pub(crate) fn builtin_gcd(args: &[Value]) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+    let mut result: u64 = 0;
+    for i in 0..args.len() {
+        let n = match num_arg(args, i) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let n_int = match to_int(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        };
+        if n_int < 0 {
+            return Value::Error(CellError::Num);
+        }
+        result = gcd_pair(result, n_int as u64);
+    }
+    Value::Number(result as f64)
+}
+
+/// `LCM(number1, [number2], ...)` — least common multiple.
+///
+/// Variadic (1-255 args). Each arg truncated to integer.
+/// Negative values return `#NUM!`. Any zero arg yields 0.
+#[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
+pub(crate) fn builtin_lcm(args: &[Value]) -> Value {
+    if args.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+    let mut result: u64 = 0;
+    let mut first = true;
+    for i in 0..args.len() {
+        let n = match num_arg(args, i) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let n_int = match to_int(n) {
+            Ok(v) => v,
+            Err(e) => return Value::Error(e),
+        };
+        if n_int < 0 {
+            return Value::Error(CellError::Num);
+        }
+        let n_u = n_int as u64;
+        if first {
+            result = n_u;
+            first = false;
+        } else if result == 0 || n_u == 0 {
+            result = 0;
+        } else {
+            let g = gcd_pair(result, n_u);
+            match (result / g).checked_mul(n_u) {
+                Some(v) => result = v,
+                None => return Value::Error(CellError::Num),
+            }
+        }
+    }
+    match finite_or_num(result as f64) {
+        Ok(v) => Value::Number(v),
+        Err(e) => Value::Error(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ROMAN / ARABIC
+// ---------------------------------------------------------------------------
+
+/// Classic Roman numeral pairs (form 0): value and string representation.
+const ROMAN_CLASSIC: &[(u32, &str)] = &[
+    (1000, "M"),
+    (900, "CM"),
+    (500, "D"),
+    (400, "CD"),
+    (100, "C"),
+    (90, "XC"),
+    (50, "L"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+];
+
+/// Form 1 additional subtractive pairs.
+const ROMAN_FORM1: &[(u32, &str)] = &[
+    (1000, "M"),
+    (995, "VM"),
+    (990, "XM"),
+    (900, "CM"),
+    (500, "D"),
+    (495, "VD"),
+    (490, "XD"),
+    (400, "CD"),
+    (100, "C"),
+    (95, "VC"),
+    (90, "XC"),
+    (50, "L"),
+    (45, "VL"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+];
+
+/// Form 2 additional subtractive pairs.
+const ROMAN_FORM2: &[(u32, &str)] = &[
+    (1000, "M"),
+    (995, "VM"),
+    (990, "XM"),
+    (950, "LM"),
+    (900, "CM"),
+    (500, "D"),
+    (495, "VD"),
+    (490, "XD"),
+    (450, "LD"),
+    (400, "CD"),
+    (100, "C"),
+    (95, "VC"),
+    (90, "XC"),
+    (50, "L"),
+    (45, "VL"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+];
+
+// Forms 3-4: identical in Excel — both allow all subtractive pairs.
+// Validated via conformance fixture against Excel cached values.
+const ROMAN_FORM3_4: &[(u32, &str)] = &[
+    (1000, "M"),
+    (999, "IM"),
+    (995, "VM"),
+    (990, "XM"),
+    (950, "LM"),
+    (900, "CM"),
+    (500, "D"),
+    (499, "ID"),
+    (495, "VD"),
+    (490, "XD"),
+    (450, "LD"),
+    (400, "CD"),
+    (100, "C"),
+    (99, "IC"),
+    (95, "VC"),
+    (90, "XC"),
+    (50, "L"),
+    (49, "IL"),
+    (45, "VL"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+];
+
+/// `ROMAN(number, [form])` — convert integer to Roman numeral text.
+///
+/// `number` must be 0-3999. `form` 0-4 controls abbreviation level (0=classic).
+/// Returns empty string for 0.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn builtin_roman(args: &[Value]) -> Value {
+    if args.is_empty() || args.len() > 2 {
+        return Value::Error(CellError::Value);
+    }
+    let n = match num_arg(args, 0) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let Ok(n_int) = to_int(n) else {
+        return Value::Error(CellError::Value);
+    };
+    if !(0..=3999).contains(&n_int) {
+        return Value::Error(CellError::Value);
+    }
+    if n_int == 0 {
+        return Value::Text("".into());
+    }
+    let form = if args.len() == 2 {
+        let f = match num_arg(args, 1) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        match to_int(f) {
+            Ok(v) => v,
+            Err(_) => return Value::Error(CellError::Value),
+        }
+    } else {
+        0
+    };
+    if !(0..=4).contains(&form) {
+        return Value::Error(CellError::Value);
+    }
+    let table = match form {
+        0 => ROMAN_CLASSIC,
+        1 => ROMAN_FORM1,
+        2 => ROMAN_FORM2,
+        _ => ROMAN_FORM3_4,
+    };
+    let mut result = String::new();
+    let mut remaining = n_int as u32;
+    for &(value, symbol) in table {
+        while remaining >= value {
+            result.push_str(symbol);
+            remaining -= value;
+        }
+    }
+    Value::Text(result.into())
+}
+
+/// Map a single Roman numeral character to its value.
+fn roman_char_value(c: u8) -> Option<i64> {
+    match c {
+        b'I' => Some(1),
+        b'V' => Some(5),
+        b'X' => Some(10),
+        b'L' => Some(50),
+        b'C' => Some(100),
+        b'D' => Some(500),
+        b'M' => Some(1000),
+        _ => None,
+    }
+}
+
+/// `ARABIC(text)` — convert Roman numeral text to number.
+///
+/// Case insensitive. Empty string returns 0. Leading `-` supported.
+/// Invalid characters return `#VALUE!`.
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn builtin_arabic(args: &[Value]) -> Value {
+    if args.len() != 1 {
+        return Value::Error(CellError::Value);
+    }
+    let v = args.first().unwrap_or(&Value::Empty);
+    if let Value::Error(e) = v {
+        return Value::Error(*e);
+    }
+    let text = xlstream_core::coerce::to_text(v);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Value::Number(0.0);
+    }
+    let (neg, roman_part) =
+        if let Some(rest) = trimmed.strip_prefix('-') { (true, rest) } else { (false, trimmed) };
+    if roman_part.is_empty() {
+        return Value::Error(CellError::Value);
+    }
+    let upper = roman_part.to_ascii_uppercase();
+    let bytes = upper.as_bytes();
+    let mut total: i64 = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        let Some(cur) = roman_char_value(b) else {
+            return Value::Error(CellError::Value);
+        };
+        let next =
+            if i + 1 < bytes.len() { roman_char_value(bytes[i + 1]).unwrap_or(0) } else { 0 };
+        if cur < next {
+            total -= cur;
+        } else {
+            total += cur;
+        }
+    }
+    if neg {
+        total = -total;
+    }
+    Value::Number(total as f64)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -3220,5 +3515,412 @@ mod tests {
             builtin_floor_precise(&[Value::Number(f64::INFINITY)]),
             Value::Error(CellError::Num)
         );
+    }
+
+    // ===== GCD =====
+
+    #[test]
+    fn gcd_two_args() {
+        assert_eq!(builtin_gcd(&[Value::Number(12.0), Value::Number(8.0)]), Value::Number(4.0));
+    }
+
+    #[test]
+    fn gcd_three_args() {
+        assert_eq!(
+            builtin_gcd(&[Value::Number(24.0), Value::Number(36.0), Value::Number(48.0)]),
+            Value::Number(12.0),
+        );
+    }
+
+    #[test]
+    fn gcd_coprime() {
+        assert_eq!(builtin_gcd(&[Value::Number(7.0), Value::Number(13.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn gcd_single_arg() {
+        assert_eq!(builtin_gcd(&[Value::Number(12.0)]), Value::Number(12.0));
+    }
+
+    #[test]
+    fn gcd_with_zero() {
+        assert_eq!(builtin_gcd(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(5.0));
+    }
+
+    #[test]
+    fn gcd_zero_first() {
+        assert_eq!(builtin_gcd(&[Value::Number(0.0), Value::Number(5.0)]), Value::Number(5.0));
+    }
+
+    #[test]
+    fn gcd_both_zero() {
+        assert_eq!(builtin_gcd(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn gcd_fractional_truncated() {
+        assert_eq!(builtin_gcd(&[Value::Number(12.9), Value::Number(8.1)]), Value::Number(4.0));
+    }
+
+    #[test]
+    fn gcd_negative_returns_num() {
+        assert_eq!(
+            builtin_gcd(&[Value::Number(-1.0), Value::Number(5.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn gcd_second_arg_negative() {
+        assert_eq!(
+            builtin_gcd(&[Value::Number(5.0), Value::Number(-1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn gcd_no_args() {
+        assert_eq!(builtin_gcd(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn gcd_error_propagation() {
+        assert_eq!(
+            builtin_gcd(&[Value::Error(CellError::Na), Value::Number(5.0)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn gcd_coercion_bool() {
+        assert_eq!(builtin_gcd(&[Value::Bool(true), Value::Number(1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn gcd_coercion_text() {
+        assert_eq!(
+            builtin_gcd(&[Value::Text("12".into()), Value::Number(8.0)]),
+            Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn gcd_type_mismatch() {
+        assert_eq!(
+            builtin_gcd(&[Value::Text("abc".into()), Value::Number(5.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== LCM =====
+
+    #[test]
+    fn lcm_two_args() {
+        assert_eq!(builtin_lcm(&[Value::Number(4.0), Value::Number(6.0)]), Value::Number(12.0));
+    }
+
+    #[test]
+    fn lcm_three_args() {
+        assert_eq!(
+            builtin_lcm(&[Value::Number(5.0), Value::Number(10.0), Value::Number(15.0)]),
+            Value::Number(30.0),
+        );
+    }
+
+    #[test]
+    fn lcm_coprime() {
+        assert_eq!(builtin_lcm(&[Value::Number(3.0), Value::Number(7.0)]), Value::Number(21.0));
+    }
+
+    #[test]
+    fn lcm_single_arg() {
+        assert_eq!(builtin_lcm(&[Value::Number(12.0)]), Value::Number(12.0));
+    }
+
+    #[test]
+    fn lcm_with_zero() {
+        assert_eq!(builtin_lcm(&[Value::Number(5.0), Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn lcm_both_zero() {
+        assert_eq!(builtin_lcm(&[Value::Number(0.0), Value::Number(0.0)]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn lcm_fractional_truncated() {
+        assert_eq!(builtin_lcm(&[Value::Number(4.9), Value::Number(6.1)]), Value::Number(12.0));
+    }
+
+    #[test]
+    fn lcm_negative_returns_num() {
+        assert_eq!(
+            builtin_lcm(&[Value::Number(-1.0), Value::Number(5.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn lcm_no_args() {
+        assert_eq!(builtin_lcm(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn lcm_error_propagation() {
+        assert_eq!(
+            builtin_lcm(&[Value::Number(5.0), Value::Error(CellError::Na)]),
+            Value::Error(CellError::Na)
+        );
+    }
+
+    #[test]
+    fn lcm_coercion_text() {
+        assert_eq!(
+            builtin_lcm(&[Value::Text("4".into()), Value::Number(6.0)]),
+            Value::Number(12.0)
+        );
+    }
+
+    #[test]
+    fn lcm_coercion_bool() {
+        assert_eq!(builtin_lcm(&[Value::Bool(true), Value::Number(1.0)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn lcm_type_mismatch() {
+        assert_eq!(
+            builtin_lcm(&[Value::Text("abc".into()), Value::Number(5.0)]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    #[test]
+    fn lcm_overflow_returns_num() {
+        #[allow(clippy::cast_precision_loss)]
+        let big = (1_u64 << 47) as f64;
+        assert_eq!(
+            builtin_lcm(&[Value::Number(big - 1.0), Value::Number(big - 3.0)]),
+            Value::Error(CellError::Num),
+        );
+    }
+
+    // ===== ROMAN =====
+
+    #[test]
+    fn roman_one() {
+        assert_eq!(builtin_roman(&[Value::Number(1.0)]), Value::Text("I".into()));
+    }
+
+    #[test]
+    fn roman_four() {
+        assert_eq!(builtin_roman(&[Value::Number(4.0)]), Value::Text("IV".into()));
+    }
+
+    #[test]
+    fn roman_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(9.0)]), Value::Text("IX".into()));
+    }
+
+    #[test]
+    fn roman_fourteen() {
+        assert_eq!(builtin_roman(&[Value::Number(14.0)]), Value::Text("XIV".into()));
+    }
+
+    #[test]
+    fn roman_forty_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(49.0)]), Value::Text("XLIX".into()));
+    }
+
+    #[test]
+    fn roman_ninety_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(99.0)]), Value::Text("XCIX".into()));
+    }
+
+    #[test]
+    fn roman_four_ninety_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(499.0)]), Value::Text("CDXCIX".into()));
+    }
+
+    #[test]
+    fn roman_nine_ninety_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(999.0)]), Value::Text("CMXCIX".into()));
+    }
+
+    #[test]
+    fn roman_nineteen_ninety_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(1999.0)]), Value::Text("MCMXCIX".into()));
+    }
+
+    #[test]
+    fn roman_three_nine_nine_nine() {
+        assert_eq!(builtin_roman(&[Value::Number(3999.0)]), Value::Text("MMMCMXCIX".into()));
+    }
+
+    #[test]
+    fn roman_zero_returns_empty() {
+        assert_eq!(builtin_roman(&[Value::Number(0.0)]), Value::Text("".into()));
+    }
+
+    #[test]
+    fn roman_form_0_explicit() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(499.0), Value::Number(0.0)]),
+            Value::Text("CDXCIX".into()),
+        );
+    }
+
+    #[test]
+    fn roman_form_4_abbreviated() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(499.0), Value::Number(4.0)]),
+            Value::Text("ID".into()),
+        );
+    }
+
+    #[test]
+    fn roman_form_4_nine_ninety_nine() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(999.0), Value::Number(4.0)]),
+            Value::Text("IM".into()),
+        );
+    }
+
+    #[test]
+    fn roman_negative_returns_value() {
+        assert_eq!(builtin_roman(&[Value::Number(-1.0)]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn roman_four_thousand_returns_value() {
+        assert_eq!(builtin_roman(&[Value::Number(4000.0)]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn roman_form_out_of_range() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(1.0), Value::Number(5.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn roman_form_negative() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(1.0), Value::Number(-1.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn roman_no_args() {
+        assert_eq!(builtin_roman(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn roman_too_many_args() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(1.0), Value::Number(0.0), Value::Number(0.0)]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn roman_error_propagation() {
+        assert_eq!(builtin_roman(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn roman_coercion_bool() {
+        assert_eq!(builtin_roman(&[Value::Bool(true)]), Value::Text("I".into()));
+    }
+
+    #[test]
+    fn roman_coercion_text() {
+        assert_eq!(builtin_roman(&[Value::Text("5".into())]), Value::Text("V".into()));
+    }
+
+    #[test]
+    fn roman_type_mismatch() {
+        assert_eq!(builtin_roman(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
+    }
+
+    // ===== ARABIC =====
+
+    #[test]
+    fn arabic_one() {
+        assert_eq!(builtin_arabic(&[Value::Text("I".into())]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn arabic_four() {
+        assert_eq!(builtin_arabic(&[Value::Text("IV".into())]), Value::Number(4.0));
+    }
+
+    #[test]
+    fn arabic_nine() {
+        assert_eq!(builtin_arabic(&[Value::Text("IX".into())]), Value::Number(9.0));
+    }
+
+    #[test]
+    fn arabic_nineteen_ninety_nine() {
+        assert_eq!(builtin_arabic(&[Value::Text("MCMXCIX".into())]), Value::Number(1999.0));
+    }
+
+    #[test]
+    fn arabic_three_nine_nine_nine() {
+        assert_eq!(builtin_arabic(&[Value::Text("MMMCMXCIX".into())]), Value::Number(3999.0));
+    }
+
+    #[test]
+    fn arabic_case_insensitive() {
+        assert_eq!(builtin_arabic(&[Value::Text("mmvi".into())]), Value::Number(2006.0));
+    }
+
+    #[test]
+    fn arabic_empty_returns_zero() {
+        assert_eq!(builtin_arabic(&[Value::Text("".into())]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn arabic_negative() {
+        assert_eq!(builtin_arabic(&[Value::Text("-X".into())]), Value::Number(-10.0));
+    }
+
+    #[test]
+    fn arabic_invalid_chars() {
+        assert_eq!(builtin_arabic(&[Value::Text("ABC".into())]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn arabic_digits_invalid() {
+        assert_eq!(builtin_arabic(&[Value::Text("123".into())]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn arabic_no_args() {
+        assert_eq!(builtin_arabic(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn arabic_too_many_args() {
+        assert_eq!(
+            builtin_arabic(&[Value::Text("I".into()), Value::Text("V".into())]),
+            Value::Error(CellError::Value),
+        );
+    }
+
+    #[test]
+    fn arabic_error_propagation() {
+        assert_eq!(builtin_arabic(&[Value::Error(CellError::Na)]), Value::Error(CellError::Na));
+    }
+
+    #[test]
+    fn arabic_number_coerced_to_text() {
+        assert_eq!(builtin_arabic(&[Value::Number(0.0)]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn arabic_empty_value() {
+        assert_eq!(builtin_arabic(&[Value::Empty]), Value::Number(0.0));
     }
 }

@@ -197,6 +197,10 @@ pub(crate) fn dispatch(
         "PERMUTATIONA" => Some(math::builtin_permutationa(&eval_args(args, interp, scope))),
         "COMBIN" => Some(math::builtin_combin(&eval_args(args, interp, scope))),
         "COMBINA" => Some(math::builtin_combina(&eval_args(args, interp, scope))),
+        "GCD" => Some(math::builtin_gcd(&eval_args(args, interp, scope))),
+        "LCM" => Some(math::builtin_lcm(&eval_args(args, interp, scope))),
+        "ROMAN" => Some(math::builtin_roman(&eval_args(args, interp, scope))),
+        "ARABIC" => Some(math::builtin_arabic(&eval_args(args, interp, scope))),
         // -- info builtins (pure, eager eval) --
         "ISBLANK" => Some(info::builtin_isblank(&eval_args(args, interp, scope))),
         "ISNUMBER" => Some(info::builtin_isnumber(&eval_args(args, interp, scope))),
