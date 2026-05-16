@@ -40,16 +40,16 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 |---|---|---|---|---|---|---|
 | ABS | x | yes | v0.1 | x | x | |
 | ACOS | x | yes | v0.1 | x | | |
-| ACOSH | . | yes | v0.3 | x | | |
+| ACOSH | x | yes | v0.3 | x | | |
 | ACOT | . | yes | v0.3 | | | |
 | ACOTH | . | yes | v0.3 | | | |
 | AGGREGATE | . | yes | v0.3 | | | Multi-mode aggregate |
 | ARABIC | x | yes | v0.3 | | | |
 | ASIN | x | yes | v0.1 | x | | |
-| ASINH | . | yes | v0.3 | x | | |
+| ASINH | x | yes | v0.3 | x | | |
 | ATAN | x | yes | v0.1 | x | | |
 | ATAN2 | x | yes | v0.1 | x | | |
-| ATANH | . | yes | v0.3 | x | | |
+| ATANH | x | yes | v0.3 | x | | |
 | BASE | x | yes | v0.3 | | | |
 | CEILING | x | yes | v0.1 | x | x | |
 | CEILING.MATH | x | yes | v0.3 | x | x | |
@@ -57,13 +57,13 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | COMBIN | x | yes | v0.3 | | | |
 | COMBINA | x | yes | v0.3 | | | |
 | COS | x | yes | v0.1 | x | | |
-| COSH | . | yes | v0.3 | x | | |
-| COT | . | yes | v0.3 | | | |
-| COTH | . | yes | v0.3 | | | |
-| CSC | . | yes | v0.3 | | | |
-| CSCH | . | yes | v0.3 | | | |
+| COSH | x | yes | v0.3 | x | | |
+| COT | x | yes | v0.3 | | | |
+| COTH | x | yes | v0.3 | | | |
+| CSC | x | yes | v0.3 | | | |
+| CSCH | x | yes | v0.3 | | | |
 | DECIMAL | . | yes | v0.3 | | | |
-| DEGREES | . | yes | v0.3 | x | | |
+| DEGREES | x | yes | v0.3 | x | | |
 | EVEN | x | yes | v0.3 | x | x | |
 | EXP | x | yes | v0.1 | x | | |
 | FACT | x | yes | v0.3 | | | |
@@ -90,7 +90,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | POWER | x | yes | v0.1 | x | x | |
 | PRODUCT | x | yes | v0.1 | x | | |
 | QUOTIENT | . | yes | v0.3 | | | |
-| RADIANS | . | yes | v0.3 | x | | |
+| RADIANS | x | yes | v0.3 | x | | |
 | RAND | - | no | - | x | x | Volatile |
 | RANDARRAY | - | no | - | | | Volatile + spill |
 | RANDBETWEEN | - | no | - | x | x | Volatile |
@@ -98,13 +98,13 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ROUND | x | yes | v0.1 | x | x | |
 | ROUNDDOWN | x | yes | v0.1 | x | x | |
 | ROUNDUP | x | yes | v0.1 | x | x | |
-| SEC | . | yes | v0.3 | | | |
-| SECH | . | yes | v0.3 | | | |
+| SEC | x | yes | v0.3 | | | |
+| SECH | x | yes | v0.3 | | | |
 | SEQUENCE | - | no | - | | | Spill |
 | SERIESSUM | . | yes | v0.3 | | | |
 | SIGN | x | yes | v0.1 | x | | |
 | SIN | x | yes | v0.1 | x | | |
-| SINH | . | yes | v0.3 | x | | |
+| SINH | x | yes | v0.3 | x | | |
 | SQRT | x | yes | v0.1 | x | x | |
 | SQRTPI | . | yes | v0.3 | | | |
 | SUBTOTAL | . | yes | v0.3 | | | |
@@ -117,7 +117,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SUMX2PY2 | . | yes | v0.3 | | | |
 | SUMXMY2 | . | yes | v0.3 | | | |
 | TAN | x | yes | v0.1 | x | | |
-| TANH | . | yes | v0.3 | x | | |
+| TANH | x | yes | v0.3 | x | | |
 | TRUNC | x | yes | v0.3 | x | x | |
 
 ## Statistical

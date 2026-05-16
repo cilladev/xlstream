@@ -6,6 +6,10 @@ Semver.
 ## [Unreleased]
 
 ### Added
+- ACOSH, ASINH, ATANH inverse hyperbolic functions
+- COSH, SINH, TANH hyperbolic functions
+- COT, CSC, SEC, COTH, CSCH, SECH reciprocal trig/hyperbolic functions
+- DEGREES, RADIANS angle conversion functions
 - CONVERT unit conversion (~100 base units, SI/binary prefixes, 13 categories)
 - DELTA, GESTEP Kronecker delta and unit step
 - ERF, ERFC, ERF.PRECISE, ERFC.PRECISE error function and complement
