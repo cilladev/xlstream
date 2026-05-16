@@ -42,6 +42,8 @@ Semver.
 - MROUND round to nearest multiple
 - CEILING.MATH, FLOOR.MATH rounding with mode parameter
 - CEILING.PRECISE, FLOOR.PRECISE, ISO.CEILING direction-fixed rounding variants
+- GCD, LCM greatest common divisor / least common multiple (variadic)
+- ROMAN, ARABIC Roman numeral conversion (forms 0-4)
 
 ## [0.2.1] - 2026-05-11
 

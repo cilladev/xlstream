@@ -44,7 +44,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ACOT | . | yes | v0.3 | | | |
 | ACOTH | . | yes | v0.3 | | | |
 | AGGREGATE | . | yes | v0.3 | | | Multi-mode aggregate |
-| ARABIC | . | yes | v0.3 | | | |
+| ARABIC | x | yes | v0.3 | | | |
 | ASIN | x | yes | v0.1 | x | | |
 | ASINH | . | yes | v0.3 | x | | |
 | ATAN | x | yes | v0.1 | x | | |
@@ -71,10 +71,10 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | FLOOR | x | yes | v0.1 | x | x | |
 | FLOOR.MATH | x | yes | v0.3 | x | x | |
 | FLOOR.PRECISE | x | yes | v0.3 | x | x | |
-| GCD | . | yes | v0.3 | | | |
+| GCD | x | yes | v0.3 | | | |
 | INT | x | yes | v0.1 | x | x | |
 | ISO.CEILING | x | yes | v0.3 | x | x | |
-| LCM | . | yes | v0.3 | | | |
+| LCM | x | yes | v0.3 | | | |
 | LN | x | yes | v0.1 | x | x | |
 | LOG | x | yes | v0.1 | x | x | |
 | LOG10 | x | yes | v0.1 | x | | |
@@ -94,7 +94,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | RAND | - | no | - | x | x | Volatile |
 | RANDARRAY | - | no | - | | | Volatile + spill |
 | RANDBETWEEN | - | no | - | x | x | Volatile |
-| ROMAN | . | yes | v0.3 | | | |
+| ROMAN | x | yes | v0.3 | | | |
 | ROUND | x | yes | v0.1 | x | x | |
 | ROUNDDOWN | x | yes | v0.1 | x | x | |
 | ROUNDUP | x | yes | v0.1 | x | x | |
