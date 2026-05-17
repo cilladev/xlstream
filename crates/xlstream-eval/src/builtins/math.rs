@@ -1331,6 +1331,9 @@ fn roman_char_value(c: u8) -> Option<i64> {
 ///
 /// Case insensitive. Empty string returns 0. Leading `-` supported.
 /// Invalid characters return `#VALUE!`.
+///
+/// Intentionally permissive: accepts non-standard forms like "IIII" or "VV"
+/// without grammar validation — matches Excel behavior.
 #[allow(clippy::cast_precision_loss)]
 pub(crate) fn builtin_arabic(args: &[Value]) -> Value {
     if args.len() != 1 {
@@ -3844,6 +3847,23 @@ mod tests {
         assert_eq!(builtin_roman(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
 
+    #[test]
+    fn roman_form_1() {
+        assert_eq!(
+            builtin_roman(&[Value::Number(499.0), Value::Number(1.0)]),
+            Value::Text("VDIV".into()),
+        );
+    }
+
+    #[test]
+    fn roman_form_2_differs() {
+        // Form 2 adds LM (950) pair, absent from forms 0-1
+        assert_eq!(
+            builtin_roman(&[Value::Number(950.0), Value::Number(2.0)]),
+            Value::Text("LM".into()),
+        );
+    }
+
     // ===== ARABIC =====
 
     #[test]
@@ -3884,6 +3904,11 @@ mod tests {
     #[test]
     fn arabic_negative() {
         assert_eq!(builtin_arabic(&[Value::Text("-X".into())]), Value::Number(-10.0));
+    }
+
+    #[test]
+    fn arabic_bare_dash_returns_value() {
+        assert_eq!(builtin_arabic(&[Value::Text("-".into())]), Value::Error(CellError::Value));
     }
 
     #[test]
