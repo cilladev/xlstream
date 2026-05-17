@@ -331,6 +331,9 @@ pub(crate) fn builtin_even(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !x.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if x == 0.0 {
         return Value::Number(0.0);
     }
@@ -349,6 +352,9 @@ pub(crate) fn builtin_odd(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !x.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if x == 0.0 {
         return Value::Number(1.0);
     }
@@ -372,6 +378,9 @@ pub(crate) fn builtin_trunc(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !x.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     let digits = if args.len() == 2 {
         match num_arg(args, 1) {
             Ok(n) => n,
@@ -380,11 +389,14 @@ pub(crate) fn builtin_trunc(args: &[Value]) -> Value {
     } else {
         0.0
     };
+    if !digits.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     let Some(d) = to_decimal(x) else {
         return Value::Number(x);
     };
     #[allow(clippy::cast_possible_truncation)]
-    let di = digits.trunc() as i32;
+    let di = (digits.trunc() as i32).clamp(-18, 28);
     if di < 0 {
         #[allow(clippy::cast_sign_loss)]
         let factor = Decimal::from(10i64.pow((-di) as u32));
@@ -417,6 +429,9 @@ pub(crate) fn builtin_mround(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !number.is_finite() || !multiple.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if multiple == 0.0 {
         return Value::Number(0.0);
     }
@@ -445,6 +460,9 @@ pub(crate) fn builtin_ceiling_math(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !number.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     let sig = if args.len() >= 2 {
         match num_arg(args, 1) {
             Ok(n) => n,
@@ -455,6 +473,9 @@ pub(crate) fn builtin_ceiling_math(args: &[Value]) -> Value {
     } else {
         -1.0
     };
+    if !sig.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if sig == 0.0 {
         return Value::Number(0.0);
     }
@@ -489,6 +510,9 @@ pub(crate) fn builtin_floor_math(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !number.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     let sig = if args.len() >= 2 {
         match num_arg(args, 1) {
             Ok(n) => n,
@@ -499,6 +523,9 @@ pub(crate) fn builtin_floor_math(args: &[Value]) -> Value {
     } else {
         -1.0
     };
+    if !sig.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if sig == 0.0 {
         return Value::Number(0.0);
     }
@@ -532,6 +559,9 @@ pub(crate) fn builtin_ceiling_precise(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !number.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     let sig = if args.len() == 2 {
         match num_arg(args, 1) {
             Ok(n) => n,
@@ -540,6 +570,9 @@ pub(crate) fn builtin_ceiling_precise(args: &[Value]) -> Value {
     } else {
         1.0
     };
+    if !sig.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if sig == 0.0 {
         return Value::Number(0.0);
     }
@@ -559,6 +592,9 @@ pub(crate) fn builtin_floor_precise(args: &[Value]) -> Value {
         Ok(n) => n,
         Err(e) => return e,
     };
+    if !number.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     let sig = if args.len() == 2 {
         match num_arg(args, 1) {
             Ok(n) => n,
@@ -567,6 +603,9 @@ pub(crate) fn builtin_floor_precise(args: &[Value]) -> Value {
     } else {
         1.0
     };
+    if !sig.is_finite() {
+        return Value::Error(CellError::Num);
+    }
     if sig == 0.0 {
         return Value::Number(0.0);
     }
@@ -3023,6 +3062,163 @@ mod tests {
         assert_eq!(
             builtin_floor_precise(&[Value::Text("4.1".into()), Value::Number(2.0)]),
             Value::Number(4.0)
+        );
+    }
+
+    #[test]
+    fn floor_precise_type_mismatch() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Text("abc".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== Missing test shapes: FLOOR.MATH coercion + type mismatch =====
+
+    #[test]
+    fn floor_math_coercion() {
+        assert_eq!(builtin_floor_math(&[Value::Bool(true)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn floor_math_type_mismatch() {
+        assert_eq!(
+            builtin_floor_math(&[Value::Text("abc".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== Missing test shapes: CEILING.PRECISE coercion + type mismatch =====
+
+    #[test]
+    fn ceiling_precise_coercion() {
+        assert_eq!(builtin_ceiling_precise(&[Value::Bool(true)]), Value::Number(1.0));
+    }
+
+    #[test]
+    fn ceiling_precise_type_mismatch() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Text("abc".into())]),
+            Value::Error(CellError::Value)
+        );
+    }
+
+    // ===== NaN / Infinity guards =====
+
+    #[test]
+    fn even_nan_returns_num() {
+        assert_eq!(builtin_even(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn even_inf_returns_num() {
+        assert_eq!(builtin_even(&[Value::Number(f64::INFINITY)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn odd_nan_returns_num() {
+        assert_eq!(builtin_odd(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn odd_inf_returns_num() {
+        assert_eq!(builtin_odd(&[Value::Number(f64::NEG_INFINITY)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn trunc_nan_returns_num() {
+        assert_eq!(builtin_trunc(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn trunc_inf_returns_num() {
+        assert_eq!(builtin_trunc(&[Value::Number(f64::INFINITY)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn trunc_nan_digits_returns_num() {
+        assert_eq!(
+            builtin_trunc(&[Value::Number(5.0), Value::Number(f64::NAN)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn trunc_extreme_negative_digits() {
+        assert_eq!(
+            builtin_trunc(&[Value::Number(1234.0), Value::Number(-100.0)]),
+            Value::Number(0.0)
+        );
+    }
+
+    #[test]
+    fn mround_nan_returns_num() {
+        assert_eq!(
+            builtin_mround(&[Value::Number(f64::NAN), Value::Number(3.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn mround_inf_returns_num() {
+        assert_eq!(
+            builtin_mround(&[Value::Number(f64::INFINITY), Value::Number(3.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn mround_nan_multiple_returns_num() {
+        assert_eq!(
+            builtin_mround(&[Value::Number(10.0), Value::Number(f64::NAN)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn ceiling_math_nan_returns_num() {
+        assert_eq!(builtin_ceiling_math(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn ceiling_math_inf_returns_num() {
+        assert_eq!(
+            builtin_ceiling_math(&[Value::Number(f64::INFINITY)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn floor_math_nan_returns_num() {
+        assert_eq!(builtin_floor_math(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn ceiling_precise_nan_returns_num() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(f64::NAN)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn ceiling_precise_nan_sig_returns_num() {
+        assert_eq!(
+            builtin_ceiling_precise(&[Value::Number(4.1), Value::Number(f64::NAN)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn floor_precise_nan_returns_num() {
+        assert_eq!(builtin_floor_precise(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
+    }
+
+    #[test]
+    fn floor_precise_inf_returns_num() {
+        assert_eq!(
+            builtin_floor_precise(&[Value::Number(f64::INFINITY)]),
+            Value::Error(CellError::Num)
         );
     }
 }
