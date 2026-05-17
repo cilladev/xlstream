@@ -4341,6 +4341,11 @@ mod tests {
     }
 
     #[test]
+    fn atanh_coercion_from_text() {
+        assert_eq!(builtin_atanh(&[Value::Text("0".into())]), Value::Number(0.0));
+    }
+
+    #[test]
     fn atanh_type_mismatch() {
         assert_eq!(builtin_atanh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
@@ -4462,6 +4467,11 @@ mod tests {
     }
 
     #[test]
+    fn tanh_coercion_from_text() {
+        assert_eq!(builtin_tanh(&[Value::Text("0".into())]), Value::Number(0.0));
+    }
+
+    #[test]
     fn tanh_type_mismatch() {
         assert_eq!(builtin_tanh(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
@@ -4563,6 +4573,11 @@ mod tests {
     }
 
     #[test]
+    fn sec_coercion_from_text() {
+        assert_eq!(builtin_sec(&[Value::Text("0".into())]), Value::Number(1.0));
+    }
+
+    #[test]
     fn sec_type_mismatch() {
         assert_eq!(builtin_sec(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
@@ -4595,6 +4610,11 @@ mod tests {
     }
 
     #[test]
+    fn coth_coercion_from_bool() {
+        assert_approx(builtin_coth(&[Value::Bool(true)]), 1.313_035_285_499_331_3, 1e-12);
+    }
+
+    #[test]
     fn coth_type_mismatch() {
         assert_eq!(builtin_coth(&[Value::Text("abc".into())]), Value::Error(CellError::Value));
     }
@@ -4624,6 +4644,11 @@ mod tests {
     #[test]
     fn csch_wrong_arg_count() {
         assert_eq!(builtin_csch(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn csch_coercion_from_text() {
+        assert_approx(builtin_csch(&[Value::Text("1".into())]), 0.850_918_128_239_321_5, 1e-12);
     }
 
     #[test]
@@ -4660,6 +4685,11 @@ mod tests {
     #[test]
     fn sech_wrong_arg_count() {
         assert_eq!(builtin_sech(&[]), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn sech_coercion_from_bool() {
+        assert_approx(builtin_sech(&[Value::Bool(true)]), 0.648_054_273_663_885_4, 1e-12);
     }
 
     #[test]
