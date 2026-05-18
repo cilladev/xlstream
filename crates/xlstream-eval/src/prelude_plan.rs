@@ -656,6 +656,8 @@ pub fn execute_prelude(
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
 ) -> Result<(Prelude, u32), XlStreamError> {
+    // (column, start_row, end_row) — AggKind excluded because one FoldState serves all kinds
+    // for the same column+bounds (cloned and finished per kind).
     type FoldKey = (u32, Option<u32>, Option<u32>);
 
     if simple_keys.is_empty() && multi_keys.is_empty() && range_keys.is_empty() {
@@ -713,12 +715,10 @@ pub fn execute_prelude(
     // Stream the sheet, skipping header row.
     let mut stream = reader.cells(main_sheet)?;
     let mut header_skipped = false;
-    let mut calamine_row_idx: u32 = 0;
     let mut data_row_count: u32 = 0;
 
-    while let Some((_row_idx, row_values)) = stream.next_row()? {
-        let excel_row = calamine_row_idx + 1; // 1-based
-        calamine_row_idx += 1;
+    while let Some((row_idx, row_values)) = stream.next_row()? {
+        let excel_row = row_idx + 1; // 1-based
 
         if header_skipped {
             data_row_count = data_row_count.saturating_add(1);
@@ -847,10 +847,8 @@ pub fn execute_prelude(
         }
 
         let mut cs_stream = reader.cells(sheet_name)?;
-        let mut cs_row_idx: u32 = 0;
-        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
-            let cs_excel_row = cs_row_idx + 1;
-            cs_row_idx += 1;
+        while let Some((row_idx, row_values)) = cs_stream.next_row()? {
+            let cs_excel_row = row_idx + 1;
             for (&(col, start_row, end_row), fold) in &mut cs_folds {
                 let in_bounds = match (start_row, end_row) {
                     (Some(sr), Some(er)) => cs_excel_row >= sr && cs_excel_row <= er,
@@ -875,10 +873,8 @@ pub fn execute_prelude(
     // Cross-sheet bounded range pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_range_keys {
         let mut cs_stream = reader.cells(sheet_name)?;
-        let mut cs_row_idx: u32 = 0;
-        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
-            let excel_row = cs_row_idx + 1;
-            cs_row_idx += 1;
+        while let Some((row_idx, row_values)) = cs_stream.next_row()? {
+            let excel_row = row_idx + 1;
             for rk in keys {
                 if excel_row >= rk.start_row && excel_row <= rk.end_row {
                     let idx = (rk.col as usize).saturating_sub(1);
