@@ -84,7 +84,7 @@ impl<'ctx> Interpreter<'ctx> {
                         .cloned()
                         .unwrap_or(Value::Error(CellError::Ref))
                 } else {
-                    scope.get(col)
+                    Value::Error(CellError::Ref)
                 }
             }
             NodeView::CellRef { col, .. } => scope.get(col),
@@ -247,6 +247,16 @@ mod tests {
         let ast = parse("'Data'!Z99").unwrap();
         let scope = RowScope::new(&[], 1);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn cross_sheet_cell_ref_to_missing_sheet_returns_ref_error() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("'Missing'!A1").unwrap();
+        let row = vec![Value::Number(999.0)];
+        let scope = RowScope::new(&row, 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref),);
     }
 
     #[test]
