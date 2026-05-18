@@ -1,6 +1,6 @@
 //! SUBTOTAL and AGGREGATE meta-dispatch functions.
 
-use xlstream_core::{CellError, Value};
+use xlstream_core::{coerce, CellError, Value};
 use xlstream_parse::NodeRef;
 
 use crate::builtins::{aggregate, expand_range, statistical};
@@ -102,7 +102,7 @@ pub(crate) fn builtin_subtotal(
         return Value::Error(CellError::Value);
     }
     let fn_num_val = interp.eval(args[0], scope);
-    let raw = match xlstream_core::coerce::to_number(&fn_num_val) {
+    let raw = match coerce::to_number(&fn_num_val) {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
@@ -140,7 +140,7 @@ pub(crate) fn builtin_aggregate(
         return Value::Error(CellError::Value);
     }
     let fn_val = interp.eval(args[0], scope);
-    let raw_fn = match xlstream_core::coerce::to_number(&fn_val) {
+    let raw_fn = match coerce::to_number(&fn_val) {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
@@ -153,7 +153,7 @@ pub(crate) fn builtin_aggregate(
     }
 
     let opt_val = interp.eval(args[1], scope);
-    let raw_opt = match xlstream_core::coerce::to_number(&opt_val) {
+    let raw_opt = match coerce::to_number(&opt_val) {
         Ok(n) => n,
         Err(e) => return Value::Error(e),
     };
@@ -333,6 +333,28 @@ mod tests {
         assert_eq!(dispatch_subtotal(12, &nums(&[1.0])), Value::Error(CellError::Value));
     }
 
+    // ===== empty-range behavior =====
+
+    #[test]
+    fn subtotal_sum_empty_returns_zero() {
+        assert_eq!(dispatch_subtotal(9, &[]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn subtotal_average_empty_returns_div0() {
+        assert_eq!(dispatch_subtotal(1, &[]), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn subtotal_count_empty_returns_zero() {
+        assert_eq!(dispatch_subtotal(2, &[]), Value::Number(0.0));
+    }
+
+    #[test]
+    fn aggregate_median_empty_returns_num() {
+        assert_eq!(dispatch_aggregate(12, &[]), Value::Error(CellError::Num));
+    }
+
     // ===== dispatch_aggregate: basic =====
 
     #[test]
@@ -348,6 +370,26 @@ mod tests {
     #[test]
     fn aggregate_4_max() {
         assert_eq!(dispatch_aggregate(4, &nums(&[1.0, 5.0, 3.0])), Value::Number(5.0));
+    }
+
+    #[test]
+    fn aggregate_2_count_delegates() {
+        let vals = vec![Value::Number(1.0), Value::Text("a".into()), Value::Number(3.0)];
+        assert_eq!(dispatch_aggregate(2, &vals), Value::Number(2.0));
+    }
+
+    #[test]
+    fn aggregate_5_min_delegates() {
+        assert_eq!(dispatch_aggregate(5, &nums(&[3.0, 1.0, 2.0])), Value::Number(1.0));
+    }
+
+    #[test]
+    fn aggregate_7_stdev_s_delegates() {
+        let v = dispatch_aggregate(7, &nums(&[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]));
+        match v {
+            Value::Number(n) => assert!((n - 2.138_089_935_299_395).abs() < 1e-6),
+            other => panic!("expected Number, got {other:?}"),
+        }
     }
 
     #[test]
