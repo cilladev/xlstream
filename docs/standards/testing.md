@@ -3,14 +3,14 @@
 Two tiers for library crates. Every feature lands with both.
 
 1. **Unit tests** — in-module `#[cfg(test)] mod tests`. Test one function, one behaviour. Live alongside the implementation.
-2. **Conformance tests** — full pipeline through `evaluate()`, compared against LibreOffice cached values. The oracle is LibreOffice, not hand-computed assertions. One xlsx fixture per function.
+2. **Conformance tests** — full pipeline through `evaluate()`, compared against Excel cached values. The oracle is Excel, not hand-computed assertions. One xlsx fixture per function.
 
 Separately: **Benchmarks** via `criterion` and **Python tests** via `pytest`.
 
 ## Golden rules
 
 1. **Every public function has at least one test.**
-2. **Every builtin function has both a unit test and a conformance fixture.** Unit tests call the builtin directly. Conformance tests feed a formula through the full pipeline (parse, classify, prelude, evaluate, write) and compare against LibreOffice.
+2. **Every builtin function has both a unit test and a conformance fixture.** Unit tests call the builtin directly. Conformance tests feed a formula through the full pipeline (parse, classify, prelude, evaluate, write) and compare against Excel.
 3. **Every bug fix has a regression test.** A conformance fixture in `fixtures/issues/` reproducing the bug, added before the fix.
 4. **No test is "too trivial."** Trivial code is where bugs hide.
 5. **Tests are code.** Reviewed as rigorously as library code.
@@ -63,13 +63,13 @@ fn vlookup_exact_miss_returns_na() {
 
 ## Conformance tests
 
-Full pipeline tests comparing xlstream output against LibreOffice cached values. One xlsx fixture per function or closely related group. **Only in `xlstream-eval`** — the other crates don't have a pipeline to test.
+Full pipeline tests comparing xlstream output against Excel cached values. One xlsx fixture per function or closely related group. **Only in `xlstream-eval`** — the other crates don't have a pipeline to test.
 
 ### Structure
 
 ```
 crates/xlstream-eval/tests/
-├── fixtures/                            <- LibreOffice-verified xlsx (one per function)
+├── fixtures/                            <- Excel-verified xlsx (one per function)
 │   ├── operators/
 │   │   ├── arithmetic.xlsx
 │   │   ├── comparison.xlsx
@@ -101,7 +101,7 @@ crates/xlstream-eval/tests/
 ### How it works
 
 `run_conformance()` in `conformance/mod.rs`:
-1. Opens the LibreOffice-saved fixture (reads cached values as ground truth)
+1. Opens the Excel-saved fixture (reads cached values as ground truth)
 2. Identifies formula cells (skips data cells)
 3. Evaluates through xlstream
 4. Compares every formula cell against the cached value
@@ -123,12 +123,7 @@ Float comparison uses epsilon 1e-6. Volatile functions (TODAY, NOW) are not incl
    wb.save('/tmp/round.xlsx')
    ```
 
-2. Recalculate with LibreOffice headless:
-   ```sh
-   /Applications/LibreOffice.app/Contents/MacOS/soffice \
-     --headless --calc --convert-to xlsx \
-     --outdir tests/fixtures/<category>/ /tmp/<function>.xlsx
-   ```
+2. **Open in Excel and save.** Place the openpyxl-generated fixture in the fixtures directory, then open it in Excel, let it recalculate, and save. Excel populates the cached values that the conformance runner uses as ground truth. Do NOT use LibreOffice headless or xlstream to populate cached values — Excel is the only authoritative oracle.
 
 3. Add `#[test]` in `conformance/<category>.rs`:
    ```rust
@@ -142,8 +137,8 @@ Float comparison uses epsilon 1e-6. Volatile functions (TODAY, NOW) are not incl
 
 ### Adding an issue regression
 
-1. Create xlsx reproducing the issue
-2. Recalculate with LibreOffice headless
+1. Create xlsx reproducing the issue with openpyxl (formulas + data, no cached values)
+2. Open in Excel, let it recalculate, and save to populate cached values
 3. Drop in `fixtures/issues/issue-NN-description.xlsx`
 4. Add `#[test]` in `conformance/issues.rs`
 
