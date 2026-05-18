@@ -5,8 +5,6 @@ Semver.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-05-19
-
 ### Added
 - ACOSH, ASINH, ATANH inverse hyperbolic functions
 - COSH, SINH, TANH hyperbolic functions
@@ -52,13 +50,6 @@ Semver.
 - ROMAN, ARABIC Roman numeral conversion (forms 0-4)
 - SUBTOTAL multi-mode aggregate (function_num 1-11, 101-111)
 - AGGREGATE extended multi-mode aggregate (function_num 1-13, options 0-7; hidden-row and nested-SUBTOTAL ignoring are no-ops)
-
-### Fixed
-- Cross-sheet cell refs (e.g. `=EVEN(Sheet2!A2)`) silently returned wrong values from the main sheet (#136)
-- Cross-sheet simple aggregates (`SUM(Sheet2!A:A)`) read from the main sheet instead of the referenced sheet (#137)
-- Bounded aggregate ranges (`SUM(A2:A10)`) ignored row bounds and summed the whole column (#138)
-- Interpreter fallback for unloaded sheets changed from silent wrong value to `#REF!` (defense-in-depth)
-- Self-referencing cross-sheet refs (`=Sheet1!A1` on Sheet1) now resolve from streaming row instead of `#REF!`
 
 ## [0.2.1] - 2026-05-11
 
