@@ -29,6 +29,10 @@ use crate::scope::RowScope;
 /// ```
 pub struct Interpreter<'ctx> {
     prelude: &'ctx Prelude,
+    /// When set, cross-sheet refs targeting this name resolve from the
+    /// streaming row scope instead of the lookup sheet map. Prevents the
+    /// main sheet from needing to be loaded as its own lookup sheet.
+    main_sheet: Option<&'ctx str>,
 }
 
 impl<'ctx> Interpreter<'ctx> {
@@ -43,7 +47,23 @@ impl<'ctx> Interpreter<'ctx> {
     /// ```
     #[must_use]
     pub fn new(prelude: &'ctx Prelude) -> Self {
-        Self { prelude }
+        Self { prelude, main_sheet: None }
+    }
+
+    /// Set the main (streaming) sheet name. Cross-sheet refs targeting
+    /// this name resolve from the row scope instead of the lookup map.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_eval::{Interpreter, Prelude};
+    /// let prelude = Prelude::empty();
+    /// let interp = Interpreter::new(&prelude).with_main_sheet("Sheet1");
+    /// ```
+    #[must_use]
+    pub fn with_main_sheet(mut self, name: &'ctx str) -> Self {
+        self.main_sheet = Some(name);
+        self
     }
 
     /// Borrow the prelude data backing this interpreter.
@@ -78,6 +98,12 @@ impl<'ctx> Interpreter<'ctx> {
             NodeView::Error(e) => Value::Error(e),
 
             // Cell ref: same-row or cross-sheet lookup cell.
+            // Self-refs (sheet == main_sheet) resolve from the streaming row.
+            NodeView::CellRef { sheet: Some(sheet_name), row: _, col }
+                if self.main_sheet.is_some_and(|ms| ms.eq_ignore_ascii_case(sheet_name)) =>
+            {
+                scope.get(col)
+            }
             NodeView::CellRef { sheet: Some(sheet_name), row, col } => {
                 if let Some(ls) = self.prelude.lookup_sheet(sheet_name) {
                     ls.cell((row - 1) as usize, (col - 1) as usize)
