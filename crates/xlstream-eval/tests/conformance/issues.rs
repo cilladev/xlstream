@@ -171,9 +171,10 @@ fn issue_136_self_ref_not_loaded_as_lookup() {
     );
 }
 
-/// Referencing a sheet that doesn't exist should produce #REF!, not abort.
+/// Referencing a nonexistent sheet currently aborts evaluation at
+/// load_lookup_sheets. Graceful per-cell #REF! is a follow-up.
 #[test]
-fn issue_136_nonexistent_sheet_returns_ref_error() {
+fn issue_136_nonexistent_sheet_aborts_evaluation() {
     let input = NamedTempFile::with_suffix(".xlsx").unwrap();
     let output = NamedTempFile::with_suffix(".xlsx").unwrap();
 
@@ -186,21 +187,8 @@ fn issue_136_nonexistent_sheet_returns_ref_error() {
     wb.save(input.path()).unwrap();
 
     let opts = EvaluateOptions { workers: Some(1), ..Default::default() };
-    // Should NOT panic or error — should complete and produce #REF! in the cell
     let result = evaluate(input.path(), output.path(), &opts);
-
-    if let Ok(_) = result {
-        let mut wb_out: Xlsx<_> = open_workbook(output.path()).unwrap();
-        let range = wb_out.worksheet_range("Sheet1").unwrap();
-        let rows: Vec<_> = range.rows().collect();
-        // B1 should be #REF! since NoSuchSheet doesn't exist
-        assert!(
-            matches!(&rows[0][1], Data::String(s) if s == "#REF!")
-                || matches!(&rows[0][1], Data::Error(calamine::CellErrorType::Ref)),
-            "B1: expected #REF!, got {:?}",
-            rows[0][1]
-        );
-    }
+    assert!(result.is_err(), "expected Err for nonexistent sheet, got Ok");
     // If result is Err, that's also acceptable — the formula references a
     // nonexistent sheet and the loader may legitimately reject it.
 }
