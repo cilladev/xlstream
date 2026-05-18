@@ -38,6 +38,11 @@ fn issue_76_negation_max_iter_1() {
 }
 
 #[test]
+fn issue_136_cross_sheet_cell_ref() {
+    super::conformance::run_conformance("issues/issue-136-cross-sheet-cell-ref.xlsx");
+}
+
+#[test]
 fn issue_136_cross_sheet_bare_cell_ref() {
     let input = NamedTempFile::with_suffix(".xlsx").unwrap();
     let output = NamedTempFile::with_suffix(".xlsx").unwrap();
