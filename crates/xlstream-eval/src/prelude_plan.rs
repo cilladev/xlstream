@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use xlstream_core::{CellError, Value, XlStreamError};
 use xlstream_io::Reader;
-use xlstream_parse::{AggKind, AggregateKey, Ast, NodeView, PreludeKey};
+use xlstream_parse::{AggKind, AggregateKey, Ast, NodeRef, NodeView, PreludeKey};
 
 use crate::prelude::Prelude;
 
@@ -618,6 +618,40 @@ fn collect_range_keys_recursive(
     }
 }
 
+/// Returns `true` if every node in the AST can be resolved from the
+/// current row alone — no prelude data, no cross-sheet lookups, no
+/// named/external/table refs. Only such formulas are safe to evaluate
+/// during the prelude pass.
+fn is_row_local(ast: &Ast) -> bool {
+    is_row_local_node(ast.root())
+}
+
+fn is_row_local_node(node: NodeRef<'_>) -> bool {
+    match node.view() {
+        NodeView::Number(_)
+        | NodeView::Bool(_)
+        | NodeView::Text(_)
+        | NodeView::Error(_)
+        | NodeView::CellRef { sheet: None, .. } => true,
+        NodeView::CellRef { sheet: Some(_), .. }
+        | NodeView::RangeRef { .. }
+        | NodeView::PreludeRef(_)
+        | NodeView::NamedRef(_)
+        | NodeView::ExternalRef { .. }
+        | NodeView::TableRef { .. }
+        | NodeView::ThreeDimensionalRef { .. } => false,
+        NodeView::BinaryOp { .. } => {
+            node.left().is_some_and(is_row_local_node)
+                && node.right().is_some_and(is_row_local_node)
+        }
+        NodeView::UnaryOp { .. } => node.operand().is_some_and(is_row_local_node),
+        NodeView::Function { .. } => node.args().iter().all(|a| is_row_local_node(*a)),
+        NodeView::Array { .. } => {
+            node.array_cells().iter().all(|row| row.iter().all(|c| is_row_local_node(*c)))
+        }
+    }
+}
+
 /// Execute the prelude pass: stream the main sheet, fold column values
 /// through `FoldState` accumulators, and build a filled [`Prelude`].
 ///
@@ -639,6 +673,7 @@ fn collect_range_keys_recursive(
 /// # Examples
 ///
 /// ```no_run
+/// use std::collections::HashMap;
 /// use std::path::Path;
 /// use xlstream_io::Reader;
 /// use xlstream_parse::{AggKind, AggregateKey};
@@ -646,15 +681,21 @@ fn collect_range_keys_recursive(
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None }];
-/// let (prelude, _count) = execute_prelude(&mut reader, "Sheet1", &keys, &[], &[]).unwrap();
+/// let (prelude, _count) = execute_prelude(
+///     &mut reader, "Sheet1", &keys, &[], &[],
+///     &HashMap::new(), &HashMap::new(), &[],
+/// ).unwrap();
 /// ```
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments, clippy::implicit_hasher)]
 pub fn execute_prelude(
     reader: &mut Reader,
     main_sheet: &str,
     simple_keys: &[AggregateKey],
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
+    col_asts: &HashMap<u32, Ast>,
+    row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
+    topo_order: &[u32],
 ) -> Result<(Prelude, u32), XlStreamError> {
     // (column, start_row, end_row) — AggKind excluded because one FoldState serves all kinds
     // for the same column+bounds (cloned and finished per kind).
@@ -717,6 +758,9 @@ pub fn execute_prelude(
     let mut header_skipped = false;
     let mut data_row_count: u32 = 0;
 
+    let empty_prelude = Prelude::empty();
+    let interp = crate::Interpreter::new(&empty_prelude);
+
     while let Some((row_idx, row_values)) = stream.next_row()? {
         let excel_row = row_idx + 1; // 1-based
 
@@ -724,6 +768,40 @@ pub fn execute_prelude(
             data_row_count = data_row_count.saturating_add(1);
         } else {
             header_skipped = true;
+        }
+
+        // Evaluate row-local formulas whose cached value is absent so
+        // aggregates see computed values instead of blanks. Calamine
+        // returns Empty or Text("") for formula cells without cache.
+        let mut evaluated_row = row_values;
+        for &col in topo_order {
+            let idx = col as usize;
+            let needs_eval = match evaluated_row.get(idx) {
+                None | Some(Value::Empty) => true,
+                Some(Value::Text(s)) => s.is_empty(),
+                _ => false,
+            };
+            if !needs_eval {
+                continue;
+            }
+            let ast = row_overrides
+                .get(&col)
+                .and_then(|rm| rm.get(&row_idx))
+                .or_else(|| col_asts.get(&col));
+            if let Some(ast) = ast {
+                if is_row_local(ast) {
+                    let idx = col as usize;
+                    if idx >= evaluated_row.len() {
+                        evaluated_row.resize(idx + 1, Value::Empty);
+                    }
+                    let result = {
+                        let scope =
+                            crate::scope::RowScope::new(&evaluated_row, row_idx).with_col_idx(col);
+                        interp.eval(ast.root(), &scope)
+                    };
+                    evaluated_row[idx] = result;
+                }
+            }
         }
 
         // Feed simple aggregate folds, respecting row bounds.
@@ -734,7 +812,7 @@ pub fn execute_prelude(
             };
             if in_bounds {
                 let idx = (col as usize).saturating_sub(1);
-                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                 fold.feed(val);
             }
         }
@@ -746,7 +824,7 @@ pub fn execute_prelude(
             }
             if excel_row >= rk.start_row && excel_row <= rk.end_row {
                 let idx = (rk.col as usize).saturating_sub(1);
-                let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
+                let val = evaluated_row.get(idx).cloned().unwrap_or(Value::Empty);
                 collector.push(val);
             }
         }
@@ -760,7 +838,7 @@ pub fn execute_prelude(
             let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
             for &cc in &mk.criteria_cols {
                 let idx = (cc as usize).saturating_sub(1);
-                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                 composite_parts.push(xlstream_core::coerce::to_text(val).to_ascii_lowercase());
             }
             let composite = composite_parts.join("\0");
@@ -769,7 +847,7 @@ pub fn execute_prelude(
             // feed a Number(1.0) to count).
             let feed_val = if mk.sum_col > 0 {
                 let idx = (mk.sum_col as usize).saturating_sub(1);
-                row_values.get(idx).unwrap_or(&Value::Empty)
+                evaluated_row.get(idx).unwrap_or(&Value::Empty)
             } else {
                 // COUNTIFS: count rows, feed 1.0
                 &Value::Number(1.0)

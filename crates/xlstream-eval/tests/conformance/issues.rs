@@ -51,6 +51,11 @@ fn issue_138_bounded_aggregate_row_bounds() {
     super::conformance::run_conformance("issues/issue-138-bounded-aggregate-row-bounds.xlsx");
 }
 
+#[test]
+fn issue_139_formula_column_aggregates() {
+    super::conformance::run_conformance("issues/issue-139-formula-column-aggregates.xlsx");
+}
+
 /// Can't use conformance — asserts evaluate() returns Err, not cell values.
 #[test]
 fn issue_136_nonexistent_sheet_is_unsupported() {
