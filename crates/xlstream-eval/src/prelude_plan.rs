@@ -660,13 +660,18 @@ pub fn execute_prelude(
         return Ok((Prelude::empty(), 0));
     }
 
-    // Group keys by column — multiple agg kinds may target the same column.
+    // Group main-sheet keys by column; cross-sheet keys go to a separate map.
     let mut col_kinds: HashMap<u32, Vec<(AggKind, AggregateKey)>> = HashMap::new();
+    let mut cross_simple_keys: HashMap<String, Vec<AggregateKey>> = HashMap::new();
     for key in simple_keys {
-        col_kinds.entry(key.column).or_default().push((key.kind, key.clone()));
+        if let Some(ref sheet) = key.sheet {
+            cross_simple_keys.entry(sheet.clone()).or_default().push(key.clone());
+        } else {
+            col_kinds.entry(key.column).or_default().push((key.kind, key.clone()));
+        }
     }
 
-    // One FoldState per column (shared across all kinds for that column).
+    // One FoldState per column (main-sheet only).
     let mut col_folds: HashMap<u32, FoldState> = HashMap::new();
     for &col in col_kinds.keys() {
         col_folds.insert(col, FoldState::new());
@@ -802,13 +807,41 @@ pub fn execute_prelude(
         }
     }
 
-    // Finish simple aggregate folds.
+    // Finish main-sheet simple aggregate folds.
     let mut aggregates: HashMap<AggregateKey, Value> = HashMap::new();
     for (col, fold) in col_folds {
         let kinds = col_kinds.get(&col).map_or(&[][..], |v| v.as_slice());
         for (kind, key) in kinds {
             let result = fold.clone().finish(*kind);
             aggregates.insert(key.clone(), result);
+        }
+    }
+
+    // Cross-sheet simple aggregate pass: stream each non-main sheet.
+    for (sheet_name, keys) in &cross_simple_keys {
+        let mut cs_col_kinds: HashMap<u32, Vec<(AggKind, AggregateKey)>> = HashMap::new();
+        for key in keys {
+            cs_col_kinds.entry(key.column).or_default().push((key.kind, key.clone()));
+        }
+        let mut cs_folds: HashMap<u32, FoldState> = HashMap::new();
+        for &col in cs_col_kinds.keys() {
+            cs_folds.insert(col, FoldState::new());
+        }
+
+        let mut cs_stream = reader.cells(sheet_name)?;
+        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
+            for (&col, fold) in &mut cs_folds {
+                let idx = (col as usize).saturating_sub(1);
+                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                fold.feed(val);
+            }
+        }
+
+        for (col, fold) in cs_folds {
+            let kinds = cs_col_kinds.get(&col).map_or(&[][..], |v| v.as_slice());
+            for (kind, key) in kinds {
+                aggregates.insert(key.clone(), fold.clone().finish(*kind));
+            }
         }
     }
 
