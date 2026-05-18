@@ -659,7 +659,10 @@ fn stream_single_threaded(
     writer: &mut Writer,
     plan: &EvalPlan,
 ) -> Result<(u64, u64), XlStreamError> {
-    let interp = Interpreter::new(&plan.prelude);
+    let mut interp = Interpreter::new(&plan.prelude);
+    if let Some(ref ms) = plan.main_sheet {
+        interp = interp.with_main_sheet(ms);
+    }
     let eval_options = EvaluateOptions {
         workers: None,
         iterative_calc: plan.iterative_calc,
@@ -894,7 +897,7 @@ fn run_worker(
     let mut stream = reader.cells(main_sheet)?;
     stream.seek_to_row(start_row)?;
 
-    let interp = Interpreter::new(prelude);
+    let interp = Interpreter::new(prelude).with_main_sheet(main_sheet);
 
     while let Some((row_idx, mut row_values)) = stream.next_row()? {
         if row_idx >= end_row {
