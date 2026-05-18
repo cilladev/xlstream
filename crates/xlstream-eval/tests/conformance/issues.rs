@@ -46,6 +46,11 @@ fn issue_137_cross_sheet_simple_aggregate() {
     super::conformance::run_conformance("issues/issue-137-cross-sheet-simple-aggregate.xlsx");
 }
 
+#[test]
+fn issue_138_bounded_aggregate_row_bounds() {
+    super::conformance::run_conformance("issues/issue-138-bounded-aggregate-row-bounds.xlsx");
+}
+
 /// Can't use conformance — asserts evaluate() returns Err, not cell values.
 #[test]
 fn issue_136_nonexistent_sheet_is_unsupported() {

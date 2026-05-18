@@ -645,7 +645,7 @@ fn collect_range_keys_recursive(
 /// use xlstream_eval::prelude_plan::execute_prelude;
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
-/// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 }];
+/// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None }];
 /// let (prelude, _count) = execute_prelude(&mut reader, "Sheet1", &keys, &[], &[]).unwrap();
 /// ```
 #[allow(clippy::too_many_lines)]
@@ -656,25 +656,28 @@ pub fn execute_prelude(
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
 ) -> Result<(Prelude, u32), XlStreamError> {
+    type FoldKey = (u32, Option<u32>, Option<u32>);
+
     if simple_keys.is_empty() && multi_keys.is_empty() && range_keys.is_empty() {
         return Ok((Prelude::empty(), 0));
     }
 
-    // Group main-sheet keys by column; cross-sheet keys go to a separate map.
-    let mut col_kinds: HashMap<u32, Vec<(AggKind, AggregateKey)>> = HashMap::new();
+    // Group main-sheet keys by (column, start_row, end_row); cross-sheet keys go to a separate map.
+    let mut col_kinds: HashMap<FoldKey, Vec<(AggKind, AggregateKey)>> = HashMap::new();
     let mut cross_simple_keys: HashMap<String, Vec<AggregateKey>> = HashMap::new();
     for key in simple_keys {
         if let Some(ref sheet) = key.sheet {
             cross_simple_keys.entry(sheet.clone()).or_default().push(key.clone());
         } else {
-            col_kinds.entry(key.column).or_default().push((key.kind, key.clone()));
+            let fk = (key.column, key.start_row, key.end_row);
+            col_kinds.entry(fk).or_default().push((key.kind, key.clone()));
         }
     }
 
-    // One FoldState per column (main-sheet only).
-    let mut col_folds: HashMap<u32, FoldState> = HashMap::new();
-    for &col in col_kinds.keys() {
-        col_folds.insert(col, FoldState::new());
+    // One FoldState per (column, bounds) pair (main-sheet only).
+    let mut col_folds: HashMap<FoldKey, FoldState> = HashMap::new();
+    for &fk in col_kinds.keys() {
+        col_folds.insert(fk, FoldState::new());
     }
 
     // Collect all columns needed for multi-conditional keys.
@@ -723,11 +726,17 @@ pub fn execute_prelude(
             header_skipped = true;
         }
 
-        // Feed simple aggregate folds.
-        for (&col, fold) in &mut col_folds {
-            let idx = (col as usize).saturating_sub(1);
-            let val = row_values.get(idx).unwrap_or(&Value::Empty);
-            fold.feed(val);
+        // Feed simple aggregate folds, respecting row bounds.
+        for (&(col, start_row, end_row), fold) in &mut col_folds {
+            let in_bounds = match (start_row, end_row) {
+                (Some(sr), Some(er)) => excel_row >= sr && excel_row <= er,
+                _ => true,
+            };
+            if in_bounds {
+                let idx = (col as usize).saturating_sub(1);
+                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                fold.feed(val);
+            }
         }
 
         // Collect bounded range values (main-sheet only).
@@ -817,8 +826,8 @@ pub fn execute_prelude(
 
     // Finish main-sheet simple aggregate folds.
     let mut aggregates: HashMap<AggregateKey, Value> = HashMap::new();
-    for (col, fold) in col_folds {
-        let kinds = col_kinds.get(&col).map_or(&[][..], |v| v.as_slice());
+    for (fk, fold) in col_folds {
+        let kinds = col_kinds.get(&fk).map_or(&[][..], |v| v.as_slice());
         for (kind, key) in kinds {
             let result = fold.clone().finish(*kind);
             aggregates.insert(key.clone(), result);
@@ -827,26 +836,36 @@ pub fn execute_prelude(
 
     // Cross-sheet simple aggregate pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_simple_keys {
-        let mut cs_col_kinds: HashMap<u32, Vec<(AggKind, AggregateKey)>> = HashMap::new();
+        let mut cs_col_kinds: HashMap<FoldKey, Vec<(AggKind, AggregateKey)>> = HashMap::new();
         for key in keys {
-            cs_col_kinds.entry(key.column).or_default().push((key.kind, key.clone()));
+            let fk = (key.column, key.start_row, key.end_row);
+            cs_col_kinds.entry(fk).or_default().push((key.kind, key.clone()));
         }
-        let mut cs_folds: HashMap<u32, FoldState> = HashMap::new();
-        for &col in cs_col_kinds.keys() {
-            cs_folds.insert(col, FoldState::new());
+        let mut cs_folds: HashMap<FoldKey, FoldState> = HashMap::new();
+        for &fk in cs_col_kinds.keys() {
+            cs_folds.insert(fk, FoldState::new());
         }
 
         let mut cs_stream = reader.cells(sheet_name)?;
+        let mut cs_row_idx: u32 = 0;
         while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
-            for (&col, fold) in &mut cs_folds {
-                let idx = (col as usize).saturating_sub(1);
-                let val = row_values.get(idx).unwrap_or(&Value::Empty);
-                fold.feed(val);
+            let cs_excel_row = cs_row_idx + 1;
+            cs_row_idx += 1;
+            for (&(col, start_row, end_row), fold) in &mut cs_folds {
+                let in_bounds = match (start_row, end_row) {
+                    (Some(sr), Some(er)) => cs_excel_row >= sr && cs_excel_row <= er,
+                    _ => true,
+                };
+                if in_bounds {
+                    let idx = (col as usize).saturating_sub(1);
+                    let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                    fold.feed(val);
+                }
             }
         }
 
-        for (col, fold) in cs_folds {
-            let kinds = cs_col_kinds.get(&col).map_or(&[][..], |v| v.as_slice());
+        for (fk, fold) in cs_folds {
+            let kinds = cs_col_kinds.get(&fk).map_or(&[][..], |v| v.as_slice());
             for (kind, key) in kinds {
                 aggregates.insert(key.clone(), fold.clone().finish(*kind));
             }

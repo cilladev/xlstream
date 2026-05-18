@@ -64,7 +64,7 @@ pub enum LookupKind {
 ///
 /// ```
 /// use xlstream_parse::{AggKind, AggregateKey};
-/// let k = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+/// let k = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None };
 /// assert_eq!(k.column, 1);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -75,6 +75,10 @@ pub struct AggregateKey {
     pub sheet: Option<String>,
     /// 1-based column index.
     pub column: u32,
+    /// 1-based start row (inclusive). `None` = whole column.
+    pub start_row: Option<u32>,
+    /// 1-based end row (inclusive). `None` = whole column.
+    pub end_row: Option<u32>,
 }
 
 /// Key identifying a prelude-loaded lookup index.
@@ -117,6 +121,8 @@ pub struct LookupKey {
 ///     kind: AggKind::Sum,
 ///     sheet: None,
 ///     column: 1,
+///     start_row: None,
+///     end_row: None,
 /// });
 /// assert!(matches!(pk, PreludeKey::Aggregate(_)));
 /// ```
@@ -222,8 +228,16 @@ fn agg_kind_for(name: &str) -> Option<AggKind> {
 /// Try to build an [`AggregateKey`] from a single range reference node.
 fn aggregate_key_from_range(kind: AggKind, reference: &Reference) -> Option<AggregateKey> {
     match reference {
-        Reference::Range { sheet, start_col: Some(sc), end_col: Some(ec), .. } if sc == ec => {
-            Some(AggregateKey { kind, sheet: sheet.clone(), column: *sc })
+        Reference::Range { sheet, start_row, end_row, start_col: Some(sc), end_col: Some(ec) }
+            if sc == ec =>
+        {
+            Some(AggregateKey {
+                kind,
+                sheet: sheet.clone(),
+                column: *sc,
+                start_row: *start_row,
+                end_row: *end_row,
+            })
         }
         _ => None,
     }
