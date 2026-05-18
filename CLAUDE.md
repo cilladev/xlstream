@@ -141,7 +141,7 @@ All the recurring process questions (who merges, stacked PRs, turnaround, what t
 
 ## Current state
 
-v0.2 shipped 2026-05-11. v0.3 in progress. See [`docs/roadmap/README.md`](docs/roadmap/README.md).
+v0.3 shipped 2026-05-18 (225 functions). v0.4 in progress. See [`docs/roadmap/README.md`](docs/roadmap/README.md).
 
 ## Tone
 
