@@ -15,7 +15,11 @@
     clippy::print_stdout,
     clippy::dbg_macro
 )]
-#![allow(clippy::module_name_repetitions, clippy::cargo_common_metadata)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::cargo_common_metadata,
+    clippy::large_stack_arrays
+)]
 // `clippy::multiple_crate_versions` fires because xlstream-io transitively
 // pulls calamine and rust_xlsxwriter, which disagree on `hashbrown` and
 // `wit-bindgen` minor versions. Ratified for xlstream-io in PR 2; the
