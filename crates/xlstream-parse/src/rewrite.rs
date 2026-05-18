@@ -226,17 +226,23 @@ fn agg_kind_for(name: &str) -> Option<AggKind> {
 }
 
 /// Try to build an [`AggregateKey`] from a single range reference node.
+///
+/// Normalizes inverted bounds (A10:A2 -> start=2, end=10) to match Excel.
 fn aggregate_key_from_range(kind: AggKind, reference: &Reference) -> Option<AggregateKey> {
     match reference {
         Reference::Range { sheet, start_row, end_row, start_col: Some(sc), end_col: Some(ec) }
             if sc == ec =>
         {
+            let (sr, er) = match (start_row, end_row) {
+                (Some(s), Some(e)) if s > e => (Some(*e), Some(*s)),
+                _ => (*start_row, *end_row),
+            };
             Some(AggregateKey {
                 kind,
                 sheet: sheet.clone(),
                 column: *sc,
-                start_row: *start_row,
-                end_row: *end_row,
+                start_row: sr,
+                end_row: er,
             })
         }
         _ => None,
