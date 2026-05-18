@@ -457,6 +457,50 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     // NETWORKDAYS holidays) need the referenced sheet loaded as a lookup
     // sheet so expand_range can resolve them.
     let mut extended_lookup_keys = main_result.lookup_keys;
+    if let Some(ref main_name) = main_sheet {
+        for ast in main_result.sheet_plan.col_asts.values() {
+            let refs = extract_references(ast);
+            for r in &refs.cells {
+                if let Reference::Cell { sheet: Some(ref s), .. } = r {
+                    if s.eq_ignore_ascii_case(main_name) {
+                        continue;
+                    }
+                    let already =
+                        extended_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
+                    if !already {
+                        extended_lookup_keys.push(LookupKey {
+                            kind: xlstream_parse::LookupKind::VLookup,
+                            sheet: s.clone(),
+                            key_index: 1,
+                            value_index: 1,
+                        });
+                    }
+                }
+            }
+        }
+        for per_row in main_result.sheet_plan.row_overrides.values() {
+            for ast in per_row.values() {
+                let refs = extract_references(ast);
+                for r in &refs.cells {
+                    if let Reference::Cell { sheet: Some(ref s), .. } = r {
+                        if s.eq_ignore_ascii_case(main_name) {
+                            continue;
+                        }
+                        let already =
+                            extended_lookup_keys.iter().any(|k| k.sheet.eq_ignore_ascii_case(s));
+                        if !already {
+                            extended_lookup_keys.push(LookupKey {
+                                kind: xlstream_parse::LookupKind::VLookup,
+                                sheet: s.clone(),
+                                key_index: 1,
+                                value_index: 1,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
     for rk in &main_range_keys {
         if let Some(ref sheet_name) = rk.sheet {
             let already_present =
