@@ -1,20 +1,14 @@
 # v0.3 Roadmap
 
-**Status:** in progress
+**Status:** shipped 2026-05-18
 **Target:** 2026 Q3
 **Theme:** statistical + engineering functions, infrastructure improvements
 
-## Carried from v0.2
+## Carried from v0.2 (deferred to v0.4)
 
-These didn't ship with v0.2:
-
-- [ ] **MID empty string workaround** — `rust_xlsxwriter` drops empty string writes. Patch upstream or work around. ~1 hour.
-- [ ] **Memory optimization** — investigate calamine shared-strings buffering and rust_xlsxwriter string table. Target: < 250 MB for 100k-row workbook (currently 643 MB).
+*Carried to v0.4: MID empty string workaround, memory optimization, auto-detect iterative calc settings (#77), cross-column circular references (#80).*
 
 ## Infrastructure
-
-- [ ] **Auto-detect iterative calc settings** — parse `calcPr` from `xl/workbook.xml` in xlstream-io (#77). ~2 hours.
-- [ ] **Cross-column same-row circular references** — SCC detection in topo sort, iterate groups (#80). ~1 day.
 - [x] **ROW / COLUMN / ROWS / COLUMNS** — ROW/COLUMN return row/col number of a cell; ROWS/COLUMNS return row/col count of a range. ROWS/COLUMNS carried from v0.2 (implemented on branch but never merged). ~1 day.
 
 ## Statistical functions (~30)

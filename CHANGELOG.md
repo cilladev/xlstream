@@ -5,22 +5,11 @@ Semver.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-19
+
 ### Added
-- ACOSH, ASINH, ATANH inverse hyperbolic functions
-- COSH, SINH, TANH hyperbolic functions
-- COT, CSC, SEC, COTH, CSCH, SECH reciprocal trig/hyperbolic functions
-- DEGREES, RADIANS angle conversion functions
-- CONVERT unit conversion (~100 base units, SI/binary prefixes, 13 categories)
-- DELTA, GESTEP Kronecker delta and unit step
-- ERF, ERFC, ERF.PRECISE, ERFC.PRECISE error function and complement
-- BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT bitwise operations (48-bit non-negative integers)
-- COMPLEX, IMREAL, IMAGINARY complex number creation and extraction
-- HEX2DEC, DEC2HEX hexadecimal conversion (40-bit two's complement)
-- BIN2DEC, DEC2BIN binary conversion (10-bit two's complement)
-- OCT2DEC, DEC2OCT octal conversion (30-bit two's complement)
-- HEX2BIN, BIN2HEX, HEX2OCT, OCT2HEX, BIN2OCT, OCT2BIN cross-base conversion
-- BASE general base conversion (radix 2-36, non-negative)
-- ROW, COLUMN, ROWS, COLUMNS: return positional metadata from cell/range references (lazy dispatch, no cell reads)
+
+**Statistical functions (30)**
 - STDEV.S, STDEV.P, VAR.S, VAR.P statistical functions
 - SKEW, SKEW.P, KURT higher-order moment statistics
 - AVEDEV average absolute deviation
@@ -38,6 +27,24 @@ Semver.
 - COVARIANCE.P, COVARIANCE.S covariance (population and sample)
 - SLOPE, INTERCEPT, RSQ linear regression statistics
 - FORECAST.LINEAR linear prediction via regression
+
+**Engineering functions (26)**
+- HEX2DEC, DEC2HEX hexadecimal conversion (40-bit two's complement)
+- BIN2DEC, DEC2BIN binary conversion (10-bit two's complement)
+- OCT2DEC, DEC2OCT octal conversion (30-bit two's complement)
+- HEX2BIN, BIN2HEX, HEX2OCT, OCT2HEX, BIN2OCT, OCT2BIN cross-base conversion
+- BASE general base conversion (radix 2-36, non-negative)
+- COMPLEX, IMREAL, IMAGINARY complex number creation and extraction
+- DELTA, GESTEP Kronecker delta and unit step
+- ERF, ERFC, ERF.PRECISE, ERFC.PRECISE error function and complement
+- CONVERT unit conversion (~100 base units, SI/binary prefixes, 13 categories)
+- BITAND, BITOR, BITXOR, BITLSHIFT, BITRSHIFT bitwise operations (48-bit non-negative integers)
+
+**Math extras (27)**
+- ACOSH, ASINH, ATANH inverse hyperbolic functions
+- COSH, SINH, TANH hyperbolic functions
+- COT, CSC, SEC, COTH, CSCH, SECH reciprocal trig/hyperbolic functions
+- DEGREES, RADIANS angle conversion functions
 - FACT, FACTDOUBLE factorial functions
 - PERMUT, PERMUTATIONA permutation functions
 - COMBIN, COMBINA combination functions
@@ -48,8 +55,18 @@ Semver.
 - CEILING.PRECISE, FLOOR.PRECISE, ISO.CEILING direction-fixed rounding variants
 - GCD, LCM greatest common divisor / least common multiple (variadic)
 - ROMAN, ARABIC Roman numeral conversion (forms 0-4)
+
+**Infrastructure**
+- ROW, COLUMN, ROWS, COLUMNS positional metadata functions
 - SUBTOTAL multi-mode aggregate (function_num 1-11, 101-111)
-- AGGREGATE extended multi-mode aggregate (function_num 1-13, options 0-7; hidden-row and nested-SUBTOTAL ignoring are no-ops)
+- AGGREGATE extended multi-mode aggregate (function_num 1-13, options 0-7)
+
+### Fixed
+- Cross-sheet cell refs (e.g. `=EVEN(Sheet2!A2)`) silently returned wrong values from the main sheet (#136)
+- Cross-sheet simple aggregates (`SUM(Sheet2!A:A)`) read from the main sheet instead of the referenced sheet (#137)
+- Bounded aggregate ranges (`SUM(A2:A10)`) ignored row bounds and summed the whole column (#138)
+- Interpreter fallback for unloaded sheets changed from silent wrong value to `#REF!` (defense-in-depth)
+- Self-referencing cross-sheet refs (`=Sheet1!A1` on Sheet1) now resolve from streaming row instead of `#REF!`
 
 ## [0.2.1] - 2026-05-11
 

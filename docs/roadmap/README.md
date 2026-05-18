@@ -4,10 +4,11 @@ Each version gets its own folder with a checklist. When a version ships, its fol
 
 ## Current version
 
-**v0.3** — See [`v0.3/README.md`](v0.3/README.md).
+**v0.4** — See [`v0.4/README.md`](v0.4/README.md).
 
 ## Archive
 
+- [v0.3](v0.3/README.md) — shipped 2026-05-18
 - [v0.2](archive/v0.2/README.md) — shipped 2026-05-11
 - [v0.1](archive/v0.1/README.md) — shipped 2026-04-20
 
@@ -24,7 +25,7 @@ Each version gets its own folder with a checklist. When a version ships, its fol
 
 ### Where we are
 
-Excel has ~516 functions. xlstream implements 106 functions — covering all 15 functions that appear in 76% of real business spreadsheets (Enron Corpus, Hermans et al., IEEE ICSE 2015). See [functions.md](../functions.md) for the full cross-reference.
+Excel has ~516 functions. xlstream implements 225 functions — covering all 15 functions that appear in 76% of real business spreadsheets (Enron Corpus, Hermans et al., IEEE ICSE 2015). See [functions.md](../functions.md) for the full cross-reference.
 
 ### Where we're going
 
@@ -34,8 +35,8 @@ The goal is to support **every formula that fits the streaming model** — ~465 
 
 ```
 v0.1  ✓  Core engine (103 functions, streaming, Python bindings)
-v0.2     Coverage + fidelity (named ranges, table refs, keep-formulas)
-v0.3     Statistical + engineering (STDEV, VAR, NORM.DIST, CONVERT, HEX2DEC)
+v0.2  ✓  Coverage + fidelity (named ranges, table refs, keep-formulas)
+v0.3  ✓  Statistical + engineering + math extras (225 functions total)
 v0.4     LET + financial (38 functions) + multi-format I/O (xlsm, xlsb, csv)
 v0.5     Compatibility aliases (39) + database functions (12)
 v1.0     API stability — no breaking changes after this
