@@ -143,9 +143,9 @@ Delay until one of those conditions is genuinely true. Moving too early wastes t
 ## Tags, releases, branches
 
 - **`main`** is protected. Requires PR + passing CI.
-- **Tags** are `v0.1.0`, `v0.1.1`, etc. Tag on main, never on a branch.
-- **Releases** are created by CI on tag push.
-- **Long-lived branches**: none. We merge to main; if we need to support a stable line while developing 0.2, we'll branch then — v0.1 probably won't need it.
+- **Release flow**: create a `release/vX.Y.Z` branch off main → bump versions in `Cargo.toml` (workspace + crates), update `CHANGELOG.md` (promote `[Unreleased]` to `[X.Y.Z] - date`, add `### Fixed` etc.) → push branch → merge to main via PR. The pipeline auto-tags: `release.yml` reads the version from `Cargo.toml`, creates a `vX.Y.Z` tag if it doesn't exist, which triggers build + publish (PyPI, crates.io, GitHub Release).
+- **Tags** are `v0.1.0`, `v0.1.1`, etc. Created automatically by CI on merge to main — never create tags manually.
+- **Long-lived branches**: none. Feature branches and release branches are short-lived.
 
 ## Why we don't use git submodules
 
