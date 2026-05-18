@@ -40,6 +40,7 @@ fn bench_aggregate(c: &mut Criterion) {
                     &HashMap::new(),
                     &HashMap::new(),
                     &[],
+                    &HashMap::new(),
                 )
                 .unwrap();
                 prelude
@@ -68,6 +69,7 @@ fn bench_aggregate(c: &mut Criterion) {
                     &HashMap::new(),
                     &HashMap::new(),
                     &[],
+                    &HashMap::new(),
                 )
                 .unwrap();
                 prelude

@@ -393,6 +393,22 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let has_main_aggregates =
         !main_agg_keys.is_empty() || !main_multi_keys.is_empty() || !main_range_keys.is_empty();
 
+    // Build cross-sheet formula contexts for prelude formula evaluation.
+    let cross_sheet_formulas: HashMap<String, crate::prelude_plan::SheetFormulaCtx<'_>> =
+        secondary_plans
+            .iter()
+            .map(|(name, sp)| {
+                (
+                    name.clone(),
+                    crate::prelude_plan::SheetFormulaCtx {
+                        col_asts: &sp.col_asts,
+                        row_overrides: &sp.row_overrides,
+                        topo_order: &sp.topo_order,
+                    },
+                )
+            })
+            .collect();
+
     let (mut merged_prelude, total_data_rows) = if !has_main_aggregates {
         let count =
             if let Some(ref main) = main_sheet { count_data_rows(&mut reader, main)? } else { 0 };
@@ -407,6 +423,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             &main_result.sheet_plan.col_asts,
             &main_result.sheet_plan.row_overrides,
             &main_result.sheet_plan.topo_order,
+            &cross_sheet_formulas,
         )?
     } else {
         (Prelude::empty(), 0)
@@ -454,6 +471,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 &sp.col_asts,
                 &sp.row_overrides,
                 &sp.topo_order,
+                &cross_sheet_formulas,
             )?;
             merged_prelude.merge(sec_prelude);
         }

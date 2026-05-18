@@ -618,6 +618,56 @@ fn collect_range_keys_recursive(
     }
 }
 
+/// Formula evaluation context for a single sheet, used to evaluate
+/// row-local formulas during the prelude pass.
+pub struct SheetFormulaCtx<'a> {
+    /// Per-column formula ASTs.
+    pub col_asts: &'a HashMap<u32, Ast>,
+    /// Per-row formula overrides.
+    pub row_overrides: &'a HashMap<u32, HashMap<u32, Ast>>,
+    /// Column evaluation order.
+    pub topo_order: &'a [u32],
+}
+
+/// Evaluate row-local formulas in a row, returning the row with computed
+/// values replacing stale/missing cached results.
+fn evaluate_row_formulas(
+    row_values: Vec<Value>,
+    row_idx: u32,
+    col_asts: &HashMap<u32, Ast>,
+    row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
+    topo_order: &[u32],
+    interp: &crate::Interpreter<'_>,
+) -> Vec<Value> {
+    let mut evaluated = row_values;
+    for &col in topo_order {
+        let idx = col as usize;
+        let needs_eval = match evaluated.get(idx) {
+            None | Some(Value::Empty) => true,
+            Some(Value::Text(s)) => s.is_empty(),
+            _ => false,
+        };
+        if !needs_eval {
+            continue;
+        }
+        let ast =
+            row_overrides.get(&col).and_then(|rm| rm.get(&row_idx)).or_else(|| col_asts.get(&col));
+        if let Some(ast) = ast {
+            if is_row_local(ast) {
+                if idx >= evaluated.len() {
+                    evaluated.resize(idx + 1, Value::Empty);
+                }
+                let result = {
+                    let scope = crate::scope::RowScope::new(&evaluated, row_idx).with_col_idx(col);
+                    interp.eval(ast.root(), &scope)
+                };
+                evaluated[idx] = result;
+            }
+        }
+    }
+    evaluated
+}
+
 /// Returns `true` if every node in the AST can be resolved from the
 /// current row alone — no prelude data, no cross-sheet lookups, no
 /// named/external/table refs. Only such formulas are safe to evaluate
@@ -684,6 +734,7 @@ fn is_row_local_node(node: NodeRef<'_>) -> bool {
 /// let (prelude, _count) = execute_prelude(
 ///     &mut reader, "Sheet1", &keys, &[], &[],
 ///     &HashMap::new(), &HashMap::new(), &[],
+///     &HashMap::new(),
 /// ).unwrap();
 /// ```
 #[allow(clippy::too_many_lines, clippy::too_many_arguments, clippy::implicit_hasher)]
@@ -696,6 +747,7 @@ pub fn execute_prelude(
     col_asts: &HashMap<u32, Ast>,
     row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
     topo_order: &[u32],
+    cross_sheet_formulas: &HashMap<String, SheetFormulaCtx<'_>>,
 ) -> Result<(Prelude, u32), XlStreamError> {
     // (column, start_row, end_row) — AggKind excluded because one FoldState serves all kinds
     // for the same column+bounds (cloned and finished per kind).
@@ -770,39 +822,14 @@ pub fn execute_prelude(
             header_skipped = true;
         }
 
-        // Evaluate row-local formulas whose cached value is absent so
-        // aggregates see computed values instead of blanks. Calamine
-        // returns Empty or Text("") for formula cells without cache.
-        let mut evaluated_row = row_values;
-        for &col in topo_order {
-            let idx = col as usize;
-            let needs_eval = match evaluated_row.get(idx) {
-                None | Some(Value::Empty) => true,
-                Some(Value::Text(s)) => s.is_empty(),
-                _ => false,
-            };
-            if !needs_eval {
-                continue;
-            }
-            let ast = row_overrides
-                .get(&col)
-                .and_then(|rm| rm.get(&row_idx))
-                .or_else(|| col_asts.get(&col));
-            if let Some(ast) = ast {
-                if is_row_local(ast) {
-                    let idx = col as usize;
-                    if idx >= evaluated_row.len() {
-                        evaluated_row.resize(idx + 1, Value::Empty);
-                    }
-                    let result = {
-                        let scope =
-                            crate::scope::RowScope::new(&evaluated_row, row_idx).with_col_idx(col);
-                        interp.eval(ast.root(), &scope)
-                    };
-                    evaluated_row[idx] = result;
-                }
-            }
-        }
+        let evaluated_row = evaluate_row_formulas(
+            row_values,
+            row_idx,
+            col_asts,
+            row_overrides,
+            topo_order,
+            &interp,
+        );
 
         // Feed simple aggregate folds, respecting row bounds.
         for (&(col, start_row, end_row), fold) in &mut col_folds {
@@ -876,20 +903,33 @@ pub fn execute_prelude(
     }
 
     for (sheet_name, sheet_keys) in &cross_sheet_keys {
+        let cs_ctx = cross_sheet_formulas.get(sheet_name.as_str());
         let mut cs_stream = reader.cells(sheet_name)?;
-        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
+        while let Some((row_idx, row_values)) = cs_stream.next_row()? {
+            let evaluated_row = if let Some(ctx) = cs_ctx {
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx.col_asts,
+                    ctx.row_overrides,
+                    ctx.topo_order,
+                    &interp,
+                )
+            } else {
+                row_values
+            };
             for &(i, mk) in sheet_keys {
                 let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
                 for &cc in &mk.criteria_cols {
                     let idx = (cc as usize).saturating_sub(1);
-                    let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                    let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                     composite_parts.push(xlstream_core::coerce::to_text(val).to_ascii_lowercase());
                 }
                 let composite = composite_parts.join("\0");
 
                 let feed_val = if mk.sum_col > 0 {
                     let idx = (mk.sum_col as usize).saturating_sub(1);
-                    row_values.get(idx).unwrap_or(&Value::Empty)
+                    evaluated_row.get(idx).unwrap_or(&Value::Empty)
                 } else {
                     &Value::Number(1.0)
                 };
@@ -924,9 +964,22 @@ pub fn execute_prelude(
             cs_folds.insert(fk, FoldState::new());
         }
 
+        let cs_ctx = cross_sheet_formulas.get(sheet_name.as_str());
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let cs_excel_row = row_idx + 1;
+            let evaluated_row = if let Some(ctx) = cs_ctx {
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx.col_asts,
+                    ctx.row_overrides,
+                    ctx.topo_order,
+                    &interp,
+                )
+            } else {
+                row_values
+            };
             for (&(col, start_row, end_row), fold) in &mut cs_folds {
                 let in_bounds = match (start_row, end_row) {
                     (Some(sr), Some(er)) => cs_excel_row >= sr && cs_excel_row <= er,
@@ -934,7 +987,7 @@ pub fn execute_prelude(
                 };
                 if in_bounds {
                     let idx = (col as usize).saturating_sub(1);
-                    let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                    let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                     fold.feed(val);
                 }
             }
@@ -950,13 +1003,26 @@ pub fn execute_prelude(
 
     // Cross-sheet bounded range pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_range_keys {
+        let cs_ctx = cross_sheet_formulas.get(sheet_name.as_str());
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let excel_row = row_idx + 1;
+            let evaluated_row = if let Some(ctx) = cs_ctx {
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx.col_asts,
+                    ctx.row_overrides,
+                    ctx.topo_order,
+                    &interp,
+                )
+            } else {
+                row_values
+            };
             for rk in keys {
                 if excel_row >= rk.start_row && excel_row <= rk.end_row {
                     let idx = (rk.col as usize).saturating_sub(1);
-                    let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
+                    let val = evaluated_row.get(idx).cloned().unwrap_or(Value::Empty);
                     if let Some(collector) = range_collectors.get_mut(rk) {
                         collector.push(val);
                     }
