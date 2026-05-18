@@ -197,7 +197,7 @@ impl Prelude {
     ///
     /// let mut aggs = HashMap::new();
     /// aggs.insert(
-    ///     AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 },
+    ///     AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None },
     ///     Value::Number(100.0),
     /// );
     /// let prelude = Prelude::with_aggregates(aggs);
@@ -343,7 +343,7 @@ impl Prelude {
     /// use xlstream_eval::Prelude;
     ///
     /// let mut aggs = HashMap::new();
-    /// let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+    /// let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None };
     /// aggs.insert(key.clone(), Value::Number(42.0));
     /// let prelude = Prelude::with_aggregates(aggs);
     /// assert_eq!(prelude.get_aggregate(&key), Some(&Value::Number(42.0)));
@@ -610,7 +610,13 @@ mod tests {
     #[test]
     fn get_aggregate_returns_stored_value() {
         let mut aggs = HashMap::new();
-        let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+        let key = AggregateKey {
+            kind: AggKind::Sum,
+            sheet: None,
+            column: 1,
+            start_row: None,
+            end_row: None,
+        };
         aggs.insert(key.clone(), Value::Number(42.0));
         let prelude = Prelude::with_aggregates(aggs);
         assert_eq!(prelude.get_aggregate(&key), Some(&Value::Number(42.0)));
@@ -619,7 +625,13 @@ mod tests {
     #[test]
     fn get_aggregate_missing_returns_none() {
         let prelude = Prelude::empty();
-        let key = AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 };
+        let key = AggregateKey {
+            kind: AggKind::Sum,
+            sheet: None,
+            column: 1,
+            start_row: None,
+            end_row: None,
+        };
         assert_eq!(prelude.get_aggregate(&key), None);
     }
 
@@ -666,7 +678,13 @@ mod tests {
 
     #[test]
     fn with_conditional_stores_both() {
-        let agg_key = AggregateKey { kind: AggKind::Max, sheet: None, column: 3 };
+        let agg_key = AggregateKey {
+            kind: AggKind::Max,
+            sheet: None,
+            column: 3,
+            start_row: None,
+            end_row: None,
+        };
         let mut aggs = HashMap::new();
         aggs.insert(agg_key.clone(), Value::Number(99.0));
 

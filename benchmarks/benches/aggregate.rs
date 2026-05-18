@@ -6,9 +6,21 @@ use xlstream_parse::{AggKind, AggregateKey};
 
 fn bench_aggregate(c: &mut Criterion) {
     let keys = vec![
-        AggregateKey { kind: AggKind::Sum, sheet: None, column: 2 },
-        AggregateKey { kind: AggKind::Count, sheet: None, column: 2 },
-        AggregateKey { kind: AggKind::Average, sheet: None, column: 2 },
+        AggregateKey { kind: AggKind::Sum, sheet: None, column: 2, start_row: None, end_row: None },
+        AggregateKey {
+            kind: AggKind::Count,
+            sheet: None,
+            column: 2,
+            start_row: None,
+            end_row: None,
+        },
+        AggregateKey {
+            kind: AggKind::Average,
+            sheet: None,
+            column: 2,
+            start_row: None,
+            end_row: None,
+        },
     ];
 
     let small_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/bench_small.xlsx");

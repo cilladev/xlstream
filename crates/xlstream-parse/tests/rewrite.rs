@@ -180,8 +180,20 @@ fn collect_index_registers_sheet() {
 
 #[test]
 fn prelude_key_aggregate_equality() {
-    let a = PreludeKey::Aggregate(AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 });
-    let b = PreludeKey::Aggregate(AggregateKey { kind: AggKind::Sum, sheet: None, column: 1 });
+    let a = PreludeKey::Aggregate(AggregateKey {
+        kind: AggKind::Sum,
+        sheet: None,
+        column: 1,
+        start_row: None,
+        end_row: None,
+    });
+    let b = PreludeKey::Aggregate(AggregateKey {
+        kind: AggKind::Sum,
+        sheet: None,
+        column: 1,
+        start_row: None,
+        end_row: None,
+    });
     assert_eq!(a, b);
 }
 
