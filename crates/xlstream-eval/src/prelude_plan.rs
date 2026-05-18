@@ -695,10 +695,15 @@ pub fn execute_prelude(
         multi_folds.insert(i, HashMap::new());
     }
 
-    // Initialize bounded range collectors.
+    // Initialize bounded range collectors, split by sheet.
     let mut range_collectors: HashMap<crate::prelude::BoundedRangeKey, Vec<Value>> = HashMap::new();
+    let mut cross_range_keys: HashMap<String, Vec<crate::prelude::BoundedRangeKey>> =
+        HashMap::new();
     for rk in range_keys {
         let capacity = (rk.end_row.saturating_sub(rk.start_row) + 1) as usize;
+        if let Some(ref sheet) = rk.sheet {
+            cross_range_keys.entry(sheet.clone()).or_default().push(rk.clone());
+        }
         range_collectors.insert(rk.clone(), Vec::with_capacity(capacity));
     }
 
@@ -725,8 +730,11 @@ pub fn execute_prelude(
             fold.feed(val);
         }
 
-        // Collect bounded range values.
+        // Collect bounded range values (main-sheet only).
         for (rk, collector) in &mut range_collectors {
+            if rk.sheet.is_some() {
+                continue;
+            }
             if excel_row >= rk.start_row && excel_row <= rk.end_row {
                 let idx = (rk.col as usize).saturating_sub(1);
                 let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
@@ -841,6 +849,25 @@ pub fn execute_prelude(
             let kinds = cs_col_kinds.get(&col).map_or(&[][..], |v| v.as_slice());
             for (kind, key) in kinds {
                 aggregates.insert(key.clone(), fold.clone().finish(*kind));
+            }
+        }
+    }
+
+    // Cross-sheet bounded range pass: stream each non-main sheet.
+    for (sheet_name, keys) in &cross_range_keys {
+        let mut cs_stream = reader.cells(sheet_name)?;
+        let mut cs_row_idx: u32 = 0;
+        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
+            let excel_row = cs_row_idx + 1;
+            cs_row_idx += 1;
+            for rk in keys {
+                if excel_row >= rk.start_row && excel_row <= rk.end_row {
+                    let idx = (rk.col as usize).saturating_sub(1);
+                    let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
+                    if let Some(collector) = range_collectors.get_mut(rk) {
+                        collector.push(val);
+                    }
+                }
             }
         }
     }

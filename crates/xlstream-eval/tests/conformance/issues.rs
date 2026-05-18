@@ -106,6 +106,105 @@ fn issue_137_cross_sheet_simple_aggregate() {
     );
 }
 
+/// Multiple cross-sheets: SUM(Sheet2!A:A) + MAX(Sheet3!B:B) in same workbook.
+#[test]
+fn issue_137_multi_sheet_aggregate_isolation() {
+    use calamine::{open_workbook, Data, Reader as CalReader, Xlsx};
+
+    let input = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let output = NamedTempFile::with_suffix(".xlsx").unwrap();
+
+    let mut wb = Workbook::new();
+
+    let main = wb.add_worksheet();
+    main.set_name("Sheet1").unwrap();
+    main.write_string(0, 0, "X").unwrap();
+    main.write_number(1, 0, 999.0).unwrap();
+    main.write_formula(1, 1, Formula::new("SUM(Sheet2!A2:A4)").set_result("0")).unwrap();
+    main.write_formula(2, 1, Formula::new("MAX(Sheet3!B2:B4)").set_result("0")).unwrap();
+
+    let s2 = wb.add_worksheet();
+    s2.set_name("Sheet2").unwrap();
+    s2.write_string(0, 0, "V").unwrap();
+    s2.write_number(1, 0, 1.0).unwrap();
+    s2.write_number(2, 0, 2.0).unwrap();
+    s2.write_number(3, 0, 3.0).unwrap();
+
+    let s3 = wb.add_worksheet();
+    s3.set_name("Sheet3").unwrap();
+    s3.write_string(0, 0, "A").unwrap();
+    s3.write_string(0, 1, "B").unwrap();
+    s3.write_number(1, 1, 100.0).unwrap();
+    s3.write_number(2, 1, 200.0).unwrap();
+    s3.write_number(3, 1, 300.0).unwrap();
+
+    wb.save(input.path()).unwrap();
+
+    let opts = EvaluateOptions { workers: Some(1), ..Default::default() };
+    evaluate(input.path(), output.path(), &opts).unwrap();
+
+    let mut out: Xlsx<_> = open_workbook(output.path()).unwrap();
+    let range = out.worksheet_range("Sheet1").unwrap();
+    let rows: Vec<_> = range.rows().collect();
+
+    let b2 = &rows[1][1];
+    assert!(
+        matches!(b2, Data::Float(v) if (*v - 6.0).abs() < 1e-6),
+        "SUM(Sheet2!A2:A4) expected 6, got {b2:?}"
+    );
+    let b3 = &rows[2][1];
+    assert!(
+        matches!(b3, Data::Float(v) if (*v - 300.0).abs() < 1e-6),
+        "MAX(Sheet3!B2:B4) expected 300, got {b3:?}"
+    );
+}
+
+/// Mixed main-sheet + cross-sheet: SUM(A:A) and SUM(Sheet2!A:A) coexist.
+#[test]
+fn issue_137_mixed_main_and_cross_sheet_aggregate() {
+    use calamine::{open_workbook, Data, Reader as CalReader, Xlsx};
+
+    let input = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let output = NamedTempFile::with_suffix(".xlsx").unwrap();
+
+    let mut wb = Workbook::new();
+
+    let main = wb.add_worksheet();
+    main.set_name("Sheet1").unwrap();
+    main.write_string(0, 0, "Val").unwrap();
+    main.write_string(0, 1, "Res").unwrap();
+    main.write_number(1, 0, 100.0).unwrap();
+    main.write_number(2, 0, 200.0).unwrap();
+    main.write_formula(1, 1, Formula::new("SUM(A2:A3)").set_result("0")).unwrap();
+    main.write_formula(2, 1, Formula::new("SUM(Sheet2!A2:A3)").set_result("0")).unwrap();
+
+    let s2 = wb.add_worksheet();
+    s2.set_name("Sheet2").unwrap();
+    s2.write_string(0, 0, "D").unwrap();
+    s2.write_number(1, 0, 5.0).unwrap();
+    s2.write_number(2, 0, 7.0).unwrap();
+
+    wb.save(input.path()).unwrap();
+
+    let opts = EvaluateOptions { workers: Some(1), ..Default::default() };
+    evaluate(input.path(), output.path(), &opts).unwrap();
+
+    let mut out: Xlsx<_> = open_workbook(output.path()).unwrap();
+    let range = out.worksheet_range("Sheet1").unwrap();
+    let rows: Vec<_> = range.rows().collect();
+
+    let b2 = &rows[1][1];
+    assert!(
+        matches!(b2, Data::Float(v) if (*v - 300.0).abs() < 1e-6),
+        "SUM(A2:A3) expected 300, got {b2:?}"
+    );
+    let b3 = &rows[2][1];
+    assert!(
+        matches!(b3, Data::Float(v) if (*v - 12.0).abs() < 1e-6),
+        "SUM(Sheet2!A2:A3) expected 12, got {b3:?}"
+    );
+}
+
 #[test]
 fn issue_137_cross_sheet_simple_aggregate_conformance() {
     super::conformance::run_conformance("issues/issue-137-cross-sheet-simple-aggregate.xlsx");
