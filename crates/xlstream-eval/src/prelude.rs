@@ -4,6 +4,7 @@
 //! adds volatile data (TODAY/NOW).
 
 use std::collections::HashMap;
+use std::sync::RwLock;
 
 use xlstream_core::{CellError, ExcelDate, Value};
 use xlstream_parse::{AggKind, AggregateKey};
@@ -161,6 +162,11 @@ pub struct Prelude {
     volatile: Option<VolatileData>,
     /// Cached bounded ranges for range-expanding functions.
     cached_ranges: HashMap<BoundedRangeKey, Vec<Value>>,
+    /// Lazily populated cache for operator criteria lookups (e.g.,
+    /// `COUNTIF(B:B,">500")`). Avoids re-scanning the inner map on every
+    /// row — the scan runs once per unique (key, composite) pair, then
+    /// all subsequent calls hit this cache.
+    operator_cache: RwLock<HashMap<(MultiConditionalAggKey, String), Value>>,
 }
 
 impl Prelude {
@@ -182,6 +188,7 @@ impl Prelude {
             lookup_sheets: HashMap::new(),
             volatile: None,
             cached_ranges: HashMap::new(),
+            operator_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -211,6 +218,7 @@ impl Prelude {
             lookup_sheets: HashMap::new(),
             volatile: None,
             cached_ranges: HashMap::new(),
+            operator_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -241,6 +249,7 @@ impl Prelude {
             lookup_sheets: HashMap::new(),
             volatile: None,
             cached_ranges: HashMap::new(),
+            operator_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -268,6 +277,7 @@ impl Prelude {
             lookup_sheets: HashMap::new(),
             volatile: None,
             cached_ranges: HashMap::new(),
+            operator_cache: RwLock::new(HashMap::new()),
         }
     }
 
@@ -316,6 +326,11 @@ impl Prelude {
             self.volatile = other.volatile;
         }
         self.cached_ranges.extend(other.cached_ranges);
+        if let Ok(other_cache) = other.operator_cache.into_inner() {
+            if let Ok(ref mut self_cache) = self.operator_cache.write() {
+                self_cache.extend(other_cache);
+            }
+        }
     }
 
     /// Look up a pre-loaded sheet by name (case-insensitive).
@@ -444,7 +459,19 @@ impl Prelude {
             if let Some(v) = inner.get(composite_key) {
                 return v.clone();
             }
+
+            let cache_key = (key.clone(), composite_key.to_string());
+
+            if let Ok(cache) = self.operator_cache.read() {
+                if let Some(v) = cache.get(&cache_key) {
+                    return v.clone();
+                }
+            }
+
             if let Some(result) = try_operator_criteria(key, inner, composite_key) {
+                if let Ok(mut cache) = self.operator_cache.write() {
+                    return cache.entry(cache_key).or_insert(result).clone();
+                }
                 return result;
             }
         }
