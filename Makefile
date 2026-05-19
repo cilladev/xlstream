@@ -178,9 +178,9 @@ bench: ## run criterion micro-benchmarks (parse, arithmetic, lookup)
 	cargo bench -p xlstream-benchmarks
 
 .PHONY: bench-report
-bench-report: ## run all benchmarks and generate report (usage: make bench-report VERSION=0.1.2)
-	@test -n "$(VERSION)" || (echo "error: VERSION required. usage: make bench-report VERSION=0.1.2" && exit 1)
-	./scripts/bench-report.sh $(VERSION)
+bench-report: ## run benchmarks and generate report (usage: make bench-report VERSION=0.3.0 TIERS="-s -m")
+	@test -n "$(VERSION)" || (echo "error: VERSION required. usage: make bench-report VERSION=0.3.0 TIERS=\"-s -m\"" && exit 1)
+	./scripts/bench-report.sh $(VERSION) $(TIERS)
 
 # -----------------------------------------------------------------------------
 # pre-commit (manual runs)

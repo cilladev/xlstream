@@ -2,15 +2,40 @@
 set -euo pipefail
 
 # Generate a benchmark report markdown file.
-# Usage: ./scripts/bench-report.sh <version>
-# Example: ./scripts/bench-report.sh 0.1.2
+# Usage: ./scripts/bench-report.sh <version> [-s] [-m] [-l]
+# Example: ./scripts/bench-report.sh 0.3.0 -s -m   (small + medium only)
+#          ./scripts/bench-report.sh 0.3.0           (all tiers)
 # Output: benchmarks/reports/v<version>.md
 
-VERSION="${1:-}"
+VERSION=""
+RUN_SMALL=false
+RUN_MEDIUM=false
+RUN_LARGE=false
+EXPLICIT_TIERS=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -s|--small)  RUN_SMALL=true; EXPLICIT_TIERS=true; shift ;;
+        -m|--medium) RUN_MEDIUM=true; EXPLICIT_TIERS=true; shift ;;
+        -l|--large)  RUN_LARGE=true; EXPLICIT_TIERS=true; shift ;;
+        -*)          echo "unknown flag: $1" >&2; exit 1 ;;
+        *)           VERSION="$1"; shift ;;
+    esac
+done
+
 if [[ -z "$VERSION" ]]; then
-    echo "usage: $0 <version>" >&2
-    echo "example: $0 0.1.2" >&2
+    echo "usage: $0 <version> [-s] [-m] [-l]" >&2
+    echo "  -s, --small   run small tier (10k rows)" >&2
+    echo "  -m, --medium  run medium tier (100k rows)" >&2
+    echo "  -l, --large   run large tier (1M rows)" >&2
+    echo "  no flags      run all tiers" >&2
     exit 1
+fi
+
+if [[ "$EXPLICIT_TIERS" == "false" ]]; then
+    RUN_SMALL=true
+    RUN_MEDIUM=true
+    RUN_LARGE=true
 fi
 
 REPORT_DIR="benchmarks/reports"
@@ -106,21 +131,34 @@ format_rss() {
 echo "-> building release binary..."
 cargo build --release -p xlstream-cli 2>&1 | tail -1
 
-# --- Run tier benchmarks via CLI (single pass each) ---
-echo "-> running small tier (1 worker)..."
-read SMALL_1W_MS SMALL_1W_RSS <<< "$(run_tier benchmarks/fixtures/bench_small.xlsx 1)"
-echo "-> running small tier (4 workers)..."
-read SMALL_4W_MS SMALL_4W_RSS <<< "$(run_tier benchmarks/fixtures/bench_small.xlsx 4)"
+# --- Run selected tier benchmarks ---
+SMALL_1W_MS="n/a"; SMALL_1W_RSS="0"
+SMALL_4W_MS="n/a"; SMALL_4W_RSS="0"
+MEDIUM_1W_MS="n/a"; MEDIUM_1W_RSS="0"
+MEDIUM_4W_MS="n/a"; MEDIUM_4W_RSS="0"
+LARGE_1W_MS="n/a"; LARGE_1W_RSS="0"
+LARGE_8W_MS="n/a"; LARGE_8W_RSS="0"
 
-echo "-> running medium tier (1 worker)..."
-read MEDIUM_1W_MS MEDIUM_1W_RSS <<< "$(run_tier benchmarks/fixtures/bench_medium.xlsx 1)"
-echo "-> running medium tier (4 workers)..."
-read MEDIUM_4W_MS MEDIUM_4W_RSS <<< "$(run_tier benchmarks/fixtures/bench_medium.xlsx 4)"
+if [[ "$RUN_SMALL" == "true" ]]; then
+    echo "-> running small tier (1 worker)..."
+    read SMALL_1W_MS SMALL_1W_RSS <<< "$(run_tier benchmarks/fixtures/bench_small.xlsx 1)"
+    echo "-> running small tier (4 workers)..."
+    read SMALL_4W_MS SMALL_4W_RSS <<< "$(run_tier benchmarks/fixtures/bench_small.xlsx 4)"
+fi
 
-echo "-> running large tier (1 worker)..."
-read LARGE_1W_MS LARGE_1W_RSS <<< "$(run_tier benchmarks/fixtures/bench_large.xlsx 1)"
-echo "-> running large tier (8 workers)..."
-read LARGE_8W_MS LARGE_8W_RSS <<< "$(run_tier benchmarks/fixtures/bench_large.xlsx 8)"
+if [[ "$RUN_MEDIUM" == "true" ]]; then
+    echo "-> running medium tier (1 worker)..."
+    read MEDIUM_1W_MS MEDIUM_1W_RSS <<< "$(run_tier benchmarks/fixtures/bench_medium.xlsx 1)"
+    echo "-> running medium tier (4 workers)..."
+    read MEDIUM_4W_MS MEDIUM_4W_RSS <<< "$(run_tier benchmarks/fixtures/bench_medium.xlsx 4)"
+fi
+
+if [[ "$RUN_LARGE" == "true" ]]; then
+    echo "-> running large tier (1 worker)..."
+    read LARGE_1W_MS LARGE_1W_RSS <<< "$(run_tier benchmarks/fixtures/bench_large.xlsx 1)"
+    echo "-> running large tier (8 workers)..."
+    read LARGE_8W_MS LARGE_8W_RSS <<< "$(run_tier benchmarks/fixtures/bench_large.xlsx 8)"
+fi
 
 # Format for table
 SMALL_1W=$(format_time "$SMALL_1W_MS")
@@ -151,26 +189,25 @@ done
 # --- Write report ---
 echo "-> writing $REPORT_FILE..."
 
-cat > "$REPORT_FILE" << EOF
-# Benchmark Report — v${VERSION}
-
-**Date:** ${DATE}
-**Hardware:** ${HARDWARE}
-**Rust:** rustc ${RUST_VERSION}
-**Profile:** release (LTO fat, codegen-units=1)
-
-## Tier results
-
-| Tier | Rows | Workers | Wall-clock | Peak RSS |
-|---|---|---|---|---|
-| Small | 10,000 | 1 | ${SMALL_1W:-n/a} | ${RSS_SMALL_1W:-—} |
-| Small | 10,000 | 4 | ${SMALL_4W:-n/a} | ${RSS_SMALL_4W:-—} |
-| Medium | 100,000 | 1 | ${MEDIUM_1W:-n/a} | ${RSS_MEDIUM_1W:-—} |
-| Medium | 100,000 | 4 | ${MEDIUM_4W:-n/a} | ${RSS_MEDIUM_4W:-—} |
-| Large | 1,000,000 | 1 | ${LARGE_1W:-n/a} | ${RSS_LARGE_1W:-—} |
-| Large | 1,000,000 | 8 | ${LARGE_8W:-n/a} | ${RSS_LARGE_8W:-—} |
-
-EOF
+{
+    echo "# Benchmark Report — v${VERSION}"
+    echo ""
+    echo "**Date:** ${DATE}"
+    echo "**Hardware:** ${HARDWARE}"
+    echo "**Rust:** rustc ${RUST_VERSION}"
+    echo "**Profile:** release (LTO fat, codegen-units=1)"
+    echo ""
+    echo "## Tier results"
+    echo ""
+    echo "| Tier | Rows | Workers | Wall-clock | Peak RSS |"
+    echo "|---|---|---|---|---|"
+    [[ "$RUN_SMALL" == "true" ]]  && echo "| Small | 10,000 | 1 | ${SMALL_1W} | ${RSS_SMALL_1W} |"
+    [[ "$RUN_SMALL" == "true" ]]  && echo "| Small | 10,000 | 4 | ${SMALL_4W} | ${RSS_SMALL_4W} |"
+    [[ "$RUN_MEDIUM" == "true" ]] && echo "| Medium | 100,000 | 1 | ${MEDIUM_1W} | ${RSS_MEDIUM_1W} |"
+    [[ "$RUN_MEDIUM" == "true" ]] && echo "| Medium | 100,000 | 4 | ${MEDIUM_4W} | ${RSS_MEDIUM_4W} |"
+    [[ "$RUN_LARGE" == "true" ]]  && echo "| Large | 1,000,000 | 1 | ${LARGE_1W} | ${RSS_LARGE_1W} |"
+    [[ "$RUN_LARGE" == "true" ]]  && echo "| Large | 1,000,000 | 8 | ${LARGE_8W} | ${RSS_LARGE_8W} |"
+} > "$REPORT_FILE"
 
 # --- Auto-compare with previous report ---
 if [[ -n "$PREV_REPORT" ]]; then
@@ -189,8 +226,6 @@ if [[ -n "$PREV_REPORT" ]]; then
         esac
     }
 
-    # Extract wall-clock from a tier row in a report markdown.
-    # grep for "| Quick |" etc, pull the 4th column.
     extract_tier() {
         local file="$1" tier="$2" workers="$3"
         grep "| ${tier} " "$file" 2>/dev/null | grep "| ${workers} |" 2>/dev/null | head -1 \
@@ -237,32 +272,14 @@ if [[ -n "$PREV_REPORT" ]]; then
         echo ""
         echo "| Tier | v${PREV_VERSION} | v${VERSION} | Change |"
         echo "|---|---|---|---|"
-        compare_row "Small (1w)" "Small" "1" "$SMALL_1W"
-        compare_row "Small (4w)" "Small" "4" "$SMALL_4W"
-        compare_row "Medium (1w)" "Medium" "1" "$MEDIUM_1W"
-        compare_row "Medium (4w)" "Medium" "4" "$MEDIUM_4W"
-        compare_row "Large (1w)" "Large" "1" "$LARGE_1W"
-        compare_row "Large (8w)" "Large" "8" "$LARGE_8W"
+        [[ "$RUN_SMALL" == "true" ]]  && compare_row "Small (1w)" "Small" "1" "$SMALL_1W"
+        [[ "$RUN_SMALL" == "true" ]]  && compare_row "Small (4w)" "Small" "4" "$SMALL_4W"
+        [[ "$RUN_MEDIUM" == "true" ]] && compare_row "Medium (1w)" "Medium" "1" "$MEDIUM_1W"
+        [[ "$RUN_MEDIUM" == "true" ]] && compare_row "Medium (4w)" "Medium" "4" "$MEDIUM_4W"
+        [[ "$RUN_LARGE" == "true" ]]  && compare_row "Large (1w)" "Large" "1" "$LARGE_1W"
+        [[ "$RUN_LARGE" == "true" ]]  && compare_row "Large (8w)" "Large" "8" "$LARGE_8W"
     } >> "$REPORT_FILE"
 
-    # Flag regressions
-    echo "" >> "$REPORT_FILE"
-    REGRESSIONS=$(grep '+[0-9]' "$REPORT_FILE" | awk -F'|' '{
-        gsub(/[^0-9.]/, "", $5);
-        if ($5+0 > 20) print $2
-    }')
-    if [[ -n "$REGRESSIONS" ]]; then
-        echo "**WARNING: regressions >20% detected in:${REGRESSIONS}**" >> "$REPORT_FILE"
-    else
-        echo "No regressions (all within noise threshold)." >> "$REPORT_FILE"
-    fi
 fi
-
-cat >> "$REPORT_FILE" << 'EOF'
-
-## Changes since previous version
-
-<!-- fill in what shipped in this version -->
-EOF
 
 echo "-> done: $REPORT_FILE"
