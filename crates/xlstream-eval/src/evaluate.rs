@@ -78,6 +78,9 @@ struct SheetEvalPlan {
     self_referential_cols: HashSet<u32>,
     col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
     row_override_texts: HashMap<u32, HashMap<u32, String>>,
+    /// 0-based row indices that actually contain formulas, per column.
+    #[allow(dead_code)]
+    formula_rows: HashMap<u32, HashSet<u32>>,
 }
 
 /// Output of [`build_eval_plan`].
@@ -300,6 +303,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 self_referential_cols: HashSet::new(),
                 col_templates: HashMap::new(),
                 row_override_texts: HashMap::new(),
+                formula_rows: HashMap::new(),
             },
             lookup_keys: Vec::new(),
         }
@@ -1127,6 +1131,11 @@ fn build_eval_plan(
         .collect();
     deps.sort_by_key(|(col, _)| *col);
 
+    let formula_rows: HashMap<u32, HashSet<u32>> = col_formulas
+        .iter()
+        .map(|(&col, formulas)| (col, formulas.iter().map(|(row, _)| *row).collect()))
+        .collect();
+
     let topo_order = topo_sort(&deps, &formula_cols)?;
     Ok(BuildPlanResult {
         sheet_plan: SheetEvalPlan {
@@ -1136,6 +1145,7 @@ fn build_eval_plan(
             self_referential_cols,
             col_templates,
             row_override_texts,
+            formula_rows,
         },
         lookup_keys: all_lookup_keys,
     })
