@@ -78,6 +78,8 @@ struct SheetEvalPlan {
     self_referential_cols: HashSet<u32>,
     col_templates: HashMap<u32, crate::formula_template::FormulaTemplate>,
     row_override_texts: HashMap<u32, HashMap<u32, String>>,
+    /// 0-based row indices that actually contain formulas, per column.
+    formula_rows: HashMap<u32, HashSet<u32>>,
 }
 
 /// Output of [`build_eval_plan`].
@@ -300,6 +302,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 self_referential_cols: HashSet::new(),
                 col_templates: HashMap::new(),
                 row_override_texts: HashMap::new(),
+                formula_rows: HashMap::new(),
             },
             lookup_keys: Vec::new(),
         }
@@ -393,21 +396,30 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     let has_main_aggregates =
         !main_agg_keys.is_empty() || !main_multi_keys.is_empty() || !main_range_keys.is_empty();
 
-    // Build cross-sheet formula contexts for prelude formula evaluation.
-    let cross_sheet_formulas: HashMap<String, crate::prelude_plan::SheetFormulaCtx<'_>> =
+    let cross_sheet_formulas: Vec<(&str, crate::prelude_plan::SheetFormulaCtx<'_>)> =
         secondary_plans
             .iter()
             .map(|(name, sp)| {
                 (
-                    name.clone(),
+                    name.as_str(),
                     crate::prelude_plan::SheetFormulaCtx {
                         col_asts: &sp.col_asts,
                         row_overrides: &sp.row_overrides,
                         topo_order: &sp.topo_order,
+                        formula_rows: &sp.formula_rows,
                     },
                 )
             })
             .collect();
+    let cross_sheet_refs: Vec<(&str, &crate::prelude_plan::SheetFormulaCtx<'_>)> =
+        cross_sheet_formulas.iter().map(|(n, ctx)| (*n, ctx)).collect();
+
+    let main_formula_ctx = crate::prelude_plan::SheetFormulaCtx {
+        col_asts: &main_result.sheet_plan.col_asts,
+        row_overrides: &main_result.sheet_plan.row_overrides,
+        topo_order: &main_result.sheet_plan.topo_order,
+        formula_rows: &main_result.sheet_plan.formula_rows,
+    };
 
     let (mut merged_prelude, total_data_rows) = if !has_main_aggregates {
         let count =
@@ -420,10 +432,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             &main_agg_keys,
             &main_multi_keys,
             &main_range_keys,
-            &main_result.sheet_plan.col_asts,
-            &main_result.sheet_plan.row_overrides,
-            &main_result.sheet_plan.topo_order,
-            &cross_sheet_formulas,
+            Some(&main_formula_ctx),
+            &cross_sheet_refs,
         )?
     } else {
         (Prelude::empty(), 0)
@@ -462,16 +472,20 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 .collect()
         };
         if !sec_agg.is_empty() || !sec_multi.is_empty() || !sec_range.is_empty() {
+            let sec_ctx = crate::prelude_plan::SheetFormulaCtx {
+                col_asts: &sp.col_asts,
+                row_overrides: &sp.row_overrides,
+                topo_order: &sp.topo_order,
+                formula_rows: &sp.formula_rows,
+            };
             let (sec_prelude, _) = crate::prelude_plan::execute_prelude(
                 &mut reader,
                 sheet_name,
                 &sec_agg,
                 &sec_multi,
                 &sec_range,
-                &sp.col_asts,
-                &sp.row_overrides,
-                &sp.topo_order,
-                &cross_sheet_formulas,
+                Some(&sec_ctx),
+                &cross_sheet_refs,
             )?;
             merged_prelude.merge(sec_prelude);
         }
@@ -1151,6 +1165,11 @@ fn build_eval_plan(
         .collect();
     deps.sort_by_key(|(col, _)| *col);
 
+    let formula_rows: HashMap<u32, HashSet<u32>> = col_formulas
+        .iter()
+        .map(|(&col, formulas)| (col, formulas.iter().map(|(row, _)| *row).collect()))
+        .collect();
+
     let topo_order = topo_sort(&deps, &formula_cols)?;
     Ok(BuildPlanResult {
         sheet_plan: SheetEvalPlan {
@@ -1160,6 +1179,7 @@ fn build_eval_plan(
             self_referential_cols,
             col_templates,
             row_override_texts,
+            formula_rows,
         },
         lookup_keys: all_lookup_keys,
     })

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -31,18 +30,8 @@ fn bench_aggregate(c: &mut Criterion) {
         c.bench_function("prelude_sum_count_avg_10k", |b| {
             b.iter(|| {
                 let mut reader = Reader::open(small_path).unwrap();
-                let (prelude, _count) = execute_prelude(
-                    &mut reader,
-                    "Main",
-                    &keys,
-                    &[],
-                    &[],
-                    &HashMap::new(),
-                    &HashMap::new(),
-                    &[],
-                    &HashMap::new(),
-                )
-                .unwrap();
+                let (prelude, _count) =
+                    execute_prelude(&mut reader, "Main", &keys, &[], &[], None, &[]).unwrap();
                 prelude
             });
         });
@@ -60,18 +49,8 @@ fn bench_aggregate(c: &mut Criterion) {
         group.bench_function("prelude_sum_count_avg_100k", |b| {
             b.iter(|| {
                 let mut reader = Reader::open(medium_path).unwrap();
-                let (prelude, _count) = execute_prelude(
-                    &mut reader,
-                    "Main",
-                    &keys,
-                    &[],
-                    &[],
-                    &HashMap::new(),
-                    &HashMap::new(),
-                    &[],
-                    &HashMap::new(),
-                )
-                .unwrap();
+                let (prelude, _count) =
+                    execute_prelude(&mut reader, "Main", &keys, &[], &[], None, &[]).unwrap();
                 prelude
             });
         });

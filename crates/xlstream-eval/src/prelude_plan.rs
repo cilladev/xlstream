@@ -7,7 +7,7 @@
 //! column's values through `FoldState`, and builds a filled
 //! [`Prelude`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use xlstream_core::{CellError, Value, XlStreamError};
 use xlstream_io::Reader;
@@ -620,6 +620,21 @@ fn collect_range_keys_recursive(
 
 /// Formula evaluation context for a single sheet, used to evaluate
 /// row-local formulas during the prelude pass.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::{HashMap, HashSet};
+/// use xlstream_eval::prelude_plan::SheetFormulaCtx;
+///
+/// let ctx = SheetFormulaCtx {
+///     col_asts: &HashMap::new(),
+///     row_overrides: &HashMap::new(),
+///     topo_order: &[],
+///     formula_rows: &HashMap::new(),
+/// };
+/// assert!(ctx.topo_order.is_empty());
+/// ```
 pub struct SheetFormulaCtx<'a> {
     /// Per-column formula ASTs.
     pub col_asts: &'a HashMap<u32, Ast>,
@@ -627,20 +642,25 @@ pub struct SheetFormulaCtx<'a> {
     pub row_overrides: &'a HashMap<u32, HashMap<u32, Ast>>,
     /// Column evaluation order.
     pub topo_order: &'a [u32],
+    /// 0-based row indices that actually contain formulas, per column.
+    /// Prevents evaluating formulas on rows that never had them.
+    pub formula_rows: &'a HashMap<u32, HashSet<u32>>,
 }
 
-/// Evaluate row-local formulas in a row, returning the row with computed
-/// values replacing stale/missing cached results.
+/// Evaluate row-local formulas for cells with missing cached values,
+/// but only on rows that actually contain formulas.
 fn evaluate_row_formulas(
     row_values: Vec<Value>,
     row_idx: u32,
-    col_asts: &HashMap<u32, Ast>,
-    row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
-    topo_order: &[u32],
+    ctx: &SheetFormulaCtx<'_>,
     interp: &crate::Interpreter<'_>,
 ) -> Vec<Value> {
     let mut evaluated = row_values;
-    for &col in topo_order {
+    for &col in ctx.topo_order {
+        let has_formula = ctx.formula_rows.get(&col).is_some_and(|rows| rows.contains(&row_idx));
+        if !has_formula {
+            continue;
+        }
         let idx = col as usize;
         let needs_eval = match evaluated.get(idx) {
             None | Some(Value::Empty) => true,
@@ -650,8 +670,11 @@ fn evaluate_row_formulas(
         if !needs_eval {
             continue;
         }
-        let ast =
-            row_overrides.get(&col).and_then(|rm| rm.get(&row_idx)).or_else(|| col_asts.get(&col));
+        let ast = ctx
+            .row_overrides
+            .get(&col)
+            .and_then(|rm| rm.get(&row_idx))
+            .or_else(|| ctx.col_asts.get(&col));
         if let Some(ast) = ast {
             if is_row_local(ast) {
                 if idx >= evaluated.len() {
@@ -723,7 +746,6 @@ fn is_row_local_node(node: NodeRef<'_>) -> bool {
 /// # Examples
 ///
 /// ```no_run
-/// use std::collections::HashMap;
 /// use std::path::Path;
 /// use xlstream_io::Reader;
 /// use xlstream_parse::{AggKind, AggregateKey};
@@ -732,22 +754,18 @@ fn is_row_local_node(node: NodeRef<'_>) -> bool {
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None }];
 /// let (prelude, _count) = execute_prelude(
-///     &mut reader, "Sheet1", &keys, &[], &[],
-///     &HashMap::new(), &HashMap::new(), &[],
-///     &HashMap::new(),
+///     &mut reader, "Sheet1", &keys, &[], &[], None, &[],
 /// ).unwrap();
 /// ```
-#[allow(clippy::too_many_lines, clippy::too_many_arguments, clippy::implicit_hasher)]
+#[allow(clippy::too_many_lines)]
 pub fn execute_prelude(
     reader: &mut Reader,
     main_sheet: &str,
     simple_keys: &[AggregateKey],
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
-    col_asts: &HashMap<u32, Ast>,
-    row_overrides: &HashMap<u32, HashMap<u32, Ast>>,
-    topo_order: &[u32],
-    cross_sheet_formulas: &HashMap<String, SheetFormulaCtx<'_>>,
+    main_formulas: Option<&SheetFormulaCtx<'_>>,
+    cross_sheet_formulas: &[(&str, &SheetFormulaCtx<'_>)],
 ) -> Result<(Prelude, u32), XlStreamError> {
     // (column, start_row, end_row) — AggKind excluded because one FoldState serves all kinds
     // for the same column+bounds (cloned and finished per kind).
@@ -822,14 +840,11 @@ pub fn execute_prelude(
             header_skipped = true;
         }
 
-        let evaluated_row = evaluate_row_formulas(
-            row_values,
-            row_idx,
-            col_asts,
-            row_overrides,
-            topo_order,
-            &interp,
-        );
+        let evaluated_row = if let Some(ctx) = main_formulas {
+            evaluate_row_formulas(row_values, row_idx, ctx, &interp)
+        } else {
+            row_values
+        };
 
         // Feed simple aggregate folds, respecting row bounds.
         for (&(col, start_row, end_row), fold) in &mut col_folds {
@@ -903,18 +918,14 @@ pub fn execute_prelude(
     }
 
     for (sheet_name, sheet_keys) in &cross_sheet_keys {
-        let cs_ctx = cross_sheet_formulas.get(sheet_name.as_str());
+        let cs_ctx = cross_sheet_formulas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
+            .map(|(_, ctx)| *ctx);
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let evaluated_row = if let Some(ctx) = cs_ctx {
-                evaluate_row_formulas(
-                    row_values,
-                    row_idx,
-                    ctx.col_asts,
-                    ctx.row_overrides,
-                    ctx.topo_order,
-                    &interp,
-                )
+                evaluate_row_formulas(row_values, row_idx, ctx, &interp)
             } else {
                 row_values
             };
@@ -964,19 +975,15 @@ pub fn execute_prelude(
             cs_folds.insert(fk, FoldState::new());
         }
 
-        let cs_ctx = cross_sheet_formulas.get(sheet_name.as_str());
+        let cs_ctx = cross_sheet_formulas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
+            .map(|(_, ctx)| *ctx);
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let cs_excel_row = row_idx + 1;
             let evaluated_row = if let Some(ctx) = cs_ctx {
-                evaluate_row_formulas(
-                    row_values,
-                    row_idx,
-                    ctx.col_asts,
-                    ctx.row_overrides,
-                    ctx.topo_order,
-                    &interp,
-                )
+                evaluate_row_formulas(row_values, row_idx, ctx, &interp)
             } else {
                 row_values
             };
@@ -1003,19 +1010,15 @@ pub fn execute_prelude(
 
     // Cross-sheet bounded range pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_range_keys {
-        let cs_ctx = cross_sheet_formulas.get(sheet_name.as_str());
+        let cs_ctx = cross_sheet_formulas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
+            .map(|(_, ctx)| *ctx);
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let excel_row = row_idx + 1;
             let evaluated_row = if let Some(ctx) = cs_ctx {
-                evaluate_row_formulas(
-                    row_values,
-                    row_idx,
-                    ctx.col_asts,
-                    ctx.row_overrides,
-                    ctx.topo_order,
-                    &interp,
-                )
+                evaluate_row_formulas(row_values, row_idx, ctx, &interp)
             } else {
                 row_values
             };
@@ -1458,5 +1461,114 @@ mod tests {
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
+    }
+
+    // ===== is_row_local =====
+
+    #[test]
+    fn is_row_local_literal_number() {
+        let ast = xlstream_parse::parse("42").unwrap();
+        assert!(is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_same_sheet_cell_ref() {
+        let ast = xlstream_parse::parse("A1+B1").unwrap();
+        assert!(is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_function_over_cell_refs() {
+        let ast = xlstream_parse::parse("IF(A1>0,B1,C1)").unwrap();
+        assert!(is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_rejects_cross_sheet_ref() {
+        let ast = xlstream_parse::parse("Sheet2!A1").unwrap();
+        assert!(!is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_rejects_range_ref() {
+        let ast = xlstream_parse::parse("SUM(A1:A10)").unwrap();
+        assert!(!is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_rejects_nested_cross_sheet() {
+        let ast = xlstream_parse::parse("A1+Sheet2!B1").unwrap();
+        assert!(!is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_unary_negation() {
+        let ast = xlstream_parse::parse("-A1").unwrap();
+        assert!(is_row_local(&ast));
+    }
+
+    // ===== evaluate_row_formulas =====
+
+    #[test]
+    fn evaluate_row_formulas_skips_rows_without_formulas() {
+        let ast = xlstream_parse::parse("A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([0u32, 1]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result = evaluate_row_formulas(row, 2, &ctx, &interp);
+        assert_eq!(result[1], Value::Empty, "row 2 has no formula, should stay Empty");
+    }
+
+    #[test]
+    fn evaluate_row_formulas_evaluates_formula_rows() {
+        let ast = xlstream_parse::parse("A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([0u32, 1]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result = evaluate_row_formulas(row, 1, &ctx, &interp);
+        assert_eq!(result[1], Value::Number(10.0));
+    }
+
+    #[test]
+    fn evaluate_row_formulas_preserves_cached_values() {
+        let ast = xlstream_parse::parse("A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([1u32]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+
+        let row = vec![Value::Number(5.0), Value::Number(99.0)];
+        let result = evaluate_row_formulas(row, 1, &ctx, &interp);
+        assert_eq!(result[1], Value::Number(99.0), "cached value should be preserved");
     }
 }
