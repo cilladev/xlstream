@@ -654,7 +654,9 @@ fn evaluate_row_formulas(
     row_idx: u32,
     ctx: &SheetFormulaCtx<'_>,
     interp: &crate::Interpreter<'_>,
-) -> Vec<Value> {
+    aggregate_cols: &HashSet<u32>,
+    errored_cols: &mut HashSet<u32>,
+) -> Result<Vec<Value>, XlStreamError> {
     let mut evaluated = row_values;
     for &col in ctx.topo_order {
         let has_formula = ctx.formula_rows.get(&col).is_some_and(|rows| rows.contains(&row_idx));
@@ -685,10 +687,19 @@ fn evaluate_row_formulas(
                     interp.eval(ast.root(), &scope)
                 };
                 evaluated[idx] = result;
+            } else if aggregate_cols.contains(&col) && errored_cols.insert(col) {
+                let col_a1 = xlstream_core::col_row_to_a1(col + 1, 1);
+                let col_letter = col_a1.trim_end_matches(char::is_numeric);
+                return Err(XlStreamError::Internal(format!(
+                    "column {col_letter} contains formulas that cannot be evaluated \
+                     during the prelude pass (no cached values). \
+                     Save the workbook in Excel to populate cached values, \
+                     or ensure formula columns use only row-local expressions"
+                )));
             }
         }
     }
-    evaluated
+    Ok(evaluated)
 }
 
 /// Returns `true` if every node in the AST can be resolved from the
@@ -698,6 +709,8 @@ fn evaluate_row_formulas(
 fn is_row_local(ast: &Ast) -> bool {
     is_row_local_node(ast.root())
 }
+
+const VOLATILE_FUNCTIONS: &[&str] = &["TODAY", "NOW", "RAND", "RANDBETWEEN"];
 
 fn is_row_local_node(node: NodeRef<'_>) -> bool {
     match node.view() {
@@ -718,7 +731,12 @@ fn is_row_local_node(node: NodeRef<'_>) -> bool {
                 && node.right().is_some_and(is_row_local_node)
         }
         NodeView::UnaryOp { .. } => node.operand().is_some_and(is_row_local_node),
-        NodeView::Function { .. } => node.args().iter().all(|a| is_row_local_node(*a)),
+        NodeView::Function { name } => {
+            if VOLATILE_FUNCTIONS.iter().any(|v| v.eq_ignore_ascii_case(name)) {
+                return false;
+            }
+            node.args().iter().all(|a| is_row_local_node(*a))
+        }
         NodeView::Array { .. } => {
             node.array_cells().iter().all(|row| row.iter().all(|c| is_row_local_node(*c)))
         }
@@ -823,6 +841,24 @@ pub fn execute_prelude(
         range_collectors.insert(rk.clone(), Vec::with_capacity(capacity));
     }
 
+    let aggregate_cols: HashSet<u32> = {
+        let mut cols = HashSet::new();
+        for &(col, _, _) in col_kinds.keys() {
+            cols.insert(col.saturating_sub(1));
+        }
+        for mk in multi_keys {
+            if mk.sheet.is_none() {
+                if mk.sum_col > 0 {
+                    cols.insert(mk.sum_col.saturating_sub(1));
+                }
+                for &c in &mk.criteria_cols {
+                    cols.insert(c.saturating_sub(1));
+                }
+            }
+        }
+        cols
+    };
+
     // Stream the sheet, skipping header row.
     let mut stream = reader.cells(main_sheet)?;
     let mut header_skipped = false;
@@ -830,6 +866,7 @@ pub fn execute_prelude(
 
     let empty_prelude = Prelude::empty();
     let interp = crate::Interpreter::new(&empty_prelude);
+    let mut errored_cols: HashSet<u32> = HashSet::new();
 
     while let Some((row_idx, row_values)) = stream.next_row()? {
         let excel_row = row_idx + 1; // 1-based
@@ -841,7 +878,14 @@ pub fn execute_prelude(
         }
 
         let evaluated_row = if let Some(ctx) = main_formulas {
-            evaluate_row_formulas(row_values, row_idx, ctx, &interp)
+            evaluate_row_formulas(
+                row_values,
+                row_idx,
+                ctx,
+                &interp,
+                &aggregate_cols,
+                &mut errored_cols,
+            )?
         } else {
             row_values
         };
@@ -922,10 +966,28 @@ pub fn execute_prelude(
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
             .map(|(_, ctx)| *ctx);
+        let cs_agg_cols: HashSet<u32> = sheet_keys
+            .iter()
+            .flat_map(|(_, mk)| {
+                let mut cols = mk.criteria_cols.clone();
+                if mk.sum_col > 0 {
+                    cols.push(mk.sum_col);
+                }
+                cols.into_iter().map(|c| c.saturating_sub(1))
+            })
+            .collect();
+        let mut cs_errored: HashSet<u32> = HashSet::new();
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let evaluated_row = if let Some(ctx) = cs_ctx {
-                evaluate_row_formulas(row_values, row_idx, ctx, &interp)
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx,
+                    &interp,
+                    &cs_agg_cols,
+                    &mut cs_errored,
+                )?
             } else {
                 row_values
             };
@@ -979,11 +1041,21 @@ pub fn execute_prelude(
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
             .map(|(_, ctx)| *ctx);
+        let cs_agg_cols: HashSet<u32> =
+            cs_col_kinds.keys().map(|&(col, _, _)| col.saturating_sub(1)).collect();
+        let mut cs_errored: HashSet<u32> = HashSet::new();
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let cs_excel_row = row_idx + 1;
             let evaluated_row = if let Some(ctx) = cs_ctx {
-                evaluate_row_formulas(row_values, row_idx, ctx, &interp)
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx,
+                    &interp,
+                    &cs_agg_cols,
+                    &mut cs_errored,
+                )?
             } else {
                 row_values
             };
@@ -1014,11 +1086,20 @@ pub fn execute_prelude(
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
             .map(|(_, ctx)| *ctx);
+        let cs_range_cols: HashSet<u32> = keys.iter().map(|rk| rk.col.saturating_sub(1)).collect();
+        let mut cs_errored: HashSet<u32> = HashSet::new();
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
             let excel_row = row_idx + 1;
             let evaluated_row = if let Some(ctx) = cs_ctx {
-                evaluate_row_formulas(row_values, row_idx, ctx, &interp)
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx,
+                    &interp,
+                    &cs_range_cols,
+                    &mut cs_errored,
+                )?
             } else {
                 row_values
             };
@@ -1507,6 +1588,26 @@ mod tests {
         assert!(is_row_local(&ast));
     }
 
+    // ===== is_row_local: volatile functions =====
+
+    #[test]
+    fn is_row_local_rejects_today() {
+        let ast = xlstream_parse::parse("TODAY()").unwrap();
+        assert!(!is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_rejects_now() {
+        let ast = xlstream_parse::parse("NOW()").unwrap();
+        assert!(!is_row_local(&ast));
+    }
+
+    #[test]
+    fn is_row_local_rejects_nested_today() {
+        let ast = xlstream_parse::parse("A1-TODAY()").unwrap();
+        assert!(!is_row_local(&ast));
+    }
+
     // ===== evaluate_row_formulas =====
 
     #[test]
@@ -1524,9 +1625,12 @@ mod tests {
         };
         let prelude = Prelude::empty();
         let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
 
         let row = vec![Value::Number(5.0), Value::Empty];
-        let result = evaluate_row_formulas(row, 2, &ctx, &interp);
+        let result =
+            evaluate_row_formulas(row, 2, &ctx, &interp, &empty_agg, &mut errored).unwrap();
         assert_eq!(result[1], Value::Empty, "row 2 has no formula, should stay Empty");
     }
 
@@ -1545,9 +1649,12 @@ mod tests {
         };
         let prelude = Prelude::empty();
         let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
 
         let row = vec![Value::Number(5.0), Value::Empty];
-        let result = evaluate_row_formulas(row, 1, &ctx, &interp);
+        let result =
+            evaluate_row_formulas(row, 1, &ctx, &interp, &empty_agg, &mut errored).unwrap();
         assert_eq!(result[1], Value::Number(10.0));
     }
 
@@ -1566,9 +1673,59 @@ mod tests {
         };
         let prelude = Prelude::empty();
         let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
 
         let row = vec![Value::Number(5.0), Value::Number(99.0)];
-        let result = evaluate_row_formulas(row, 1, &ctx, &interp);
+        let result =
+            evaluate_row_formulas(row, 1, &ctx, &interp, &empty_agg, &mut errored).unwrap();
         assert_eq!(result[1], Value::Number(99.0), "cached value should be preserved");
+    }
+
+    #[test]
+    fn evaluate_row_formulas_errors_on_non_row_local_aggregate_col() {
+        let ast = xlstream_parse::parse("Sheet2!A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([1u32]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let agg_cols: HashSet<u32> = HashSet::from([1]);
+        let mut errored = HashSet::new();
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result = evaluate_row_formulas(row, 1, &ctx, &interp, &agg_cols, &mut errored);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn evaluate_row_formulas_skips_non_row_local_non_aggregate_col() {
+        let ast = xlstream_parse::parse("Sheet2!A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([1u32]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result =
+            evaluate_row_formulas(row, 1, &ctx, &interp, &empty_agg, &mut errored).unwrap();
+        assert_eq!(result[1], Value::Empty, "non-aggregate col should stay Empty, not error");
     }
 }
