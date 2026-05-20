@@ -7,11 +7,11 @@
 //! column's values through `FoldState`, and builds a filled
 //! [`Prelude`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use xlstream_core::{CellError, Value, XlStreamError};
 use xlstream_io::Reader;
-use xlstream_parse::{AggKind, AggregateKey, Ast, NodeView, PreludeKey};
+use xlstream_parse::{AggKind, AggregateKey, Ast, NodeRef, NodeView, PreludeKey};
 
 use crate::prelude::Prelude;
 
@@ -616,6 +616,129 @@ fn collect_range_keys_recursive(
         }
         _ => {}
     }
+}
+
+/// Formula evaluation context for a single sheet during prelude.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::{HashMap, HashSet};
+/// use xlstream_eval::prelude_plan::SheetFormulaCtx;
+///
+/// let ctx = SheetFormulaCtx {
+///     col_asts: &HashMap::new(),
+///     row_overrides: &HashMap::new(),
+///     topo_order: &[],
+///     formula_rows: &HashMap::new(),
+/// };
+/// assert!(ctx.topo_order.is_empty());
+/// ```
+pub struct SheetFormulaCtx<'a> {
+    /// Per-column formula ASTs.
+    pub col_asts: &'a HashMap<u32, Ast>,
+    /// Per-row formula overrides.
+    pub row_overrides: &'a HashMap<u32, HashMap<u32, Ast>>,
+    /// Column evaluation order.
+    pub topo_order: &'a [u32],
+    /// 0-based row indices that actually contain formulas, per column.
+    pub formula_rows: &'a HashMap<u32, HashSet<u32>>,
+}
+
+/// Returns `true` if the formula can be evaluated during prelude.
+///
+/// Only `PreludeRef` (circular aggregate), `ExternalRef`, and
+/// `ThreeDimensionalRef` nodes are unevaluable. Everything else
+/// resolves with loaded lookups and volatile data.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_eval::prelude_plan::is_prelude_evaluable;
+/// let ast = xlstream_parse::parse("A1*2").unwrap();
+/// assert!(is_prelude_evaluable(&ast));
+/// ```
+#[must_use]
+pub fn is_prelude_evaluable(ast: &Ast) -> bool {
+    !contains_unevaluable_node(ast.root())
+}
+
+fn contains_unevaluable_node(node: NodeRef<'_>) -> bool {
+    match node.view() {
+        NodeView::PreludeRef(_)
+        | NodeView::ExternalRef { .. }
+        | NodeView::ThreeDimensionalRef { .. } => true,
+        NodeView::Number(_)
+        | NodeView::Bool(_)
+        | NodeView::Text(_)
+        | NodeView::Error(_)
+        | NodeView::CellRef { .. }
+        | NodeView::RangeRef { .. }
+        | NodeView::NamedRef(_)
+        | NodeView::TableRef { .. } => false,
+        NodeView::BinaryOp { .. } => {
+            node.left().is_some_and(contains_unevaluable_node)
+                || node.right().is_some_and(contains_unevaluable_node)
+        }
+        NodeView::UnaryOp { .. } => node.operand().is_some_and(contains_unevaluable_node),
+        NodeView::Function { .. } => node.args().iter().any(|a| contains_unevaluable_node(*a)),
+        NodeView::Array { .. } => {
+            node.array_cells().iter().any(|row| row.iter().any(|c| contains_unevaluable_node(*c)))
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn evaluate_row_formulas(
+    row_values: Vec<Value>,
+    row_idx: u32,
+    ctx: &SheetFormulaCtx<'_>,
+    interp: &crate::Interpreter<'_>,
+    aggregate_cols: &HashSet<u32>,
+    errored_cols: &mut HashSet<u32>,
+) -> Result<Vec<Value>, XlStreamError> {
+    let mut evaluated = row_values;
+    for &col in ctx.topo_order {
+        let has_formula = ctx.formula_rows.get(&col).is_some_and(|rows| rows.contains(&row_idx));
+        if !has_formula {
+            continue;
+        }
+        let idx = col as usize;
+        let needs_eval = match evaluated.get(idx) {
+            None | Some(Value::Empty) => true,
+            Some(Value::Text(s)) => s.is_empty(),
+            _ => false,
+        };
+        if !needs_eval {
+            continue;
+        }
+        let ast = ctx
+            .row_overrides
+            .get(&col)
+            .and_then(|rm| rm.get(&row_idx))
+            .or_else(|| ctx.col_asts.get(&col));
+        if let Some(ast) = ast {
+            if is_prelude_evaluable(ast) {
+                if idx >= evaluated.len() {
+                    evaluated.resize(idx + 1, Value::Empty);
+                }
+                let result = {
+                    let scope = crate::scope::RowScope::new(&evaluated, row_idx).with_col_idx(col);
+                    interp.eval(ast.root(), &scope)
+                };
+                evaluated[idx] = result;
+            } else if aggregate_cols.contains(&col) && errored_cols.insert(col) {
+                let col_a1 = xlstream_core::col_row_to_a1(col + 1, 1);
+                let col_letter = col_a1.trim_end_matches(char::is_numeric);
+                return Err(XlStreamError::Internal(format!(
+                    "column {col_letter} contains formulas that cannot be evaluated \
+                     during the prelude pass (no cached values). \
+                     Save the workbook in Excel to populate cached values"
+                )));
+            }
+        }
+    }
+    Ok(evaluated)
 }
 
 /// Execute the prelude pass: stream the main sheet, fold column values
