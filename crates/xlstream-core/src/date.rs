@@ -191,6 +191,44 @@ impl ExcelDate {
         Self { serial: adjusted as f64 }
     }
 
+    /// Current date as an Excel serial (UTC, date-only).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_core::ExcelDate;
+    /// let d = ExcelDate::today();
+    /// assert!(d.serial >= 25569.0);
+    /// assert_eq!(d.serial, d.serial.floor());
+    /// ```
+    #[must_use]
+    pub fn today() -> Self {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        #[allow(clippy::cast_precision_loss)]
+        Self { serial: (secs / 86400) as f64 + 25569.0 }
+    }
+
+    /// Current date+time as an Excel serial (UTC, fractional day).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use xlstream_core::ExcelDate;
+    /// let n = ExcelDate::now();
+    /// assert!(n.serial >= 25569.0);
+    /// ```
+    #[must_use]
+    pub fn now() -> Self {
+        let total_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+        Self { serial: total_secs / 86400.0 + 25569.0 }
+    }
+
     /// Day of week. 0 = Sunday, 1 = Monday, ..., 6 = Saturday.
     ///
     /// Excel serial 1 (Jan 1, 1900) was a Sunday.
@@ -403,5 +441,27 @@ mod tests {
     #[test]
     fn equal_serials_compare_equal() {
         assert_eq!(ExcelDate { serial: 1.0 }, ExcelDate { serial: 1.0 });
+    }
+
+    #[test]
+    fn today_returns_plausible_serial() {
+        let d = ExcelDate::today();
+        assert!(d.serial >= 45000.0, "serial too low: {}", d.serial);
+        assert!(d.serial < 80000.0, "serial too high: {}", d.serial);
+        assert_eq!(d.serial, d.serial.floor(), "today() should have no fractional part");
+    }
+
+    #[test]
+    fn now_returns_plausible_serial() {
+        let n = ExcelDate::now();
+        assert!(n.serial >= 45000.0, "serial too low: {}", n.serial);
+        assert!(n.serial < 80000.0, "serial too high: {}", n.serial);
+    }
+
+    #[test]
+    fn now_is_at_least_today() {
+        let t = ExcelDate::today();
+        let n = ExcelDate::now();
+        assert!(n.serial >= t.serial, "now ({}) should be >= today ({})", n.serial, t.serial);
     }
 }
