@@ -1547,4 +1547,180 @@ mod tests {
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
     }
+
+    // ===== is_prelude_evaluable =====
+
+    #[test]
+    fn is_prelude_evaluable_literal() {
+        let ast = xlstream_parse::parse("42").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_cell_ref() {
+        let ast = xlstream_parse::parse("A1+B1").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_function() {
+        let ast = xlstream_parse::parse("IF(A1>0,B1,C1)").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_accepts_cross_sheet_ref() {
+        let ast = xlstream_parse::parse("Sheet2!A1").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_accepts_range_ref() {
+        let ast = xlstream_parse::parse("SUM(A1:A10)").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_accepts_vlookup() {
+        let ast = xlstream_parse::parse("VLOOKUP(A1,B:C,2,FALSE)").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_accepts_today() {
+        let ast = xlstream_parse::parse("TODAY()").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_accepts_now() {
+        let ast = xlstream_parse::parse("NOW()").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_rejects_prelude_ref() {
+        let ast = xlstream_parse::parse("SUM(A:A)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        assert!(!is_prelude_evaluable(&rewritten));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_rejects_nested_prelude_ref() {
+        // A2 is row-local at row 2; SUM(B:B) becomes a PreludeRef after rewrite.
+        let ast = xlstream_parse::parse("A2+SUM(B:B)").unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
+        let verdict = xlstream_parse::classify(&ast, &ctx);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict);
+        assert!(!is_prelude_evaluable(&rewritten));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_unary() {
+        let ast = xlstream_parse::parse("-A1").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    // ===== evaluate_row_formulas =====
+
+    #[test]
+    fn evaluate_row_formulas_skips_non_formula_rows() {
+        let ast = xlstream_parse::parse("A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([0u32, 1]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = crate::Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result =
+            evaluate_row_formulas(row, 2, &ctx, &interp, &empty_agg, &mut errored).unwrap();
+        assert_eq!(result[1], Value::Empty);
+    }
+
+    #[test]
+    fn evaluate_row_formulas_evaluates_formula_rows() {
+        let ast = xlstream_parse::parse("A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([0u32, 1]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = crate::Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result =
+            evaluate_row_formulas(row, 1, &ctx, &interp, &empty_agg, &mut errored).unwrap();
+        assert_eq!(result[1], Value::Number(10.0));
+    }
+
+    #[test]
+    fn evaluate_row_formulas_preserves_cached_values() {
+        let ast = xlstream_parse::parse("A1*2").unwrap();
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, ast);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([1u32]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = crate::Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let empty_agg: HashSet<u32> = HashSet::new();
+        let mut errored = HashSet::new();
+
+        let row = vec![Value::Number(5.0), Value::Number(99.0)];
+        let result =
+            evaluate_row_formulas(row, 1, &ctx, &interp, &empty_agg, &mut errored).unwrap();
+        assert_eq!(result[1], Value::Number(99.0));
+    }
+
+    #[test]
+    fn evaluate_row_formulas_errors_on_unevaluable_aggregate_col() {
+        let ast = xlstream_parse::parse("SUM(A:A)").unwrap();
+        let ctx_c = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 2);
+        let verdict = xlstream_parse::classify(&ast, &ctx_c);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx_c, &verdict);
+
+        let mut col_asts = HashMap::new();
+        col_asts.insert(1u32, rewritten);
+        let mut formula_rows = HashMap::new();
+        formula_rows.insert(1u32, HashSet::from([1u32]));
+        let ctx = SheetFormulaCtx {
+            col_asts: &col_asts,
+            row_overrides: &HashMap::new(),
+            topo_order: &[1],
+            formula_rows: &formula_rows,
+        };
+        let prelude = crate::Prelude::empty();
+        let interp = crate::Interpreter::new(&prelude);
+        let agg_cols: HashSet<u32> = HashSet::from([1]);
+        let mut errored = HashSet::new();
+
+        let row = vec![Value::Number(5.0), Value::Empty];
+        let result = evaluate_row_formulas(row, 1, &ctx, &interp, &agg_cols, &mut errored);
+        assert!(result.is_err());
+    }
 }
