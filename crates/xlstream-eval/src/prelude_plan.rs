@@ -688,7 +688,6 @@ fn contains_unevaluable_node(node: NodeRef<'_>) -> bool {
     }
 }
 
-#[allow(dead_code)]
 fn evaluate_row_formulas(
     row_values: Vec<Value>,
     row_idx: u32,
@@ -769,7 +768,10 @@ fn evaluate_row_formulas(
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None }];
-/// let (prelude, _count) = execute_prelude(&mut reader, "Sheet1", &keys, &[], &[]).unwrap();
+/// let (prelude, _count) = execute_prelude(
+///     &mut reader, "Sheet1", &keys, &[], &[], None, &[],
+///     &xlstream_eval::Prelude::empty(),
+/// ).unwrap();
 /// ```
 #[allow(clippy::too_many_lines)]
 pub fn execute_prelude(
@@ -778,6 +780,9 @@ pub fn execute_prelude(
     simple_keys: &[AggregateKey],
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
+    main_formulas: Option<&SheetFormulaCtx<'_>>,
+    cross_sheet_formulas: &[(&str, &SheetFormulaCtx<'_>)],
+    base_prelude: &Prelude,
 ) -> Result<(Prelude, u32), XlStreamError> {
     // (column, start_row, end_row) — AggKind excluded because one FoldState serves all kinds
     // for the same column+bounds (cloned and finished per kind).
@@ -835,6 +840,29 @@ pub fn execute_prelude(
         range_collectors.insert(rk.clone(), Vec::with_capacity(capacity));
     }
 
+    // Columns consumed by aggregates — used to detect unevaluable formulas
+    // feeding into aggregate folds (which would produce silently wrong results).
+    let aggregate_cols: HashSet<u32> = {
+        let mut cols = HashSet::new();
+        for &(col, _, _) in col_kinds.keys() {
+            cols.insert(col.saturating_sub(1));
+        }
+        for mk in multi_keys {
+            if mk.sheet.is_none() {
+                if mk.sum_col > 0 {
+                    cols.insert(mk.sum_col.saturating_sub(1));
+                }
+                for &c in &mk.criteria_cols {
+                    cols.insert(c.saturating_sub(1));
+                }
+            }
+        }
+        cols
+    };
+
+    let interp = crate::Interpreter::new(base_prelude);
+    let mut errored_cols: HashSet<u32> = HashSet::new();
+
     // Stream the sheet, skipping header row.
     let mut stream = reader.cells(main_sheet)?;
     let mut header_skipped = false;
@@ -849,6 +877,20 @@ pub fn execute_prelude(
             header_skipped = true;
         }
 
+        // Evaluate formulas in this row if a formula context was provided.
+        let evaluated_row = if let Some(ctx) = main_formulas {
+            evaluate_row_formulas(
+                row_values,
+                row_idx,
+                ctx,
+                &interp,
+                &aggregate_cols,
+                &mut errored_cols,
+            )?
+        } else {
+            row_values
+        };
+
         // Feed simple aggregate folds, respecting row bounds.
         for (&(col, start_row, end_row), fold) in &mut col_folds {
             let in_bounds = match (start_row, end_row) {
@@ -857,7 +899,7 @@ pub fn execute_prelude(
             };
             if in_bounds {
                 let idx = (col as usize).saturating_sub(1);
-                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                 fold.feed(val);
             }
         }
@@ -869,7 +911,7 @@ pub fn execute_prelude(
             }
             if excel_row >= rk.start_row && excel_row <= rk.end_row {
                 let idx = (rk.col as usize).saturating_sub(1);
-                let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
+                let val = evaluated_row.get(idx).cloned().unwrap_or(Value::Empty);
                 collector.push(val);
             }
         }
@@ -883,7 +925,7 @@ pub fn execute_prelude(
             let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
             for &cc in &mk.criteria_cols {
                 let idx = (cc as usize).saturating_sub(1);
-                let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                 composite_parts.push(xlstream_core::coerce::to_text(val).to_ascii_lowercase());
             }
             let composite = composite_parts.join("\0");
@@ -892,7 +934,7 @@ pub fn execute_prelude(
             // feed a Number(1.0) to count).
             let feed_val = if mk.sum_col > 0 {
                 let idx = (mk.sum_col as usize).saturating_sub(1);
-                row_values.get(idx).unwrap_or(&Value::Empty)
+                evaluated_row.get(idx).unwrap_or(&Value::Empty)
             } else {
                 // COUNTIFS: count rows, feed 1.0
                 &Value::Number(1.0)
@@ -921,20 +963,49 @@ pub fn execute_prelude(
     }
 
     for (sheet_name, sheet_keys) in &cross_sheet_keys {
+        let cs_ctx = cross_sheet_formulas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
+            .map(|(_, ctx)| ctx);
+        let cs_agg_cols: HashSet<u32> = sheet_keys
+            .iter()
+            .flat_map(|(_, mk)| {
+                let mut cols = mk.criteria_cols.clone();
+                if mk.sum_col > 0 {
+                    cols.push(mk.sum_col);
+                }
+                cols.into_iter().map(|c| c.saturating_sub(1))
+            })
+            .collect();
+        let mut cs_errored: HashSet<u32> = HashSet::new();
+
         let mut cs_stream = reader.cells(sheet_name)?;
-        while let Some((_row_idx, row_values)) = cs_stream.next_row()? {
+        while let Some((row_idx, row_values)) = cs_stream.next_row()? {
+            let evaluated_row = if let Some(ctx) = cs_ctx {
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx,
+                    &interp,
+                    &cs_agg_cols,
+                    &mut cs_errored,
+                )?
+            } else {
+                row_values
+            };
+
             for &(i, mk) in sheet_keys {
                 let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
                 for &cc in &mk.criteria_cols {
                     let idx = (cc as usize).saturating_sub(1);
-                    let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                    let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                     composite_parts.push(xlstream_core::coerce::to_text(val).to_ascii_lowercase());
                 }
                 let composite = composite_parts.join("\0");
 
                 let feed_val = if mk.sum_col > 0 {
                     let idx = (mk.sum_col as usize).saturating_sub(1);
-                    row_values.get(idx).unwrap_or(&Value::Empty)
+                    evaluated_row.get(idx).unwrap_or(&Value::Empty)
                 } else {
                     &Value::Number(1.0)
                 };
@@ -959,11 +1030,18 @@ pub fn execute_prelude(
 
     // Cross-sheet simple aggregate pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_simple_keys {
+        let cs_ctx = cross_sheet_formulas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
+            .map(|(_, ctx)| ctx);
         let mut cs_col_kinds: HashMap<FoldKey, Vec<(AggKind, AggregateKey)>> = HashMap::new();
         for key in keys {
             let fk = (key.column, key.start_row, key.end_row);
             cs_col_kinds.entry(fk).or_default().push((key.kind, key.clone()));
         }
+        let cs_agg_cols: HashSet<u32> =
+            cs_col_kinds.keys().map(|&(col, _, _)| col.saturating_sub(1)).collect();
+        let mut cs_errored: HashSet<u32> = HashSet::new();
         let mut cs_folds: HashMap<FoldKey, FoldState> = HashMap::new();
         for &fk in cs_col_kinds.keys() {
             cs_folds.insert(fk, FoldState::new());
@@ -971,6 +1049,18 @@ pub fn execute_prelude(
 
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
+            let evaluated_row = if let Some(ctx) = cs_ctx {
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx,
+                    &interp,
+                    &cs_agg_cols,
+                    &mut cs_errored,
+                )?
+            } else {
+                row_values
+            };
             let cs_excel_row = row_idx + 1;
             for (&(col, start_row, end_row), fold) in &mut cs_folds {
                 let in_bounds = match (start_row, end_row) {
@@ -979,7 +1069,7 @@ pub fn execute_prelude(
                 };
                 if in_bounds {
                     let idx = (col as usize).saturating_sub(1);
-                    let val = row_values.get(idx).unwrap_or(&Value::Empty);
+                    let val = evaluated_row.get(idx).unwrap_or(&Value::Empty);
                     fold.feed(val);
                 }
             }
@@ -995,13 +1085,32 @@ pub fn execute_prelude(
 
     // Cross-sheet bounded range pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_range_keys {
+        let cs_ctx = cross_sheet_formulas
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
+            .map(|(_, ctx)| ctx);
+        let cs_range_cols: HashSet<u32> = keys.iter().map(|rk| rk.col.saturating_sub(1)).collect();
+        let mut cs_errored: HashSet<u32> = HashSet::new();
+
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
+            let evaluated_row = if let Some(ctx) = cs_ctx {
+                evaluate_row_formulas(
+                    row_values,
+                    row_idx,
+                    ctx,
+                    &interp,
+                    &cs_range_cols,
+                    &mut cs_errored,
+                )?
+            } else {
+                row_values
+            };
             let excel_row = row_idx + 1;
             for rk in keys {
                 if excel_row >= rk.start_row && excel_row <= rk.end_row {
                     let idx = (rk.col as usize).saturating_sub(1);
-                    let val = row_values.get(idx).cloned().unwrap_or(Value::Empty);
+                    let val = evaluated_row.get(idx).cloned().unwrap_or(Value::Empty);
                     if let Some(collector) = range_collectors.get_mut(rk) {
                         collector.push(val);
                     }

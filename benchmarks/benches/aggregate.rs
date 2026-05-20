@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::path::Path;
 use xlstream_eval::prelude_plan::execute_prelude;
+use xlstream_eval::Prelude;
 use xlstream_io::Reader;
 use xlstream_parse::{AggKind, AggregateKey};
 
@@ -29,8 +30,17 @@ fn bench_aggregate(c: &mut Criterion) {
         c.bench_function("prelude_sum_count_avg_10k", |b| {
             b.iter(|| {
                 let mut reader = Reader::open(small_path).unwrap();
-                let (prelude, _count) =
-                    execute_prelude(&mut reader, "Main", &keys, &[], &[]).unwrap();
+                let (prelude, _count) = execute_prelude(
+                    &mut reader,
+                    "Main",
+                    &keys,
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &Prelude::empty(),
+                )
+                .unwrap();
                 prelude
             });
         });
@@ -48,8 +58,17 @@ fn bench_aggregate(c: &mut Criterion) {
         group.bench_function("prelude_sum_count_avg_100k", |b| {
             b.iter(|| {
                 let mut reader = Reader::open(medium_path).unwrap();
-                let (prelude, _count) =
-                    execute_prelude(&mut reader, "Main", &keys, &[], &[]).unwrap();
+                let (prelude, _count) = execute_prelude(
+                    &mut reader,
+                    "Main",
+                    &keys,
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &Prelude::empty(),
+                )
+                .unwrap();
                 prelude
             });
         });

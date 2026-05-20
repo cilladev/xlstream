@@ -408,6 +408,9 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             &main_agg_keys,
             &main_multi_keys,
             &main_range_keys,
+            None,
+            &[],
+            &Prelude::empty(),
         )?
     } else {
         (Prelude::empty(), 0)
@@ -452,6 +455,9 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 &sec_agg,
                 &sec_multi,
                 &sec_range,
+                None,
+                &[],
+                &Prelude::empty(),
             )?;
             merged_prelude.merge(sec_prelude);
         }
