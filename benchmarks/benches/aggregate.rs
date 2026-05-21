@@ -32,7 +32,7 @@ fn bench_aggregate(c: &mut Criterion) {
                 let mut reader = Reader::open(small_path).unwrap();
                 let base = Prelude::empty();
                 let formula_ctx = xlstream_eval::prelude_plan::PreludeFormulaCtx {
-                    main_formulas: None,
+                    current_sheet_formulas: None,
                     cross_sheet_formulas: &[],
                     base_prelude: &base,
                 };
@@ -57,7 +57,7 @@ fn bench_aggregate(c: &mut Criterion) {
                 let mut reader = Reader::open(medium_path).unwrap();
                 let base = Prelude::empty();
                 let formula_ctx = xlstream_eval::prelude_plan::PreludeFormulaCtx {
-                    main_formulas: None,
+                    current_sheet_formulas: None,
                     cross_sheet_formulas: &[],
                     base_prelude: &base,
                 };

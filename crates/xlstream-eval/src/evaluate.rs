@@ -287,12 +287,12 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         }
     }
     let main_sheet = sheets_with_formulas.first().map(|(n, _)| n.clone());
-    let main_formulas: Vec<(u32, u32, String)> =
+    let current_sheet_formulas: Vec<(u32, u32, String)> =
         sheets_with_formulas.first().map(|(_, f)| f.clone()).unwrap_or_default();
 
     // Parse + classify formula columns; build topo order.
     let main_result = if let Some(ref main) = main_sheet {
-        build_eval_plan(main, &main_formulas, &sheet_names, &named_ranges, &table_infos)?
+        build_eval_plan(main, &current_sheet_formulas, &sheet_names, &named_ranges, &table_infos)?
     } else {
         BuildPlanResult {
             sheet_plan: SheetEvalPlan {
@@ -567,7 +567,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             &main_multi_keys,
             &main_range_keys,
             &crate::prelude_plan::PreludeFormulaCtx {
-                main_formulas: Some(&main_formula_ctx),
+                current_sheet_formulas: Some(&main_formula_ctx),
                 cross_sheet_formulas: &cross_sheet_refs,
                 base_prelude: &base_prelude,
             },
@@ -623,7 +623,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 &sec_multi,
                 &sec_range,
                 &crate::prelude_plan::PreludeFormulaCtx {
-                    main_formulas: Some(&sec_ctx),
+                    current_sheet_formulas: Some(&sec_ctx),
                     cross_sheet_formulas: &cross_sheet_refs,
                     base_prelude: &base_prelude,
                 },
