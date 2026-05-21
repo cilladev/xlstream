@@ -73,3 +73,8 @@ fn issue_136_nonexistent_sheet_is_unsupported() {
 fn issue_139_prelude_formula_eval() {
     super::conformance::run_conformance("issues/issue-139-prelude-formula-eval.xlsx");
 }
+
+#[test]
+fn issue_140_aggregate_literal_args() {
+    super::conformance::run_conformance("issues/issue-140-aggregate-literal-args.xlsx");
+}
