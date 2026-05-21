@@ -9,10 +9,6 @@ Use GitHub's private vulnerability reporting:
 
 Or email the maintainer listed in the repository metadata. We aim to acknowledge within 48 hours and provide a fix or mitigation plan within 7 days for critical issues.
 
-## Supported versions
-
-v0.1.x — best-effort support. Until v1.0.0, security fixes are released as patch versions of the current minor line.
-
 ## Scope
 
 In scope:

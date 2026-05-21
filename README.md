@@ -24,7 +24,7 @@ Benchmark: 100k rows x 50 cols (20 data + 30 formula). Intel i9-10910, 128 GB RA
 
 ## Supported functions
 
-106 functions + 13 operators across 9 categories. [Full list with cross-reference](docs/functions.md).
+225 functions + 13 operators across 12 categories. [Full list with cross-reference](docs/functions.md).
 
 | Category   | Count | Examples                                          |
 | ---------- | ----- | ------------------------------------------------- |

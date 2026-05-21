@@ -616,24 +616,6 @@ Old function names. Thin wrappers over modern equivalents (implemented in v0.3/v
 | RAND | Volatile; deterministic seeding deferred |
 | RANDBETWEEN | Volatile; deterministic seeding deferred |
 
-## How to add a new function
-
-1. Pick a home — category in this file, matching phase doc.
-2. Implement in the right `xlstream-eval/src/builtins/*.rs` module.
-3. Add a match arm in `dispatch()` (`builtins/mod.rs`).
-4. Write >= 5 unit tests (happy, empty, error-propagation, coercion, edge case).
-5. Tick the box here in the same PR.
-6. Update `CHANGELOG.md`.
-
-## How to promote a v0.2 function to v0.1
-
-Open an issue with:
-- The function name.
-- Why it's needed for v0.1 release (real use case, not "would be nice").
-- Estimate of implementation + test effort.
-
-Decision rule: we promote only if leaving it out would break a common workbook shape the release is meant to handle.
-
 ## How to request a new function
 
 Open a GitHub issue with:

@@ -59,7 +59,7 @@ let opts = EvaluateOptions { workers: Some(4), ..Default::default() };
 xlstream::evaluate(Path::new("in.xlsx"), Path::new("out.xlsx"), &opts)?;
 ```
 
-## 106 Excel-compatible functions
+## 225 Excel-compatible functions
 
 | Category   | Count | Examples                                          |
 | ---------- | ----- | ------------------------------------------------- |
