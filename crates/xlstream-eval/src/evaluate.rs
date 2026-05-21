@@ -538,9 +538,11 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             &main_agg_keys,
             &main_multi_keys,
             &main_range_keys,
-            Some(&main_formula_ctx),
-            &cross_sheet_refs,
-            &base_prelude,
+            &crate::prelude_plan::PreludeFormulaCtx {
+                main_formulas: Some(&main_formula_ctx),
+                cross_sheet_formulas: &cross_sheet_refs,
+                base_prelude: &base_prelude,
+            },
         )?
     } else {
         (Prelude::empty(), 0)
@@ -591,9 +593,11 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 &sec_agg,
                 &sec_multi,
                 &sec_range,
-                Some(&sec_ctx),
-                &cross_sheet_refs,
-                &base_prelude,
+                &crate::prelude_plan::PreludeFormulaCtx {
+                    main_formulas: Some(&sec_ctx),
+                    cross_sheet_formulas: &cross_sheet_refs,
+                    base_prelude: &base_prelude,
+                },
             )?;
             merged_prelude.merge(sec_prelude);
         }

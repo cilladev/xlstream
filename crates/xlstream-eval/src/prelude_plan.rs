@@ -748,6 +748,34 @@ fn evaluate_row_formulas(
     Ok(evaluated)
 }
 
+/// Formula-evaluation context passed to [`execute_prelude`].
+///
+/// Bundles the base prelude (lookups + volatile), main-sheet formula
+/// context, and cross-sheet formula contexts into a single argument.
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_eval::prelude_plan::PreludeFormulaCtx;
+/// use xlstream_eval::Prelude;
+///
+/// let base = Prelude::empty();
+/// let ctx = PreludeFormulaCtx {
+///     main_formulas: None,
+///     cross_sheet_formulas: &[],
+///     base_prelude: &base,
+/// };
+/// assert!(ctx.main_formulas.is_none());
+/// ```
+pub struct PreludeFormulaCtx<'a> {
+    /// Formula context for the main (streaming) sheet, if it has formulas.
+    pub main_formulas: Option<&'a SheetFormulaCtx<'a>>,
+    /// Formula contexts for secondary sheets, keyed by sheet name.
+    pub cross_sheet_formulas: &'a [(&'a str, &'a SheetFormulaCtx<'a>)],
+    /// Base prelude with loaded lookup sheets and volatile data.
+    pub base_prelude: &'a Prelude,
+}
+
 /// Execute the prelude pass: stream the main sheet, fold column values
 /// through `FoldState` accumulators, and build a filled [`Prelude`].
 ///
@@ -776,9 +804,16 @@ fn evaluate_row_formulas(
 ///
 /// let mut reader = Reader::open(Path::new("workbook.xlsx")).unwrap();
 /// let keys = vec![AggregateKey { kind: AggKind::Sum, sheet: None, column: 1, start_row: None, end_row: None }];
+/// use xlstream_eval::prelude_plan::PreludeFormulaCtx;
+///
+/// let base = xlstream_eval::Prelude::empty();
+/// let formula_ctx = PreludeFormulaCtx {
+///     main_formulas: None,
+///     cross_sheet_formulas: &[],
+///     base_prelude: &base,
+/// };
 /// let (prelude, _count) = execute_prelude(
-///     &mut reader, "Sheet1", &keys, &[], &[], None, &[],
-///     &xlstream_eval::Prelude::empty(),
+///     &mut reader, "Sheet1", &keys, &[], &[], &formula_ctx,
 /// ).unwrap();
 /// ```
 #[allow(clippy::too_many_lines)]
@@ -788,9 +823,7 @@ pub fn execute_prelude(
     simple_keys: &[AggregateKey],
     multi_keys: &[crate::prelude::MultiConditionalAggKey],
     range_keys: &[crate::prelude::BoundedRangeKey],
-    main_formulas: Option<&SheetFormulaCtx<'_>>,
-    cross_sheet_formulas: &[(&str, &SheetFormulaCtx<'_>)],
-    base_prelude: &Prelude,
+    formula_ctx: &PreludeFormulaCtx<'_>,
 ) -> Result<(Prelude, u32), XlStreamError> {
     // (column, start_row, end_row) — AggKind excluded because one FoldState serves all kinds
     // for the same column+bounds (cloned and finished per kind).
@@ -868,7 +901,7 @@ pub fn execute_prelude(
         cols
     };
 
-    let interp = crate::Interpreter::new(base_prelude);
+    let interp = crate::Interpreter::new(formula_ctx.base_prelude);
     let mut errored_cols: HashSet<u32> = HashSet::new();
 
     // Stream the sheet, skipping header row.
@@ -886,7 +919,7 @@ pub fn execute_prelude(
         }
 
         // Evaluate formulas in this row if a formula context was provided.
-        let evaluated_row = if let Some(ctx) = main_formulas {
+        let evaluated_row = if let Some(ctx) = formula_ctx.main_formulas {
             evaluate_row_formulas(
                 row_values,
                 row_idx,
@@ -971,7 +1004,8 @@ pub fn execute_prelude(
     }
 
     for (sheet_name, sheet_keys) in &cross_sheet_keys {
-        let cs_ctx = cross_sheet_formulas
+        let cs_ctx = formula_ctx
+            .cross_sheet_formulas
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
             .map(|(_, ctx)| ctx);
@@ -1038,7 +1072,8 @@ pub fn execute_prelude(
 
     // Cross-sheet simple aggregate pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_simple_keys {
-        let cs_ctx = cross_sheet_formulas
+        let cs_ctx = formula_ctx
+            .cross_sheet_formulas
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
             .map(|(_, ctx)| ctx);
@@ -1093,7 +1128,8 @@ pub fn execute_prelude(
 
     // Cross-sheet bounded range pass: stream each non-main sheet.
     for (sheet_name, keys) in &cross_range_keys {
-        let cs_ctx = cross_sheet_formulas
+        let cs_ctx = formula_ctx
+            .cross_sheet_formulas
             .iter()
             .find(|(n, _)| n.eq_ignore_ascii_case(sheet_name))
             .map(|(_, ctx)| ctx);
