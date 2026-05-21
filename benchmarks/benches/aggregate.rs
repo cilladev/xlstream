@@ -30,17 +30,14 @@ fn bench_aggregate(c: &mut Criterion) {
         c.bench_function("prelude_sum_count_avg_10k", |b| {
             b.iter(|| {
                 let mut reader = Reader::open(small_path).unwrap();
-                let (prelude, _count) = execute_prelude(
-                    &mut reader,
-                    "Main",
-                    &keys,
-                    &[],
-                    &[],
-                    None,
-                    &[],
-                    &Prelude::empty(),
-                )
-                .unwrap();
+                let base = Prelude::empty();
+                let formula_ctx = xlstream_eval::prelude_plan::PreludeFormulaCtx {
+                    main_formulas: None,
+                    cross_sheet_formulas: &[],
+                    base_prelude: &base,
+                };
+                let (prelude, _count) =
+                    execute_prelude(&mut reader, "Main", &keys, &[], &[], &formula_ctx).unwrap();
                 prelude
             });
         });
@@ -58,17 +55,14 @@ fn bench_aggregate(c: &mut Criterion) {
         group.bench_function("prelude_sum_count_avg_100k", |b| {
             b.iter(|| {
                 let mut reader = Reader::open(medium_path).unwrap();
-                let (prelude, _count) = execute_prelude(
-                    &mut reader,
-                    "Main",
-                    &keys,
-                    &[],
-                    &[],
-                    None,
-                    &[],
-                    &Prelude::empty(),
-                )
-                .unwrap();
+                let base = Prelude::empty();
+                let formula_ctx = xlstream_eval::prelude_plan::PreludeFormulaCtx {
+                    main_formulas: None,
+                    cross_sheet_formulas: &[],
+                    base_prelude: &base,
+                };
+                let (prelude, _count) =
+                    execute_prelude(&mut reader, "Main", &keys, &[], &[], &formula_ctx).unwrap();
                 prelude
             });
         });
