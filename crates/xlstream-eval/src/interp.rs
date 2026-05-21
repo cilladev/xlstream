@@ -291,12 +291,21 @@ mod tests {
     }
 
     #[test]
-    fn eval_function_returns_value_error() {
+    fn eval_unknown_function_returns_value_error() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("NOTAFUNCTION(1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value),);
+    }
+
+    #[test]
+    fn eval_sum_unresolvable_range_returns_ref_error() {
         let prelude = Prelude::empty();
         let interp = make_interp(&prelude);
         let ast = parse("SUM(A1:A10)").unwrap();
         let scope = RowScope::new(&[], 0);
-        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value),);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref),);
     }
 
     #[test]
