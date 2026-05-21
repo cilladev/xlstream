@@ -86,6 +86,63 @@ fn resolve_node<S: BuildHasher>(
     }
 }
 
+/// Stamp explicit sheet names onto `PreludeRef(Aggregate { sheet: None })`
+/// nodes so that aggregates from different sheets don't collide after merge.
+///
+/// Call this after [`crate::rewrite::rewrite`] for every formula-bearing
+/// sheet. Same walk-and-rebuild pattern as [`resolve_named_ranges`].
+///
+/// # Examples
+///
+/// ```
+/// use xlstream_parse::{parse, classify, rewrite, ClassificationContext, stamp_prelude_sheet};
+///
+/// let ast = parse("SUM(A:A)").unwrap();
+/// let ctx = ClassificationContext::for_cell("Sales", 2, 5);
+/// let verdict = classify(&ast, &ctx);
+/// let rewritten = rewrite(ast, &ctx, &verdict);
+/// let stamped = stamp_prelude_sheet(rewritten, "Sales");
+/// let dbg = format!("{stamped:?}");
+/// assert!(dbg.contains("Sales"), "expected sheet name in: {dbg}");
+/// ```
+#[must_use]
+pub fn stamp_prelude_sheet(ast: Ast, sheet: &str) -> Ast {
+    let new_root = stamp_node(ast.root, sheet);
+    Ast { upstream: ast.upstream, root: new_root }
+}
+
+fn stamp_node(node: Node, sheet: &str) -> Node {
+    match node {
+        Node::PreludeRef(crate::rewrite::PreludeKey::Aggregate(mut key)) => {
+            if key.sheet.is_none() {
+                key.sheet = Some(sheet.to_owned());
+            }
+            Node::PreludeRef(crate::rewrite::PreludeKey::Aggregate(key))
+        }
+        Node::Function { name, args } => {
+            Node::Function { name, args: args.into_iter().map(|a| stamp_node(a, sheet)).collect() }
+        }
+        Node::BinaryOp { op, left, right } => Node::BinaryOp {
+            op,
+            left: Box::new(stamp_node(*left, sheet)),
+            right: Box::new(stamp_node(*right, sheet)),
+        },
+        Node::UnaryOp { op, expr } => {
+            Node::UnaryOp { op, expr: Box::new(stamp_node(*expr, sheet)) }
+        }
+        Node::Array(rows) => Node::Array(
+            rows.into_iter()
+                .map(|row| row.into_iter().map(|n| stamp_node(n, sheet)).collect())
+                .collect(),
+        ),
+        other @ (Node::Literal(_)
+        | Node::Text(_)
+        | Node::Error(_)
+        | Node::Reference(_)
+        | Node::PreludeRef(crate::rewrite::PreludeKey::Lookup(_))) => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

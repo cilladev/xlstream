@@ -64,10 +64,12 @@ pub(crate) fn expand_range(
                 }
             }
 
-            // Fall back to cached bounded range (main sheet).
+            // Fall back to cached bounded range.
             if let (Some(sr), Some(er)) = (start_row, end_row) {
                 let key = crate::prelude::BoundedRangeKey {
-                    sheet: sheet.map(ToString::to_string),
+                    sheet: sheet
+                        .map(ToString::to_string)
+                        .or_else(|| interp.current_sheet().map(ToString::to_string)),
                     col: sc,
                     start_row: sr,
                     end_row: er,
