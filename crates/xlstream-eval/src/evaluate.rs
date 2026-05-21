@@ -160,7 +160,7 @@ pub fn evaluate(
                 let mut stream = reader.cells(name)?;
 
                 if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
-                    let sec_interp = Interpreter::new(&plan.prelude);
+                    let sec_interp = Interpreter::new(&plan.prelude).with_main_sheet(name);
                     let sec_options = EvaluateOptions {
                         workers: None,
                         iterative_calc: plan.iterative_calc,
@@ -361,6 +361,16 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         secondary_plans.insert(sheet_name.clone(), sec_result.sheet_plan);
     }
 
+    // Stamp sheet names onto PreludeRef nodes so aggregate keys from
+    // different sheets don't collide after merge.
+    let mut main_result = main_result;
+    if let Some(ref main_name) = main_sheet {
+        stamp_eval_plan_sheet(&mut main_result.sheet_plan, main_name);
+    }
+    for (sheet_name, sp) in &mut secondary_plans {
+        stamp_eval_plan_sheet(sp, sheet_name);
+    }
+
     // Collect main sheet aggregate keys and run prelude.
     let main_agg_keys: Vec<AggregateKey> = {
         let mut seen = HashSet::new();
@@ -372,7 +382,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
-    let main_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
+    let mut main_multi_keys: Vec<crate::prelude::MultiConditionalAggKey> = {
         let mut seen = HashSet::new();
         let primary = main_result.sheet_plan.col_asts.values();
         let overrides = main_result.sheet_plan.row_overrides.values().flat_map(HashMap::values);
@@ -382,7 +392,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
-    let main_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
+    let mut main_range_keys: Vec<crate::prelude::BoundedRangeKey> = {
         let mut seen = HashSet::new();
         let primary = main_result.sheet_plan.col_asts.values();
         let overrides = main_result.sheet_plan.row_overrides.values().flat_map(HashMap::values);
@@ -392,6 +402,13 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             .filter(|k| seen.insert(k.clone()))
             .collect()
     };
+
+    // Stamp sheet name onto bounded-range and multi-conditional keys
+    // (these come from RangeRef nodes, not PreludeRef, so stamp_prelude_sheet
+    // doesn't cover them).
+    if let Some(ref main_name) = main_sheet {
+        stamp_collected_keys_sheet(&mut main_multi_keys, &mut main_range_keys, main_name);
+    }
 
     let has_main_aggregates =
         !main_agg_keys.is_empty() || !main_multi_keys.is_empty() || !main_range_keys.is_empty();
@@ -446,6 +463,9 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
     }
     for rk in &main_range_keys {
         if let Some(ref sheet_name) = rk.sheet {
+            if main_sheet.as_deref().is_some_and(|ms| sheet_name.eq_ignore_ascii_case(ms)) {
+                continue;
+            }
             let already_present =
                 extended_lookup_keys.iter().any(|lk| lk.sheet.eq_ignore_ascii_case(sheet_name));
             if !already_present {
@@ -467,6 +487,8 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
         }
     }
     // Include cross-sheet bounded range keys from secondary sheets.
+    // Skip keys pointing to formula-bearing sheets (main or secondary) —
+    // those are handled by the prelude, not by lookup loading.
     for sp in secondary_plans.values() {
         let primary = sp.col_asts.values();
         let overrides = sp.row_overrides.values().flat_map(HashMap::values);
@@ -476,6 +498,12 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
             .collect();
         for rk in &sec_range {
             if let Some(ref sheet_name) = rk.sheet {
+                if main_sheet.as_deref().is_some_and(|ms| sheet_name.eq_ignore_ascii_case(ms)) {
+                    continue;
+                }
+                if secondary_plans.keys().any(|k| k.eq_ignore_ascii_case(sheet_name)) {
+                    continue;
+                }
                 let already_present =
                     extended_lookup_keys.iter().any(|lk| lk.sheet.eq_ignore_ascii_case(sheet_name));
                 if !already_present {
@@ -560,7 +588,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 .filter(|k| seen.insert(k.clone()))
                 .collect()
         };
-        let sec_multi: Vec<crate::prelude::MultiConditionalAggKey> = {
+        let mut sec_multi: Vec<crate::prelude::MultiConditionalAggKey> = {
             let mut seen = HashSet::new();
             let primary = sp.col_asts.values();
             let overrides = sp.row_overrides.values().flat_map(HashMap::values);
@@ -570,7 +598,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 .filter(|k| seen.insert(k.clone()))
                 .collect()
         };
-        let sec_range: Vec<crate::prelude::BoundedRangeKey> = {
+        let mut sec_range: Vec<crate::prelude::BoundedRangeKey> = {
             let mut seen = HashSet::new();
             let primary = sp.col_asts.values();
             let overrides = sp.row_overrides.values().flat_map(HashMap::values);
@@ -580,6 +608,7 @@ fn build_plan(input: &Path) -> Result<(EvalPlan, Reader), XlStreamError> {
                 .filter(|k| seen.insert(k.clone()))
                 .collect()
         };
+        stamp_collected_keys_sheet(&mut sec_multi, &mut sec_range, sheet_name);
         if !sec_agg.is_empty() || !sec_multi.is_empty() || !sec_range.is_empty() {
             let sec_ctx = crate::prelude_plan::SheetFormulaCtx {
                 col_asts: &sp.col_asts,
@@ -732,6 +761,7 @@ fn stream_single_threaded(
         let is_main = plan.main_sheet.as_deref() == Some(name.as_str());
         let sheet_plan: Option<&SheetEvalPlan> =
             if is_main { plan.main_plan.as_ref() } else { plan.secondary_plans.get(name.as_str()) };
+        interp = interp.with_main_sheet(name);
 
         let mut header_pending = sheet_plan.is_some();
 
@@ -1201,6 +1231,51 @@ fn build_eval_plan(
 
 /// Strip `_xlfn.` (and `_xlfn._xlws.`) prefixes from formula text.
 ///
+/// Stamp `sheet: None` → `sheet: Some(name)` on multi-conditional and
+/// bounded-range keys. These come from `RangeRef` nodes (not `PreludeRef`),
+/// so `stamp_prelude_sheet` doesn't cover them.
+fn stamp_collected_keys_sheet(
+    multi: &mut [crate::prelude::MultiConditionalAggKey],
+    ranges: &mut [crate::prelude::BoundedRangeKey],
+    sheet: &str,
+) {
+    for mk in multi.iter_mut() {
+        if mk.sheet.is_none() {
+            mk.sheet = Some(sheet.to_owned());
+        }
+    }
+    for rk in ranges.iter_mut() {
+        if rk.sheet.is_none() {
+            rk.sheet = Some(sheet.to_owned());
+        }
+    }
+}
+
+/// Stamp explicit sheet names onto `PreludeRef(Aggregate { sheet: None })`
+/// nodes in all ASTs of a `SheetEvalPlan`. Drains and rebuilds the inner maps
+/// to avoid requiring `Ast: Default`.
+fn stamp_eval_plan_sheet(plan: &mut SheetEvalPlan, sheet: &str) {
+    let col_asts: HashMap<u32, Ast> = plan
+        .col_asts
+        .drain()
+        .map(|(col, ast)| (col, xlstream_parse::stamp_prelude_sheet(ast, sheet)))
+        .collect();
+    plan.col_asts = col_asts;
+
+    let row_overrides: HashMap<u32, HashMap<u32, Ast>> = plan
+        .row_overrides
+        .drain()
+        .map(|(col, per_row)| {
+            let stamped: HashMap<u32, Ast> = per_row
+                .into_iter()
+                .map(|(row, ast)| (row, xlstream_parse::stamp_prelude_sheet(ast, sheet)))
+                .collect();
+            (col, stamped)
+        })
+        .collect();
+    plan.row_overrides = row_overrides;
+}
+
 /// These prefixes are part of the xlsx XML format for "future" Excel
 /// functions (CONCAT, TEXTJOIN, IFS, etc.). Calamine preserves them
 /// verbatim; we strip them before parsing.

@@ -837,11 +837,15 @@ pub fn execute_prelude(
     let mut col_kinds: HashMap<FoldKey, Vec<(AggKind, AggregateKey)>> = HashMap::new();
     let mut cross_simple_keys: HashMap<String, Vec<AggregateKey>> = HashMap::new();
     for key in simple_keys {
-        if let Some(ref sheet) = key.sheet {
-            cross_simple_keys.entry(sheet.clone()).or_default().push(key.clone());
-        } else {
+        let is_same_sheet = key.sheet.as_deref().is_none_or(|s| s.eq_ignore_ascii_case(main_sheet));
+        if is_same_sheet {
             let fk = (key.column, key.start_row, key.end_row);
             col_kinds.entry(fk).or_default().push((key.kind, key.clone()));
+        } else {
+            cross_simple_keys
+                .entry(key.sheet.clone().unwrap_or_default())
+                .or_default()
+                .push(key.clone());
         }
     }
 
@@ -875,8 +879,11 @@ pub fn execute_prelude(
         HashMap::new();
     for rk in range_keys {
         let capacity = (rk.end_row.saturating_sub(rk.start_row) + 1) as usize;
-        if let Some(ref sheet) = rk.sheet {
-            cross_range_keys.entry(sheet.clone()).or_default().push(rk.clone());
+        let is_cross = rk.sheet.as_deref().is_some_and(|s| !s.eq_ignore_ascii_case(main_sheet));
+        if is_cross {
+            if let Some(ref sheet) = rk.sheet {
+                cross_range_keys.entry(sheet.clone()).or_default().push(rk.clone());
+            }
         }
         range_collectors.insert(rk.clone(), Vec::with_capacity(capacity));
     }
@@ -889,7 +896,8 @@ pub fn execute_prelude(
             cols.insert(col.saturating_sub(1));
         }
         for mk in multi_keys {
-            if mk.sheet.is_none() {
+            let is_same = mk.sheet.as_deref().is_none_or(|s| s.eq_ignore_ascii_case(main_sheet));
+            if is_same {
                 if mk.sum_col > 0 {
                     cols.insert(mk.sum_col.saturating_sub(1));
                 }
@@ -901,7 +909,7 @@ pub fn execute_prelude(
         cols
     };
 
-    let interp = crate::Interpreter::new(formula_ctx.base_prelude);
+    let interp = crate::Interpreter::new(formula_ctx.base_prelude).with_main_sheet(main_sheet);
     let mut errored_cols: HashSet<u32> = HashSet::new();
 
     // Stream the sheet, skipping header row.
@@ -945,9 +953,10 @@ pub fn execute_prelude(
             }
         }
 
-        // Collect bounded range values (main-sheet only).
+        // Collect bounded range values (current-sheet only).
         for (rk, collector) in &mut range_collectors {
-            if rk.sheet.is_some() {
+            let is_cross = rk.sheet.as_deref().is_some_and(|s| !s.eq_ignore_ascii_case(main_sheet));
+            if is_cross {
                 continue;
             }
             if excel_row >= rk.start_row && excel_row <= rk.end_row {
@@ -957,9 +966,10 @@ pub fn execute_prelude(
             }
         }
 
-        // Feed multi-conditional folds (main-sheet keys only).
+        // Feed multi-conditional folds (current-sheet keys only).
         for (i, mk) in multi_keys.iter().enumerate() {
-            if mk.sheet.is_some() {
+            let is_cross = mk.sheet.as_deref().is_some_and(|s| !s.eq_ignore_ascii_case(main_sheet));
+            if is_cross {
                 continue;
             }
             // Build composite key from criteria columns.
@@ -998,8 +1008,11 @@ pub fn execute_prelude(
         Vec<(usize, &crate::prelude::MultiConditionalAggKey)>,
     > = HashMap::new();
     for (i, mk) in multi_keys.iter().enumerate() {
-        if let Some(ref sheet_name) = mk.sheet {
-            cross_sheet_keys.entry(sheet_name.clone()).or_default().push((i, mk));
+        let is_cross = mk.sheet.as_deref().is_some_and(|s| !s.eq_ignore_ascii_case(main_sheet));
+        if is_cross {
+            if let Some(ref sheet_name) = mk.sheet {
+                cross_sheet_keys.entry(sheet_name.clone()).or_default().push((i, mk));
+            }
         }
     }
 

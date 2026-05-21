@@ -30,10 +30,16 @@ fn extract_static_criteria(
 }
 
 /// Extract column index and optional sheet from a range reference argument.
-fn extract_criteria_col_and_sheet(node: NodeRef<'_>) -> Option<(u32, Option<String>)> {
+fn extract_criteria_col_and_sheet(
+    interp: &Interpreter<'_>,
+    node: NodeRef<'_>,
+) -> Option<(u32, Option<String>)> {
     match node.view() {
         NodeView::RangeRef { sheet, start_col: Some(sc), end_col: Some(ec), .. } if sc == ec => {
-            Some((sc, sheet.map(ToString::to_string)))
+            let resolved = sheet
+                .map(ToString::to_string)
+                .or_else(|| interp.current_sheet().map(ToString::to_string));
+            Some((sc, resolved))
         }
         _ => None,
     }
@@ -54,7 +60,7 @@ pub(crate) fn builtin_sumifs(
         return Value::Error(CellError::Value);
     }
 
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
 
@@ -66,7 +72,7 @@ pub(crate) fn builtin_sumifs(
         let range_idx = 1 + i * 2;
         let crit_idx = 2 + i * 2;
 
-        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -104,7 +110,7 @@ pub(crate) fn builtin_countifs(
         let range_idx = i * 2;
         let crit_idx = i * 2 + 1;
 
-        let Some((col, s)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+        let Some((col, s)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -136,7 +142,7 @@ pub(crate) fn builtin_averageifs(
         return Value::Error(CellError::Value);
     }
 
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
 
@@ -148,7 +154,7 @@ pub(crate) fn builtin_averageifs(
         let range_idx = 1 + i * 2;
         let crit_idx = 2 + i * 2;
 
-        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -176,7 +182,7 @@ pub(crate) fn builtin_minifs(
         return Value::Error(CellError::Value);
     }
 
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
 
@@ -188,7 +194,7 @@ pub(crate) fn builtin_minifs(
         let range_idx = 1 + i * 2;
         let crit_idx = 2 + i * 2;
 
-        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -216,7 +222,7 @@ pub(crate) fn builtin_maxifs(
         return Value::Error(CellError::Value);
     }
 
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
 
@@ -228,7 +234,7 @@ pub(crate) fn builtin_maxifs(
         let range_idx = 1 + i * 2;
         let crit_idx = 2 + i * 2;
 
-        let Some((col, _)) = extract_criteria_col_and_sheet(args[range_idx]) else {
+        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
             return Value::Error(CellError::Value);
         };
         criteria_cols.push(col);
@@ -252,11 +258,11 @@ pub(crate) fn builtin_sumif(
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
-    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
     let sum_col = if args.len() >= 3 {
-        let Some((sc, _)) = extract_criteria_col_and_sheet(args[2]) else {
+        let Some((sc, _)) = extract_criteria_col_and_sheet(interp, args[2]) else {
             return Value::Error(CellError::Value);
         };
         sc
@@ -283,7 +289,7 @@ pub(crate) fn builtin_countif(
     if args.len() != 2 {
         return Value::Error(CellError::Value);
     }
-    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
     let criteria_val = extract_static_criteria(args[1], interp, scope);
@@ -306,11 +312,11 @@ pub(crate) fn builtin_averageif(
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
-    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(args[0]) else {
+    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
     let sum_col = if args.len() >= 3 {
-        let Some((sc, _)) = extract_criteria_col_and_sheet(args[2]) else {
+        let Some((sc, _)) = extract_criteria_col_and_sheet(interp, args[2]) else {
             return Value::Error(CellError::Value);
         };
         sc

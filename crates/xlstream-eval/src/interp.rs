@@ -71,6 +71,11 @@ impl<'ctx> Interpreter<'ctx> {
         self.prelude
     }
 
+    /// The sheet this interpreter is currently evaluating.
+    pub(crate) fn current_sheet(&self) -> Option<&str> {
+        self.main_sheet
+    }
+
     /// Evaluate a single AST node against the current row.
     ///
     /// Returns a [`Value`]. Never errors at the library level — unsupported
