@@ -1296,95 +1296,252 @@ fn strip_xlfn_prefix(formula: &str) -> Cow<'_, str> {
 
 /// Check if two formula texts are streaming-equivalent without parsing.
 ///
-/// Returns true if the formulas differ only in same-sheet cell reference
-/// row numbers (e.g., `A2+B2` vs `A3+B3`). Scans both strings in
-/// lockstep, allowing digits after column letters to differ while
-/// requiring everything else to match exactly.
+/// Uses a lightweight lexer to tokenize both formulas in lockstep. Each
+/// token is classified as one of: cell-ref row digits (skippable),
+/// identifier, number, string literal, operator, or other. Only
+/// same-sheet cell-ref row digits are allowed to differ; everything else
+/// must match exactly.
 ///
-/// Returns false conservatively if the formulas differ structurally
-/// (different functions, different column refs, different range bounds,
-/// different cross-sheet refs). False negatives cause a parse + AST
-/// compare (correct but slower); false positives would be a bug.
+/// The lexer distinguishes `A2` (column + row) from `LOG10` (identifier),
+/// `Sheet2!` (sheet qualifier), `RATE2` (named range), and `1E2`
+/// (scientific notation) — all of which contain letters followed by
+/// digits but are NOT cell references.
+///
+/// False negatives cause a parse + AST compare (correct but slower).
+/// False positives would silently produce wrong results.
 fn formulas_streaming_eq(a: &str, b: &str) -> bool {
-    let ab = a.as_bytes();
-    let bb = b.as_bytes();
-    let mut ia = 0;
-    let mut ib = 0;
-    let mut in_string = false;
+    let mut la = FormulaLexer::new(a.as_bytes());
+    let mut lb = FormulaLexer::new(b.as_bytes());
 
-    while ia < ab.len() && ib < bb.len() {
-        if ab[ia] == b'"' {
-            in_string = !in_string;
-        }
+    loop {
+        let ta = la.next_token();
+        let tb = lb.next_token();
 
-        if in_string || !ab[ia].is_ascii_digit() || !bb[ib].is_ascii_digit() {
-            if ab[ia] != bb[ib] {
-                return false;
+        match (&ta, &tb) {
+            (FToken::End, FToken::End) => return true,
+            (FToken::CellRow, FToken::CellRow) => {}
+            _ => {
+                if ta != tb {
+                    return false;
+                }
             }
-            ia += 1;
-            ib += 1;
-            continue;
-        }
-
-        // Both at a digit. Check if preceded by column letters (same-sheet cell ref).
-        let is_cell_row = ia > 0 && {
-            let prev = ab[ia - 1];
-            prev.is_ascii_alphabetic() || prev == b'$'
-        };
-
-        // Skip if this is a cross-sheet ref (column letters preceded by !)
-        let is_cross_sheet = is_cell_row && {
-            let mut j = ia - 1;
-            if ab[j] == b'$' && j > 0 {
-                j -= 1;
-            }
-            while j > 0 && ab[j].is_ascii_alphabetic() {
-                j -= 1;
-            }
-            j < ia && (ab[j] == b'!' || ab[j] == b'\'')
-        };
-
-        // Also check: is this a range bound? If followed by `:`, it's the
-        // start of a range. Peek after the digit run.
-        let is_range_bound = is_cell_row && !is_cross_sheet && {
-            let mut end = ia;
-            while end < ab.len() && ab[end].is_ascii_digit() {
-                end += 1;
-            }
-            end < ab.len() && ab[end] == b':'
-        };
-
-        // Also check if preceded by `:` (end of a range)
-        let is_range_end = is_cell_row && !is_cross_sheet && ia >= 2 && {
-            let mut j = ia - 1;
-            if ab[j] == b'$' && j > 0 {
-                j -= 1;
-            }
-            while j > 0 && ab[j].is_ascii_alphabetic() {
-                j -= 1;
-            }
-            ab[j] == b':'
-        };
-
-        if is_cell_row && !is_cross_sheet && !is_range_bound && !is_range_end {
-            // Same-sheet cell ref row digits — skip both digit runs
-            while ia < ab.len() && ab[ia].is_ascii_digit() {
-                ia += 1;
-            }
-            while ib < bb.len() && bb[ib].is_ascii_digit() {
-                ib += 1;
-            }
-        } else {
-            // Not a streaming row ref — digits must match exactly
-            if ab[ia] != bb[ib] {
-                return false;
-            }
-            ia += 1;
-            ib += 1;
         }
     }
+}
 
-    ia == ab.len() && ib == bb.len()
+#[derive(Debug, PartialEq, Eq)]
+enum FToken {
+    /// Same-sheet cell reference row digits — skippable
+    CellRow,
+    /// Exact-match content (operators, identifiers, numbers, etc.)
+    Exact(u8),
+    /// String literal content byte — exact match
+    StringByte(u8),
+    /// End of input
+    End,
+}
+
+struct FormulaLexer<'a> {
+    s: &'a [u8],
+    pos: usize,
+    in_string: bool,
+    /// Next digits are a same-sheet cell-ref row number
+    after_column: bool,
+    /// Remaining bytes of an identifier to emit as Exact (skips column check)
+    ident_remaining: usize,
+}
+
+impl<'a> FormulaLexer<'a> {
+    fn new(s: &'a [u8]) -> Self {
+        Self { s, pos: 0, in_string: false, after_column: false, ident_remaining: 0 }
+    }
+
+    fn next_token(&mut self) -> FToken {
+        if self.pos >= self.s.len() {
+            return FToken::End;
+        }
+
+        // Emit remaining identifier bytes without re-entering alpha logic
+        if self.ident_remaining > 0 {
+            self.ident_remaining -= 1;
+            let b = self.s[self.pos];
+            self.pos += 1;
+            self.after_column = false;
+            return FToken::Exact(b);
+        }
+
+        let b = self.s[self.pos];
+
+        // String literal: pass through byte-by-byte with exact match
+        if b == b'"' {
+            self.in_string = !self.in_string;
+            self.pos += 1;
+            self.after_column = false;
+            return FToken::Exact(b'"');
+        }
+        if self.in_string {
+            self.pos += 1;
+            return FToken::StringByte(b);
+        }
+
+        // Letter run: could be a column ref, function name, sheet name,
+        // or named range. Consume the full alpha run, then look ahead.
+        if b.is_ascii_alphabetic() || b == b'$' {
+            return self.lex_alpha_or_dollar();
+        }
+
+        // Digit run: if after_column is set, this is a cell row number.
+        // Otherwise it's a plain number.
+        if b.is_ascii_digit() {
+            if self.after_column {
+                self.after_column = false;
+                // Check: not followed by : (range bound)
+                let mut end = self.pos;
+                while end < self.s.len() && self.s[end].is_ascii_digit() {
+                    end += 1;
+                }
+                if end < self.s.len() && self.s[end] == b':' {
+                    // Range start bound — digits must match exactly
+                    self.pos += 1;
+                    return FToken::Exact(b);
+                }
+                // Skip entire digit run as one CellRow token
+                while self.pos < self.s.len() && self.s[self.pos].is_ascii_digit() {
+                    self.pos += 1;
+                }
+                return FToken::CellRow;
+            }
+            self.pos += 1;
+            self.after_column = false;
+            return FToken::Exact(b);
+        }
+
+        // Everything else: operators, parens, commas, etc.
+        self.pos += 1;
+        self.after_column = false;
+        FToken::Exact(b)
+    }
+
+    /// Lex an alpha run (possibly preceded by $). Determines whether
+    /// it's a same-sheet column ref (sets `after_column=true`) or something
+    /// else (identifier, sheet name, etc.).
+    fn lex_alpha_or_dollar(&mut self) -> FToken {
+        let start = self.pos;
+
+        // Optional leading $ (column-absolute or row-absolute)
+        let has_dollar = self.s[self.pos] == b'$';
+        if has_dollar {
+            self.pos += 1;
+            if self.pos >= self.s.len() || !self.s[self.pos].is_ascii_alphabetic() {
+                // $ before digit when after_column — row-absolute marker
+                if self.after_column && self.pos < self.s.len() && self.s[self.pos].is_ascii_digit()
+                {
+                    return FToken::Exact(b'$');
+                }
+                // Lone $ or $ before non-alpha/non-digit — emit as exact
+                self.after_column = false;
+                return FToken::Exact(b'$');
+            }
+        }
+
+        // Consume alpha run
+        let alpha_start = self.pos;
+        while self.pos < self.s.len() && self.s[self.pos].is_ascii_alphabetic() {
+            self.pos += 1;
+        }
+        let alpha_len = self.pos - alpha_start;
+
+        // Look ahead to classify
+        let next = self.s.get(self.pos).copied();
+
+        // If followed by ! or '! — this is a sheet qualifier, not a column
+        if next == Some(b'!') || next == Some(b'\'') {
+            let total = self.pos - start;
+            self.after_column = false;
+            self.pos = start + 1;
+            if total > 1 {
+                self.ident_remaining = total - 1;
+            }
+            return FToken::Exact(self.s[start]);
+        }
+
+        // If followed by ( — this is a function name, not a column
+        if next == Some(b'(') {
+            let total = self.pos - start;
+            self.after_column = false;
+            self.pos = start + 1;
+            if total > 1 {
+                self.ident_remaining = total - 1;
+            }
+            return FToken::Exact(self.s[start]);
+        }
+
+        // If alpha run is 1-3 chars and followed by $ or digit — potential column ref
+        if (1..=3).contains(&alpha_len) {
+            let mut peek = self.pos;
+            if peek < self.s.len() && self.s[peek] == b'$' {
+                peek += 1;
+            }
+            if peek < self.s.len() && self.s[peek].is_ascii_digit() {
+                // Peek past digit run to check for ( — function like LOG10(
+                let mut digit_end = peek;
+                while digit_end < self.s.len() && self.s[digit_end].is_ascii_digit() {
+                    digit_end += 1;
+                }
+                if digit_end < self.s.len() && self.s[digit_end] == b'(' {
+                    self.after_column = false;
+                    self.pos = start + 1;
+                    return FToken::Exact(self.s[start]);
+                }
+                // Peek past digit run for ! — sheet name like Sheet2!
+                if digit_end < self.s.len()
+                    && (self.s[digit_end] == b'!' || self.s[digit_end] == b'\'')
+                {
+                    self.after_column = false;
+                    self.pos = start + 1;
+                    return FToken::Exact(self.s[start]);
+                }
+                // Preceded by digit — scientific notation like 1E2
+                if start > 0 && self.s[start - 1].is_ascii_digit() {
+                    self.after_column = false;
+                    self.pos = start + 1;
+                    return FToken::Exact(self.s[start]);
+                }
+                // Preceded by ! — cross-sheet ref, row matters
+                if start > 0 && self.s[start - 1] == b'!' {
+                    self.after_column = false;
+                    self.pos = start + 1;
+                    return FToken::Exact(self.s[start]);
+                }
+                // Preceded by : — range end, row matters (A10 in A2:A10)
+                // Check back past optional $ (column-absolute in :$B$5)
+                let mut back = start;
+                if back > 0 && self.s[back - 1] == b'$' {
+                    back -= 1;
+                }
+                if back > 0 && self.s[back - 1] == b':' {
+                    self.after_column = false;
+                    self.pos = start + 1;
+                    return FToken::Exact(self.s[start]);
+                }
+                // Valid same-sheet column ref
+                self.after_column = true;
+                self.pos = start + 1;
+                return FToken::Exact(self.s[start]);
+            }
+        }
+
+        // 4+ chars or not followed by digit — identifier/named range.
+        // Mark remaining bytes so they emit as Exact without re-entering
+        // column detection (prevents RATE2 → R + ATE2 misparse).
+        let total_consumed = self.pos - start;
+        self.after_column = false;
+        self.pos = start + 1;
+        if total_consumed > 1 {
+            self.ident_remaining = total_consumed - 1;
+        }
+        FToken::Exact(self.s[start])
+    }
 }
 
 /// Two ASTs are streaming-equivalent if every row would produce the same
@@ -1672,5 +1829,32 @@ mod tests {
     #[test]
     fn streaming_eq_multi_letter_columns() {
         assert!(super::formulas_streaming_eq("AA100+AB200", "AA101+AB201"));
+    }
+
+    // --- false-positive regression tests ---
+
+    #[test]
+    fn streaming_eq_function_names_with_digits() {
+        assert!(!super::formulas_streaming_eq("LOG10(A2)", "LOG2(A3)"));
+    }
+
+    #[test]
+    fn streaming_eq_sheet_names_with_digits() {
+        assert!(!super::formulas_streaming_eq("Sheet2!A2", "Sheet3!A3"));
+    }
+
+    #[test]
+    fn streaming_eq_named_ranges_with_digits() {
+        assert!(!super::formulas_streaming_eq("RATE2+A2", "RATE3+A3"));
+    }
+
+    #[test]
+    fn streaming_eq_scientific_notation() {
+        assert!(!super::formulas_streaming_eq("1E2+A2", "1E3+A3"));
+    }
+
+    #[test]
+    fn streaming_eq_absolute_range_end() {
+        assert!(!super::formulas_streaming_eq("SUM($A$2:$B$5)", "SUM($A$2:$B$6)"));
     }
 }
