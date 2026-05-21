@@ -1,5 +1,6 @@
 //! The [`evaluate`] entry point and [`EvaluateSummary`] return type.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -1098,6 +1099,7 @@ fn build_eval_plan(
 
         let formula_str = first_text.strip_prefix('=').unwrap_or(first_text.as_str());
         let formula_str = strip_xlfn_prefix(formula_str);
+        let first_formula_str = formula_str.clone();
         let first_ast = parse(&formula_str)?;
         let first_ast = resolve_named_ranges(first_ast, named_ranges);
         let first_ast = xlstream_parse::resolve_table_references(
@@ -1129,7 +1131,7 @@ fn build_eval_plan(
         col_asts.insert(col, rewritten);
         col_templates.insert(
             col,
-            crate::formula_template::FormulaTemplate::new(formula_str.clone(), first_row + 1),
+            crate::formula_template::FormulaTemplate::new(formula_str.to_string(), first_row + 1),
         );
 
         for (row, text) in &formulas[1..] {
@@ -1139,6 +1141,11 @@ fn build_eval_plan(
 
             let formula_str = text.strip_prefix('=').unwrap_or(text.as_str());
             let formula_str = strip_xlfn_prefix(formula_str);
+
+            if formulas_streaming_eq(&first_formula_str, &formula_str) {
+                continue;
+            }
+
             let ast = parse(&formula_str)?;
             let ast = resolve_named_ranges(ast, named_ranges);
             let ast = xlstream_parse::resolve_table_references(
@@ -1279,8 +1286,105 @@ fn stamp_eval_plan_sheet(plan: &mut SheetEvalPlan, sheet: &str) {
 /// These prefixes are part of the xlsx XML format for "future" Excel
 /// functions (CONCAT, TEXTJOIN, IFS, etc.). Calamine preserves them
 /// verbatim; we strip them before parsing.
-fn strip_xlfn_prefix(formula: &str) -> String {
-    formula.replace("_xlfn._xlws.", "").replace("_xlfn.", "")
+fn strip_xlfn_prefix(formula: &str) -> Cow<'_, str> {
+    if formula.contains("_xlfn.") {
+        Cow::Owned(formula.replace("_xlfn._xlws.", "").replace("_xlfn.", ""))
+    } else {
+        Cow::Borrowed(formula)
+    }
+}
+
+/// Check if two formula texts are streaming-equivalent without parsing.
+///
+/// Returns true if the formulas differ only in same-sheet cell reference
+/// row numbers (e.g., `A2+B2` vs `A3+B3`). Scans both strings in
+/// lockstep, allowing digits after column letters to differ while
+/// requiring everything else to match exactly.
+///
+/// Returns false conservatively if the formulas differ structurally
+/// (different functions, different column refs, different range bounds,
+/// different cross-sheet refs). False negatives cause a parse + AST
+/// compare (correct but slower); false positives would be a bug.
+fn formulas_streaming_eq(a: &str, b: &str) -> bool {
+    let ab = a.as_bytes();
+    let bb = b.as_bytes();
+    let mut ia = 0;
+    let mut ib = 0;
+    let mut in_string = false;
+
+    while ia < ab.len() && ib < bb.len() {
+        if ab[ia] == b'"' {
+            in_string = !in_string;
+        }
+
+        if in_string || !ab[ia].is_ascii_digit() || !bb[ib].is_ascii_digit() {
+            if ab[ia] != bb[ib] {
+                return false;
+            }
+            ia += 1;
+            ib += 1;
+            continue;
+        }
+
+        // Both at a digit. Check if preceded by column letters (same-sheet cell ref).
+        let is_cell_row = ia > 0 && {
+            let prev = ab[ia - 1];
+            prev.is_ascii_alphabetic() || prev == b'$'
+        };
+
+        // Skip if this is a cross-sheet ref (column letters preceded by !)
+        let is_cross_sheet = is_cell_row && {
+            let mut j = ia - 1;
+            if ab[j] == b'$' && j > 0 {
+                j -= 1;
+            }
+            while j > 0 && ab[j].is_ascii_alphabetic() {
+                j -= 1;
+            }
+            j < ia && (ab[j] == b'!' || ab[j] == b'\'')
+        };
+
+        // Also check: is this a range bound? If followed by `:`, it's the
+        // start of a range. Peek after the digit run.
+        let is_range_bound = is_cell_row && !is_cross_sheet && {
+            let mut end = ia;
+            while end < ab.len() && ab[end].is_ascii_digit() {
+                end += 1;
+            }
+            end < ab.len() && ab[end] == b':'
+        };
+
+        // Also check if preceded by `:` (end of a range)
+        let is_range_end = is_cell_row && !is_cross_sheet && ia >= 2 && {
+            let mut j = ia - 1;
+            if ab[j] == b'$' && j > 0 {
+                j -= 1;
+            }
+            while j > 0 && ab[j].is_ascii_alphabetic() {
+                j -= 1;
+            }
+            ab[j] == b':'
+        };
+
+        if is_cell_row && !is_cross_sheet && !is_range_bound && !is_range_end {
+            // Same-sheet cell ref row digits — skip both digit runs
+            while ia < ab.len() && ab[ia].is_ascii_digit() {
+                ia += 1;
+            }
+            while ib < bb.len() && bb[ib].is_ascii_digit() {
+                ib += 1;
+            }
+        } else {
+            // Not a streaming row ref — digits must match exactly
+            if ab[ia] != bb[ib] {
+                return false;
+            }
+            ia += 1;
+            ib += 1;
+        }
+    }
+
+    ia == ab.len() && ib == bb.len()
 }
 
 /// Two ASTs are streaming-equivalent if every row would produce the same
@@ -1503,5 +1607,70 @@ mod tests {
     #[test]
     fn result_cacheable_empty_rejected() {
         assert!(!super::result_cacheable(&Value::Empty));
+    }
+
+    // ===== normalize_formula_text =====
+
+    // ===== formulas_streaming_eq =====
+
+    #[test]
+    fn streaming_eq_same_formula() {
+        assert!(super::formulas_streaming_eq("A2+B2", "A2+B2"));
+    }
+
+    #[test]
+    fn streaming_eq_different_rows() {
+        assert!(super::formulas_streaming_eq("A2+B2", "A3+B3"));
+    }
+
+    #[test]
+    fn streaming_eq_preserves_plain_numbers() {
+        assert!(super::formulas_streaming_eq("MOD(A2,1000)", "MOD(A3,1000)"));
+        assert!(!super::formulas_streaming_eq("MOD(A2,1000)", "MOD(A3,2000)"));
+    }
+
+    #[test]
+    fn streaming_eq_absolute_refs() {
+        assert!(super::formulas_streaming_eq("$A$2+$B$3", "$A$5+$B$6"));
+    }
+
+    #[test]
+    fn streaming_eq_range_bounds_must_match() {
+        assert!(!super::formulas_streaming_eq("SUM(A2:A10)", "SUM(A2:A5)"));
+        assert!(super::formulas_streaming_eq("SUM(A2:A10)", "SUM(A2:A10)"));
+    }
+
+    #[test]
+    fn streaming_eq_cross_sheet_rows_must_match() {
+        assert!(!super::formulas_streaming_eq("Data!B2+B2", "Data!B3+B3"));
+    }
+
+    #[test]
+    fn streaming_eq_same_sheet_cell_refs() {
+        assert!(super::formulas_streaming_eq(
+            "VLOOKUP(A2,Sheet1!A:B,2,FALSE)",
+            "VLOOKUP(A3,Sheet1!A:B,2,FALSE)",
+        ));
+    }
+
+    #[test]
+    fn streaming_eq_string_literals_preserved() {
+        assert!(super::formulas_streaming_eq("IF(A2=\"Row1\",B2,C2)", "IF(A3=\"Row1\",B3,C3)",));
+        assert!(!super::formulas_streaming_eq("IF(A2=\"Row1\",B2,C2)", "IF(A3=\"Row2\",B3,C3)",));
+    }
+
+    #[test]
+    fn streaming_eq_different_functions() {
+        assert!(!super::formulas_streaming_eq("SUM(A2)", "AVG(A2)"));
+    }
+
+    #[test]
+    fn streaming_eq_different_columns() {
+        assert!(!super::formulas_streaming_eq("A2+B2", "A2+C2"));
+    }
+
+    #[test]
+    fn streaming_eq_multi_letter_columns() {
+        assert!(super::formulas_streaming_eq("AA100+AB200", "AA101+AB201"));
     }
 }
