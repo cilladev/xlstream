@@ -85,6 +85,33 @@ pub(crate) fn expand_range(
     }
 }
 
+/// Expand args for aggregate builtins with Excel's scalar coercion.
+///
+/// Range args use range semantics (bools/text skipped by the aggregate
+/// function). Scalar args are coerced: `TRUE`→`1`, `FALSE`→`0`,
+/// numeric text→number. This matches Excel's behavior where
+/// `SUM(TRUE,1)` = 2 but `SUM(A1:A2)` with A1=TRUE, A2=1 = 1.
+fn expand_args_for_aggregate(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Vec<Value> {
+    args.iter()
+        .flat_map(|&a| {
+            if matches!(a.view(), NodeView::RangeRef { .. }) {
+                expand_range(a, interp, scope)
+            } else {
+                let val = interp.eval(a, scope);
+                let coerced = match &val {
+                    Value::Bool(b) => Value::Number(if *b { 1.0 } else { 0.0 }),
+                    _ => val,
+                };
+                vec![coerced]
+            }
+        })
+        .collect()
+}
+
 /// Look up `name` (case-insensitive) and call the matching builtin.
 ///
 /// Returns `None` for unknown functions — the caller decides the fallback.
@@ -117,8 +144,41 @@ pub(crate) fn dispatch(
         "AVERAGEIF" => Some(multi_conditional::builtin_averageif(args, interp, scope)),
         "MINIFS" => Some(multi_conditional::builtin_minifs(args, interp, scope)),
         "MAXIFS" => Some(multi_conditional::builtin_maxifs(args, interp, scope)),
+        "SUM" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::sum(&vals).unwrap_or_else(Value::Error))
+        }
+        "COUNT" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::count(&vals).unwrap_or_else(Value::Error))
+        }
+        "COUNTA" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::counta(&vals).unwrap_or_else(Value::Error))
+        }
+        "COUNTBLANK" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::countblank(&vals).unwrap_or_else(Value::Error))
+        }
+        "AVERAGE" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::average(&vals).unwrap_or_else(Value::Error))
+        }
+        "MIN" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::min(&vals).unwrap_or_else(Value::Error))
+        }
+        "MAX" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::max(&vals).unwrap_or_else(Value::Error))
+        }
+        "MEDIAN" => {
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::median(&vals).unwrap_or_else(Value::Error))
+        }
         "PRODUCT" => {
-            Some(aggregate::product(&eval_args(args, interp, scope)).unwrap_or_else(Value::Error))
+            let vals = expand_args_for_aggregate(args, interp, scope);
+            Some(aggregate::product(&vals).unwrap_or_else(Value::Error))
         }
         "VLOOKUP" => Some(lookup::builtin_vlookup(args, interp, scope)),
         "XLOOKUP" | "_XLFN.XLOOKUP" => Some(lookup::builtin_xlookup(args, interp, scope)),
