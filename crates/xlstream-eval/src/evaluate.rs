@@ -1424,6 +1424,7 @@ impl<'a> FormulaLexer<'a> {
 
     /// Lex an alpha run (possibly preceded by $). Determines whether
     /// it's a same-sheet column ref (sets `after_column=true`) or something
+    #[allow(clippy::too_many_lines)]
     /// else (identifier, sheet name, etc.).
     fn lex_alpha_or_dollar(&mut self) -> FToken {
         let start = self.pos;
@@ -1507,21 +1508,32 @@ impl<'a> FormulaLexer<'a> {
                     self.pos = start + 1;
                     return FToken::Exact(self.s[start]);
                 }
-                // Preceded by ! — cross-sheet ref, row matters
-                if start > 0 && self.s[start - 1] == b'!' {
+                // Preceded by ! (or $!) — cross-sheet ref, row matters
+                let mut bang_back = start;
+                if bang_back > 0 && self.s[bang_back - 1] == b'$' {
+                    bang_back -= 1;
+                }
+                if bang_back > 0 && self.s[bang_back - 1] == b'!' {
+                    let total = self.pos - start;
                     self.after_column = false;
                     self.pos = start + 1;
+                    if total > 1 {
+                        self.ident_remaining = total - 1;
+                    }
                     return FToken::Exact(self.s[start]);
                 }
-                // Preceded by : — range end, row matters (A10 in A2:A10)
-                // Check back past optional $ (column-absolute in :$B$5)
+                // Preceded by : (or $:) — range end, row matters
                 let mut back = start;
                 if back > 0 && self.s[back - 1] == b'$' {
                     back -= 1;
                 }
                 if back > 0 && self.s[back - 1] == b':' {
+                    let total = self.pos - start;
                     self.after_column = false;
                     self.pos = start + 1;
+                    if total > 1 {
+                        self.ident_remaining = total - 1;
+                    }
                     return FToken::Exact(self.s[start]);
                 }
                 // Valid same-sheet column ref
@@ -1841,6 +1853,21 @@ mod tests {
     #[test]
     fn streaming_eq_sheet_names_with_digits() {
         assert!(!super::formulas_streaming_eq("Sheet2!A2", "Sheet3!A3"));
+    }
+
+    #[test]
+    fn streaming_eq_cross_sheet_dollar_col() {
+        assert!(!super::formulas_streaming_eq("Sheet1!$A2", "Sheet1!$A3"));
+    }
+
+    #[test]
+    fn streaming_eq_cross_sheet_absolute() {
+        assert!(!super::formulas_streaming_eq("Sheet1!$A$2", "Sheet1!$A$3"));
+    }
+
+    #[test]
+    fn streaming_eq_cross_sheet_multi_letter_col() {
+        assert!(!super::formulas_streaming_eq("Sheet1!$AB2", "Sheet1!$AB3"));
     }
 
     #[test]
