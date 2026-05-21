@@ -734,6 +734,14 @@ fn evaluate_row_formulas(
                      during the prelude pass (no cached values). \
                      Save the workbook in Excel to populate cached values"
                 )));
+            } else if !is_prelude_evaluable(ast) {
+                let col_a1 = xlstream_core::col_row_to_a1(col + 1, 1);
+                let col_letter = col_a1.trim_end_matches(char::is_numeric);
+                tracing::warn!(
+                    column = col_letter,
+                    "unevaluable formula column has empty cached values; \
+                     downstream columns depending on it may produce wrong results"
+                );
             }
         }
     }
@@ -1722,5 +1730,25 @@ mod tests {
         let row = vec![Value::Number(5.0), Value::Empty];
         let result = evaluate_row_formulas(row, 1, &ctx, &interp, &agg_cols, &mut errored);
         assert!(result.is_err());
+    }
+
+    // ===== is_prelude_evaluable: coverage gaps =====
+
+    #[test]
+    fn is_prelude_evaluable_bool_literal() {
+        let ast = xlstream_parse::parse("TRUE").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_text_literal() {
+        let ast = xlstream_parse::parse("\"hello\"").unwrap();
+        assert!(is_prelude_evaluable(&ast));
+    }
+
+    #[test]
+    fn is_prelude_evaluable_array_literal() {
+        let ast = xlstream_parse::parse("{1,2;3,4}").unwrap();
+        assert!(is_prelude_evaluable(&ast));
     }
 }
