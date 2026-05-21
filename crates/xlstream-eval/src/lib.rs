@@ -29,6 +29,7 @@
 pub mod builtins;
 pub mod criteria;
 mod evaluate;
+mod formula_lexer;
 mod formula_template;
 mod interp;
 pub mod lookup;
