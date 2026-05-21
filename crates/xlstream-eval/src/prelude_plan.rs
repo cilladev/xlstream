@@ -647,7 +647,7 @@ pub struct SheetFormulaCtx<'a> {
 
 /// Returns `true` if the formula can be evaluated during prelude.
 ///
-/// Only `PreludeRef` (circular aggregate), `ExternalRef`, and
+/// Only `PreludeRef`, `ExternalRef`, and
 /// `ThreeDimensionalRef` nodes are unevaluable. Everything else
 /// resolves with loaded lookups and volatile data.
 ///
@@ -730,11 +730,12 @@ fn evaluate_row_formulas(
                 let col_a1 = xlstream_core::col_row_to_a1(col + 1, 1);
                 let col_letter = col_a1.trim_end_matches(char::is_numeric);
                 return Err(XlStreamError::Internal(format!(
-                    "column {col_letter} contains formulas that cannot be evaluated \
-                     during the prelude pass (no cached values). \
-                     Save the workbook in Excel to populate cached values"
+                    "cannot compute aggregate over column {col_letter}: \
+                     formula contains aggregate references that create a circular \
+                     dependency during prelude. Save the workbook in Excel to \
+                     populate cached values"
                 )));
-            } else if !is_prelude_evaluable(ast) {
+            } else if !is_prelude_evaluable(ast) && errored_cols.insert(col) {
                 let col_a1 = xlstream_core::col_row_to_a1(col + 1, 1);
                 let col_letter = col_a1.trim_end_matches(char::is_numeric);
                 tracing::warn!(
@@ -761,15 +762,15 @@ fn evaluate_row_formulas(
 ///
 /// let base = Prelude::empty();
 /// let ctx = PreludeFormulaCtx {
-///     main_formulas: None,
+///     current_sheet_formulas: None,
 ///     cross_sheet_formulas: &[],
 ///     base_prelude: &base,
 /// };
-/// assert!(ctx.main_formulas.is_none());
+/// assert!(ctx.current_sheet_formulas.is_none());
 /// ```
 pub struct PreludeFormulaCtx<'a> {
     /// Formula context for the main (streaming) sheet, if it has formulas.
-    pub main_formulas: Option<&'a SheetFormulaCtx<'a>>,
+    pub current_sheet_formulas: Option<&'a SheetFormulaCtx<'a>>,
     /// Formula contexts for secondary sheets, keyed by sheet name.
     pub cross_sheet_formulas: &'a [(&'a str, &'a SheetFormulaCtx<'a>)],
     /// Base prelude with loaded lookup sheets and volatile data.
@@ -808,7 +809,7 @@ pub struct PreludeFormulaCtx<'a> {
 ///
 /// let base = xlstream_eval::Prelude::empty();
 /// let formula_ctx = PreludeFormulaCtx {
-///     main_formulas: None,
+///     current_sheet_formulas: None,
 ///     cross_sheet_formulas: &[],
 ///     base_prelude: &base,
 /// };
@@ -927,7 +928,7 @@ pub fn execute_prelude(
         }
 
         // Evaluate formulas in this row if a formula context was provided.
-        let evaluated_row = if let Some(ctx) = formula_ctx.main_formulas {
+        let evaluated_row = if let Some(ctx) = formula_ctx.current_sheet_formulas {
             evaluate_row_formulas(
                 row_values,
                 row_idx,
@@ -1033,6 +1034,8 @@ pub fn execute_prelude(
             })
             .collect();
         let mut cs_errored: HashSet<u32> = HashSet::new();
+        let cs_interp =
+            crate::Interpreter::new(formula_ctx.base_prelude).with_main_sheet(sheet_name);
 
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
@@ -1041,7 +1044,7 @@ pub fn execute_prelude(
                     row_values,
                     row_idx,
                     ctx,
-                    &interp,
+                    &cs_interp,
                     &cs_agg_cols,
                     &mut cs_errored,
                 )?
@@ -1102,6 +1105,8 @@ pub fn execute_prelude(
         for &fk in cs_col_kinds.keys() {
             cs_folds.insert(fk, FoldState::new());
         }
+        let cs_interp =
+            crate::Interpreter::new(formula_ctx.base_prelude).with_main_sheet(sheet_name);
 
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
@@ -1110,7 +1115,7 @@ pub fn execute_prelude(
                     row_values,
                     row_idx,
                     ctx,
-                    &interp,
+                    &cs_interp,
                     &cs_agg_cols,
                     &mut cs_errored,
                 )?
@@ -1148,6 +1153,8 @@ pub fn execute_prelude(
             .map(|(_, ctx)| ctx);
         let cs_range_cols: HashSet<u32> = keys.iter().map(|rk| rk.col.saturating_sub(1)).collect();
         let mut cs_errored: HashSet<u32> = HashSet::new();
+        let cs_interp =
+            crate::Interpreter::new(formula_ctx.base_prelude).with_main_sheet(sheet_name);
 
         let mut cs_stream = reader.cells(sheet_name)?;
         while let Some((row_idx, row_values)) = cs_stream.next_row()? {
@@ -1156,7 +1163,7 @@ pub fn execute_prelude(
                     row_values,
                     row_idx,
                     ctx,
-                    &interp,
+                    &cs_interp,
                     &cs_range_cols,
                     &mut cs_errored,
                 )?
