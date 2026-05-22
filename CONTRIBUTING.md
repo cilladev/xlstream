@@ -87,12 +87,11 @@ At minimum:
 3. Write tests first in the appropriate test module under `crates/xlstream-eval/src/builtins/`.
    - At minimum: happy path, empty input, error propagation, type coercion, edge case.
 4. Implement in the matching `builtins/*.rs` module (e.g., `text.rs`, `math.rs`, `lookup.rs`).
-5. Add a match arm in `crates/xlstream-eval/src/builtins/mod.rs` `dispatch()`.
-6. If the function needs prelude data (aggregates, lookups), use the lazy dispatch path instead.
-7. Add rustdoc with `# Examples` block.
-8. Tick the box in `docs/functions.md` in the same PR.
-9. If the function introduces a novel code path (not just dispatch to existing machinery), add a criterion bench in `benchmarks/benches/<category>.rs`. See [`docs/standards/testing.md`](docs/standards/testing.md) for the code path → benchmark mapping.
-10. Run `make check`.
+5. Add a `FunctionEntry` in `crates/xlstream-eval/src/registry.rs` with the correct `FnCaps`, `FnCategory`, `agg_kind`, and handler. See existing entries for the pattern.
+6. Add rustdoc with `# Examples` block.
+7. Tick the box in `docs/functions.md` in the same PR.
+8. If the function introduces a novel code path (not just dispatch to existing machinery), add a criterion bench in `benchmarks/benches/<category>.rs`. See [`docs/standards/testing.md`](docs/standards/testing.md) for the code path → benchmark mapping.
+9. Run `make check`.
 
 ## Code style
 

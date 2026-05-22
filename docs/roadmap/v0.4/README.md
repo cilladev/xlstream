@@ -5,8 +5,17 @@
 **Theme:** LET variable binding, advanced financial functions, multi-format I/O
 
 ## Cleanup
+<<<<<<< Updated upstream
 - [x] Formula registry clean up
 - [ ] EvalMode dispatch — replace ~134 eager/aggregate handler wrappers in builtins/mod.rs with a 3-variant enum (Eager/Aggregate/Custom) in registry. Keep ~34 Custom wrappers as glue layer. ~0.5 day.
+||||||| Stash base
+- [] Formula registry clean up
+=======
+- [ ] **Formula registry cleanup** — single-registry architecture. See [`02-formula-registry-cleanup-v2.md`](02-formula-registry-cleanup-v2.md). ~3-4 days.
+
+# Bug fixes
+- [] Fix all outstanding issues
+>>>>>>> Stashed changes
 
 ## LET
 
