@@ -76,28 +76,31 @@ const SQRT_2PI: f64 = 2.506_628_274_631_000_5;
 /// use xlstream_core::Value;
 /// use xlstream_eval::builtins::statistical::builtin_norm_dist;
 /// let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-/// let result = builtin_norm_dist(&args).unwrap();
+/// let Value::Number(result) = builtin_norm_dist(&args) else { panic!("expected Number") };
 /// assert!((result - 0.5).abs() < 1e-6);
 /// ```
-pub fn builtin_norm_dist(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 4 {
-        return Err(CellError::Value);
-    }
-    let x = num_arg_ce(args, 0)?;
-    let mean = num_arg_ce(args, 1)?;
-    let stdev = num_arg_ce(args, 2)?;
-    let cumulative = bool_arg_ce(args, 3)?;
+pub fn builtin_norm_dist(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 4 {
+            return Err(CellError::Value);
+        }
+        let x = num_arg_ce(args, 0)?;
+        let mean = num_arg_ce(args, 1)?;
+        let stdev = num_arg_ce(args, 2)?;
+        let cumulative = bool_arg_ce(args, 3)?;
 
-    if !x.is_finite() || !mean.is_finite() || !stdev.is_finite() || stdev <= 0.0 {
-        return Err(CellError::Num);
-    }
+        if !x.is_finite() || !mean.is_finite() || !stdev.is_finite() || stdev <= 0.0 {
+            return Err(CellError::Num);
+        }
 
-    let z = (x - mean) / stdev;
-    if cumulative {
-        finite_or_num(0.5 * (1.0 + erf_approx(z / SQRT_2)))
-    } else {
-        finite_or_num((-0.5 * z * z).exp() / (stdev * SQRT_2PI))
-    }
+        let z = (x - mean) / stdev;
+        if cumulative {
+            finite_or_num(0.5 * (1.0 + erf_approx(z / SQRT_2)))
+        } else {
+            finite_or_num((-0.5 * z * z).exp() / (stdev * SQRT_2PI))
+        }
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// Standard normal inverse CDF (quantile function).
@@ -172,26 +175,29 @@ fn norm_inv_standard(p: f64) -> f64 {
 /// use xlstream_core::Value;
 /// use xlstream_eval::builtins::statistical::builtin_norm_inv;
 /// let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(1.0)];
-/// let result = builtin_norm_inv(&args).unwrap();
+/// let Value::Number(result) = builtin_norm_inv(&args) else { panic!("expected Number") };
 /// assert!(result.abs() < 1e-9);
 /// ```
-pub fn builtin_norm_inv(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 3 {
-        return Err(CellError::Value);
-    }
-    let p = num_arg_ce(args, 0)?;
-    let mean = num_arg_ce(args, 1)?;
-    let stdev = num_arg_ce(args, 2)?;
+pub fn builtin_norm_inv(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 3 {
+            return Err(CellError::Value);
+        }
+        let p = num_arg_ce(args, 0)?;
+        let mean = num_arg_ce(args, 1)?;
+        let stdev = num_arg_ce(args, 2)?;
 
-    if !mean.is_finite() || !stdev.is_finite() || stdev <= 0.0 {
-        return Err(CellError::Num);
-    }
-    if !p.is_finite() || p <= 0.0 || p >= 1.0 {
-        return Err(CellError::Num);
-    }
+        if !mean.is_finite() || !stdev.is_finite() || stdev <= 0.0 {
+            return Err(CellError::Num);
+        }
+        if !p.is_finite() || p <= 0.0 || p >= 1.0 {
+            return Err(CellError::Num);
+        }
 
-    let z = norm_inv_standard(p);
-    finite_or_num(mean + stdev * z)
+        let z = norm_inv_standard(p);
+        finite_or_num(mean + stdev * z)
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// `NORM.S.DIST(z, cumulative)` — standard normal distribution (mean=0, stdev=1).
@@ -207,24 +213,27 @@ pub fn builtin_norm_inv(args: &[Value]) -> Result<f64, CellError> {
 /// use xlstream_eval::builtins::statistical::builtin_norm_s_dist;
 /// use xlstream_core::Value;
 /// let args = [Value::Number(0.0), Value::Bool(true)];
-/// let result = builtin_norm_s_dist(&args).unwrap();
+/// let Value::Number(result) = builtin_norm_s_dist(&args) else { panic!("expected Number") };
 /// assert!((result - 0.5).abs() < 1e-6);
 /// ```
-pub fn builtin_norm_s_dist(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 2 {
-        return Err(CellError::Value);
-    }
-    let z = num_arg_ce(args, 0)?;
-    let cumulative = bool_arg_ce(args, 1)?;
-    if !z.is_finite() {
-        return Err(CellError::Num);
-    }
-    let result = if cumulative {
-        0.5 * (1.0 + erf_approx(z / SQRT_2))
-    } else {
-        (-0.5 * z * z).exp() / SQRT_2PI
-    };
-    finite_or_num(result)
+pub fn builtin_norm_s_dist(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 2 {
+            return Err(CellError::Value);
+        }
+        let z = num_arg_ce(args, 0)?;
+        let cumulative = bool_arg_ce(args, 1)?;
+        if !z.is_finite() {
+            return Err(CellError::Num);
+        }
+        let result = if cumulative {
+            0.5 * (1.0 + erf_approx(z / SQRT_2))
+        } else {
+            (-0.5 * z * z).exp() / SQRT_2PI
+        };
+        finite_or_num(result)
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// `NORM.S.INV(probability)` — inverse standard normal CDF.
@@ -243,18 +252,21 @@ pub fn builtin_norm_s_dist(args: &[Value]) -> Result<f64, CellError> {
 /// use xlstream_eval::builtins::statistical::builtin_norm_s_inv;
 /// use xlstream_core::Value;
 /// let args = [Value::Number(0.5)];
-/// let result = builtin_norm_s_inv(&args).unwrap();
+/// let Value::Number(result) = builtin_norm_s_inv(&args) else { panic!("expected Number") };
 /// assert!(result.abs() < 1e-9);
 /// ```
-pub fn builtin_norm_s_inv(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 1 {
-        return Err(CellError::Value);
-    }
-    let p = num_arg_ce(args, 0)?;
-    if !p.is_finite() || p <= 0.0 || p >= 1.0 {
-        return Err(CellError::Num);
-    }
-    finite_or_num(norm_inv_standard(p))
+pub fn builtin_norm_s_inv(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 1 {
+            return Err(CellError::Value);
+        }
+        let p = num_arg_ce(args, 0)?;
+        if !p.is_finite() || p <= 0.0 || p >= 1.0 {
+            return Err(CellError::Num);
+        }
+        finite_or_num(norm_inv_standard(p))
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// Extract numeric values from a `&[Value]` slice using range semantics.
@@ -1117,39 +1129,42 @@ pub fn expon_dist(x: f64, lambda: f64, cumulative: bool) -> Result<f64, CellErro
 /// use xlstream_core::Value;
 /// use xlstream_eval::builtins::statistical::builtin_poisson_dist;
 /// let args = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
-/// let result = builtin_poisson_dist(&args).unwrap();
+/// let Value::Number(result) = builtin_poisson_dist(&args) else { panic!("expected Number") };
 /// assert!((result - 0.140374).abs() < 1e-5);
 /// ```
-pub fn builtin_poisson_dist(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 3 {
-        return Err(CellError::Value);
-    }
-    let x_raw = coerce::to_number(&args[0])?;
-    let mean = coerce::to_number(&args[1])?;
-    let cumulative = coerce::to_bool(&args[2])?;
+pub fn builtin_poisson_dist(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 3 {
+            return Err(CellError::Value);
+        }
+        let x_raw = coerce::to_number(&args[0])?;
+        let mean = coerce::to_number(&args[1])?;
+        let cumulative = coerce::to_bool(&args[2])?;
 
-    if !x_raw.is_finite() || !mean.is_finite() {
-        return Err(CellError::Num);
-    }
+        if !x_raw.is_finite() || !mean.is_finite() {
+            return Err(CellError::Num);
+        }
 
-    #[allow(clippy::cast_possible_truncation)]
-    let k = x_raw.trunc() as i64;
-    if k < 0 || mean < 0.0 {
-        return Err(CellError::Num);
-    }
+        #[allow(clippy::cast_possible_truncation)]
+        let k = x_raw.trunc() as i64;
+        if k < 0 || mean < 0.0 {
+            return Err(CellError::Num);
+        }
 
-    #[allow(clippy::cast_precision_loss)]
-    let kf = k as f64;
+        #[allow(clippy::cast_precision_loss)]
+        let kf = k as f64;
 
-    if mean == 0.0 {
-        return if k == 0 { Ok(1.0) } else { Ok(0.0) };
-    }
+        if mean == 0.0 {
+            return if k == 0 { Ok(1.0) } else { Ok(0.0) };
+        }
 
-    if cumulative {
-        poisson_cdf(kf, mean)
-    } else {
-        poisson_pmf(kf, mean)
-    }
+        if cumulative {
+            poisson_cdf(kf, mean)
+        } else {
+            poisson_pmf(kf, mean)
+        }
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// PMF: `P(X=k) = exp(−λ + k·ln(λ) − ln_gamma(k+1))`
@@ -1487,46 +1502,49 @@ fn binom_pmf(k: f64, n: f64, p: f64) -> f64 {
 /// use xlstream_core::Value;
 /// use xlstream_eval::builtins::statistical::builtin_binom_dist;
 /// let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-/// let result = builtin_binom_dist(&args).unwrap();
+/// let Value::Number(result) = builtin_binom_dist(&args) else { panic!("expected Number") };
 /// assert!((result - 0.246_093_75).abs() < 1e-9);
 /// ```
-pub fn builtin_binom_dist(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 4 {
-        return Err(CellError::Value);
-    }
-    let k = coerce::to_number(&args[0])?;
-    let n = coerce::to_number(&args[1])?;
-    let p = coerce::to_number(&args[2])?;
-    let cumulative = coerce::to_bool(&args[3])?;
-
-    if !k.is_finite() || !n.is_finite() || !p.is_finite() {
-        return Err(CellError::Num);
-    }
-
-    let k = k.trunc();
-    let n = n.trunc();
-
-    if !(0.0..=MAX_BINOM_TRIALS).contains(&n) || k < 0.0 || k > n {
-        return Err(CellError::Num);
-    }
-    if !(0.0..=1.0).contains(&p) {
-        return Err(CellError::Num);
-    }
-
-    if cumulative {
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let k_int = k as u64;
-        let mut cdf = 0.0;
-        for i in 0..=k_int {
-            #[allow(clippy::cast_precision_loss)]
-            let fi = i as f64;
-            cdf += binom_pmf(fi, n, p);
+pub fn builtin_binom_dist(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 4 {
+            return Err(CellError::Value);
         }
-        // Guard floating-point accumulation drift past 1.0
-        finite_or_num(cdf.min(1.0))
-    } else {
-        finite_or_num(binom_pmf(k, n, p))
-    }
+        let k = coerce::to_number(&args[0])?;
+        let n = coerce::to_number(&args[1])?;
+        let p = coerce::to_number(&args[2])?;
+        let cumulative = coerce::to_bool(&args[3])?;
+
+        if !k.is_finite() || !n.is_finite() || !p.is_finite() {
+            return Err(CellError::Num);
+        }
+
+        let k = k.trunc();
+        let n = n.trunc();
+
+        if !(0.0..=MAX_BINOM_TRIALS).contains(&n) || k < 0.0 || k > n {
+            return Err(CellError::Num);
+        }
+        if !(0.0..=1.0).contains(&p) {
+            return Err(CellError::Num);
+        }
+
+        if cumulative {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let k_int = k as u64;
+            let mut cdf = 0.0;
+            for i in 0..=k_int {
+                #[allow(clippy::cast_precision_loss)]
+                let fi = i as f64;
+                cdf += binom_pmf(fi, n, p);
+            }
+            // Guard floating-point accumulation drift past 1.0
+            finite_or_num(cdf.min(1.0))
+        } else {
+            finite_or_num(binom_pmf(k, n, p))
+        }
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// `BINOM.INV(trials, probability_s, alpha)` — inverse binomial distribution.
@@ -1550,45 +1568,48 @@ pub fn builtin_binom_dist(args: &[Value]) -> Result<f64, CellError> {
 /// use xlstream_core::Value;
 /// use xlstream_eval::builtins::statistical::builtin_binom_inv;
 /// let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5)];
-/// let result = builtin_binom_inv(&args).unwrap();
+/// let Value::Number(result) = builtin_binom_inv(&args) else { panic!("expected Number") };
 /// assert!((result - 5.0).abs() < f64::EPSILON);
 /// ```
-pub fn builtin_binom_inv(args: &[Value]) -> Result<f64, CellError> {
-    if args.len() != 3 {
-        return Err(CellError::Value);
-    }
-    let n = coerce::to_number(&args[0])?;
-    let p = coerce::to_number(&args[1])?;
-    let alpha = coerce::to_number(&args[2])?;
-
-    if !n.is_finite() || !p.is_finite() || !alpha.is_finite() {
-        return Err(CellError::Num);
-    }
-
-    let n = n.trunc();
-
-    if !(0.0..=MAX_BINOM_TRIALS).contains(&n) {
-        return Err(CellError::Num);
-    }
-    if !(0.0..=1.0).contains(&p) {
-        return Err(CellError::Num);
-    }
-    if alpha <= 0.0 || alpha > 1.0 {
-        return Err(CellError::Num);
-    }
-
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let n_int = n as u64;
-    let mut cdf = 0.0;
-    for k in 0..=n_int {
-        #[allow(clippy::cast_precision_loss)]
-        let fk = k as f64;
-        cdf += binom_pmf(fk, n, p);
-        if cdf >= alpha {
-            return finite_or_num(fk);
+pub fn builtin_binom_inv(args: &[Value]) -> Value {
+    (|| -> Result<f64, CellError> {
+        if args.len() != 3 {
+            return Err(CellError::Value);
         }
-    }
-    finite_or_num(n)
+        let n = coerce::to_number(&args[0])?;
+        let p = coerce::to_number(&args[1])?;
+        let alpha = coerce::to_number(&args[2])?;
+
+        if !n.is_finite() || !p.is_finite() || !alpha.is_finite() {
+            return Err(CellError::Num);
+        }
+
+        let n = n.trunc();
+
+        if !(0.0..=MAX_BINOM_TRIALS).contains(&n) {
+            return Err(CellError::Num);
+        }
+        if !(0.0..=1.0).contains(&p) {
+            return Err(CellError::Num);
+        }
+        if alpha <= 0.0 || alpha > 1.0 {
+            return Err(CellError::Num);
+        }
+
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let n_int = n as u64;
+        let mut cdf = 0.0;
+        for k in 0..=n_int {
+            #[allow(clippy::cast_precision_loss)]
+            let fk = k as f64;
+            cdf += binom_pmf(fk, n, p);
+            if cdf >= alpha {
+                return finite_or_num(fk);
+            }
+        }
+        finite_or_num(n)
+    })()
+    .map_or_else(Value::Error, Value::Number)
 }
 
 /// Intermediate sums for linear regression on paired (x, y) data.
@@ -2996,55 +3017,97 @@ mod tests {
     #[test]
     fn poisson_pmf_typical() {
         let args = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), 0.140_373_895_814_280_5);
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.140_373_895_814_280_5,
+        );
     }
 
     #[test]
     fn poisson_cdf_typical() {
         let args = [Value::Number(3.0), Value::Number(5.0), Value::Bool(true)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), 0.265_025_915_297_842_7);
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.265_025_915_297_842_7,
+        );
     }
 
     #[test]
     fn poisson_pmf_zero() {
         let args = [Value::Number(0.0), Value::Number(5.0), Value::Bool(false)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), (-5.0_f64).exp());
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            (-5.0_f64).exp(),
+        );
     }
 
     #[test]
     fn poisson_cdf_zero() {
         let args = [Value::Number(0.0), Value::Number(5.0), Value::Bool(true)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), (-5.0_f64).exp());
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            (-5.0_f64).exp(),
+        );
     }
 
     #[test]
     fn poisson_pmf_equals_mean() {
         let args = [Value::Number(5.0), Value::Number(5.0), Value::Bool(false)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), 0.175_467_369_767_850_74);
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.175_467_369_767_850_74,
+        );
     }
 
     #[test]
     fn poisson_mean_zero_x_zero() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Bool(false)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
     fn poisson_mean_zero_x_zero_cdf() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Bool(true)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
     fn poisson_x_negative_returns_num() {
         let args = [Value::Number(-1.0), Value::Number(5.0), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn poisson_mean_negative_returns_num() {
         let args = [Value::Number(3.0), Value::Number(-1.0), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
@@ -3052,59 +3115,65 @@ mod tests {
         let args_frac = [Value::Number(3.7), Value::Number(5.0), Value::Bool(false)];
         let args_int = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
         assert_close(
-            builtin_poisson_dist(&args_frac).unwrap(),
-            builtin_poisson_dist(&args_int).unwrap(),
+            match builtin_poisson_dist(&args_frac) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            match builtin_poisson_dist(&args_int) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
         );
     }
 
     #[test]
     fn poisson_large_mean() {
         let args = [Value::Number(100.0), Value::Number(100.0), Value::Bool(true)];
-        let result = builtin_poisson_dist(&args).unwrap();
+        let Value::Number(result) = builtin_poisson_dist(&args) else { panic!("expected Number") };
         assert!(result > 0.0 && result <= 1.0);
     }
 
     #[test]
     fn poisson_large_x() {
         let args = [Value::Number(200.0), Value::Number(100.0), Value::Bool(true)];
-        let result = builtin_poisson_dist(&args).unwrap();
+        let Value::Number(result) = builtin_poisson_dist(&args) else { panic!("expected Number") };
         assert!((result - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn poisson_propagates_error() {
         let args = [Value::Error(CellError::Na), Value::Number(5.0), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Na);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Na));
     }
 
     #[test]
     fn poisson_wrong_arg_count() {
         let args = [Value::Number(3.0), Value::Number(5.0)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Value));
     }
 
     #[test]
     fn poisson_nan_x_returns_num() {
         let args = [Value::Number(f64::NAN), Value::Number(5.0), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn poisson_infinity_x_returns_num() {
         let args = [Value::Number(f64::INFINITY), Value::Number(5.0), Value::Bool(true)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn poisson_nan_mean_returns_num() {
         let args = [Value::Number(3.0), Value::Number(f64::NAN), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn poisson_infinity_mean_returns_num() {
         let args = [Value::Number(3.0), Value::Number(f64::INFINITY), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
@@ -3112,8 +3181,14 @@ mod tests {
         let args = [Value::Text("3".into()), Value::Number(5.0), Value::Bool(false)];
         let expected = [Value::Number(3.0), Value::Number(5.0), Value::Bool(false)];
         assert_close(
-            builtin_poisson_dist(&args).unwrap(),
-            builtin_poisson_dist(&expected).unwrap(),
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            match builtin_poisson_dist(&expected) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
         );
     }
 
@@ -3122,8 +3197,14 @@ mod tests {
         let args = [Value::Number(0.0), Value::Bool(true), Value::Bool(false)];
         let expected = [Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
         assert_close(
-            builtin_poisson_dist(&args).unwrap(),
-            builtin_poisson_dist(&expected).unwrap(),
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            match builtin_poisson_dist(&expected) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
         );
     }
 
@@ -3132,21 +3213,33 @@ mod tests {
         let args = [Value::Number(3.0), Value::Number(5.0), Value::Number(1.0)];
         let expected = [Value::Number(3.0), Value::Number(5.0), Value::Bool(true)];
         assert_close(
-            builtin_poisson_dist(&args).unwrap(),
-            builtin_poisson_dist(&expected).unwrap(),
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            match builtin_poisson_dist(&expected) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
         );
     }
 
     #[test]
     fn poisson_non_numeric_text_returns_value() {
         let args = [Value::Text("abc".into()), Value::Number(5.0), Value::Bool(false)];
-        assert_eq!(builtin_poisson_dist(&args).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_poisson_dist(&args), Value::Error(CellError::Value));
     }
 
     #[test]
     fn poisson_very_large_x_cdf_returns_one() {
         let args = [Value::Number(1e7), Value::Number(100.0), Value::Bool(true)];
-        assert_close(builtin_poisson_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_poisson_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     // ===== ln_gamma =====
@@ -3522,34 +3615,64 @@ mod tests {
     fn binom_dist_pmf_fair_coin() {
         let args =
             [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.246_093_75);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.246_093_75,
+        );
     }
 
     #[test]
     fn binom_dist_cdf_fair_coin() {
         let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(true)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.623_046_875);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.623_046_875,
+        );
     }
 
     #[test]
     fn binom_dist_pmf_zero_successes() {
         let args =
             [Value::Number(0.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.000_976_562_5);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.000_976_562_5,
+        );
     }
 
     #[test]
     fn binom_dist_pmf_all_successes() {
         let args =
             [Value::Number(10.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.000_976_562_5);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.000_976_562_5,
+        );
     }
 
     #[test]
     fn binom_dist_pmf_different_probability() {
         let args =
             [Value::Number(3.0), Value::Number(10.0), Value::Number(0.3), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.266_827_932);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.266_827_932,
+        );
     }
 
     // ===== BINOM.DIST — edge cases =====
@@ -3558,53 +3681,101 @@ mod tests {
     fn binom_dist_p_zero_pmf_at_zero() {
         let args =
             [Value::Number(0.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
     fn binom_dist_p_zero_pmf_at_nonzero() {
         let args =
             [Value::Number(5.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     #[test]
     fn binom_dist_p_zero_cdf() {
         let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.0), Value::Bool(true)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
     fn binom_dist_p_one_pmf_at_n() {
         let args =
             [Value::Number(10.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
     fn binom_dist_p_one_pmf_below_n() {
         let args =
             [Value::Number(5.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     #[test]
     fn binom_dist_p_one_cdf_below_n() {
         let args = [Value::Number(5.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(true)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     #[test]
     fn binom_dist_p_one_cdf_at_n() {
         let args =
             [Value::Number(10.0), Value::Number(10.0), Value::Number(1.0), Value::Bool(true)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
     fn binom_dist_trials_zero() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 1.0);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            1.0,
+        );
     }
 
     #[test]
@@ -3613,7 +3784,16 @@ mod tests {
             [Value::Number(3.7), Value::Number(10.0), Value::Number(0.3), Value::Bool(false)];
         let args_trunc =
             [Value::Number(3.0), Value::Number(10.0), Value::Number(0.3), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), builtin_binom_dist(&args_trunc).unwrap());
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            match builtin_binom_dist(&args_trunc) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+        );
     }
 
     // ===== BINOM.DIST — error cases =====
@@ -3622,35 +3802,35 @@ mod tests {
     fn binom_dist_k_negative_returns_num() {
         let args =
             [Value::Number(-1.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_dist_k_exceeds_n_returns_num() {
         let args =
             [Value::Number(11.0), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_dist_p_negative_returns_num() {
         let args =
             [Value::Number(5.0), Value::Number(10.0), Value::Number(-0.1), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_dist_p_above_one_returns_num() {
         let args =
             [Value::Number(5.0), Value::Number(10.0), Value::Number(1.1), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_dist_n_negative_returns_num() {
         let args =
             [Value::Number(0.0), Value::Number(-1.0), Value::Number(0.5), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
@@ -3661,7 +3841,7 @@ mod tests {
             Value::Number(0.5),
             Value::Bool(false),
         ];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     // ===== BINOM.DIST — NaN/Infinity =====
@@ -3670,21 +3850,21 @@ mod tests {
     fn binom_dist_nan_k_returns_num() {
         let args =
             [Value::Number(f64::NAN), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_dist_nan_n_returns_num() {
         let args =
             [Value::Number(0.0), Value::Number(f64::NAN), Value::Number(0.5), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_dist_nan_p_returns_num() {
         let args =
             [Value::Number(0.0), Value::Number(10.0), Value::Number(f64::NAN), Value::Bool(false)];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
@@ -3695,7 +3875,7 @@ mod tests {
             Value::Number(0.5),
             Value::Bool(false),
         ];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Num));
     }
 
     // ===== BINOM.DIST — coercion =====
@@ -3704,19 +3884,37 @@ mod tests {
     fn binom_dist_text_numeric_coerces() {
         let args =
             [Value::Text("5".into()), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.246_093_75);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.246_093_75,
+        );
     }
 
     #[test]
     fn binom_dist_bool_coerces() {
         let args = [Value::Bool(true), Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.009_765_625);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.009_765_625,
+        );
     }
 
     #[test]
     fn binom_dist_empty_coerces_to_zero() {
         let args = [Value::Empty, Value::Number(10.0), Value::Number(0.5), Value::Bool(false)];
-        assert_close(builtin_binom_dist(&args).unwrap(), 0.000_976_562_5);
+        assert_close(
+            match builtin_binom_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.000_976_562_5,
+        );
     }
 
     // ===== BINOM.DIST — type mismatch =====
@@ -3729,7 +3927,7 @@ mod tests {
             Value::Number(0.5),
             Value::Bool(false),
         ];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Value));
     }
 
     // ===== BINOM.DIST — error propagation =====
@@ -3742,7 +3940,7 @@ mod tests {
             Value::Number(0.5),
             Value::Bool(false),
         ];
-        assert_eq!(builtin_binom_dist(&args).unwrap_err(), CellError::Na);
+        assert_eq!(builtin_binom_dist(&args), Value::Error(CellError::Na));
     }
 
     // ===== BINOM.DIST — arg count =====
@@ -3750,7 +3948,7 @@ mod tests {
     #[test]
     fn binom_dist_wrong_arg_count() {
         let too_few = [Value::Number(5.0), Value::Number(10.0), Value::Number(0.5)];
-        assert_eq!(builtin_binom_dist(&too_few).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_binom_dist(&too_few), Value::Error(CellError::Value));
 
         let too_many = [
             Value::Number(5.0),
@@ -3759,7 +3957,7 @@ mod tests {
             Value::Bool(false),
             Value::Number(1.0),
         ];
-        assert_eq!(builtin_binom_dist(&too_many).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_binom_dist(&too_many), Value::Error(CellError::Value));
     }
 
     // ===== BINOM.INV — happy path =====
@@ -3767,25 +3965,49 @@ mod tests {
     #[test]
     fn binom_inv_fair_coin() {
         let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 5.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            5.0,
+        );
     }
 
     #[test]
     fn binom_inv_alpha_near_zero() {
         let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.000_5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 0.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     #[test]
     fn binom_inv_different_probability() {
         let args = [Value::Number(10.0), Value::Number(0.3), Value::Number(0.5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 3.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            3.0,
+        );
     }
 
     #[test]
     fn binom_inv_alpha_one_returns_n() {
         let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(1.0)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 10.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            10.0,
+        );
     }
 
     // ===== BINOM.INV — edge cases =====
@@ -3793,19 +4015,37 @@ mod tests {
     #[test]
     fn binom_inv_p_zero() {
         let args = [Value::Number(10.0), Value::Number(0.0), Value::Number(0.5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 0.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     #[test]
     fn binom_inv_p_one() {
         let args = [Value::Number(10.0), Value::Number(1.0), Value::Number(0.5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 10.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            10.0,
+        );
     }
 
     #[test]
     fn binom_inv_n_zero() {
         let args = [Value::Number(0.0), Value::Number(0.5), Value::Number(0.5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 0.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     // ===== BINOM.INV — error cases =====
@@ -3813,37 +4053,37 @@ mod tests {
     #[test]
     fn binom_inv_alpha_zero_returns_num() {
         let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(0.0)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_alpha_above_one_returns_num() {
         let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(1.1)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_n_negative_returns_num() {
         let args = [Value::Number(-1.0), Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_p_negative_returns_num() {
         let args = [Value::Number(10.0), Value::Number(-0.1), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_p_above_one_returns_num() {
         let args = [Value::Number(10.0), Value::Number(1.1), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_n_exceeds_max_returns_num() {
         let args = [Value::Number(MAX_BINOM_TRIALS + 1.0), Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     // ===== BINOM.INV — NaN/Infinity =====
@@ -3851,25 +4091,25 @@ mod tests {
     #[test]
     fn binom_inv_nan_n_returns_num() {
         let args = [Value::Number(f64::NAN), Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_nan_p_returns_num() {
         let args = [Value::Number(10.0), Value::Number(f64::NAN), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_nan_alpha_returns_num() {
         let args = [Value::Number(10.0), Value::Number(0.5), Value::Number(f64::NAN)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn binom_inv_infinity_n_returns_num() {
         let args = [Value::Number(f64::INFINITY), Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Num));
     }
 
     // ===== BINOM.INV — coercion =====
@@ -3877,7 +4117,13 @@ mod tests {
     #[test]
     fn binom_inv_text_numeric_coerces() {
         let args = [Value::Text("10".into()), Value::Number(0.5), Value::Number(0.5)];
-        assert_close(builtin_binom_inv(&args).unwrap(), 5.0);
+        assert_close(
+            match builtin_binom_inv(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            5.0,
+        );
     }
 
     // ===== BINOM.INV — type mismatch =====
@@ -3885,7 +4131,7 @@ mod tests {
     #[test]
     fn binom_inv_non_numeric_text_returns_value() {
         let args = [Value::Text("abc".into()), Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Value));
     }
 
     // ===== BINOM.INV — error propagation =====
@@ -3893,7 +4139,7 @@ mod tests {
     #[test]
     fn binom_inv_propagates_error() {
         let args = [Value::Error(CellError::Na), Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&args).unwrap_err(), CellError::Na);
+        assert_eq!(builtin_binom_inv(&args), Value::Error(CellError::Na));
     }
 
     // ===== BINOM.INV — arg count =====
@@ -3901,11 +4147,11 @@ mod tests {
     #[test]
     fn binom_inv_wrong_arg_count() {
         let too_few = [Value::Number(10.0), Value::Number(0.5)];
-        assert_eq!(builtin_binom_inv(&too_few).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_binom_inv(&too_few), Value::Error(CellError::Value));
 
         let too_many =
             [Value::Number(10.0), Value::Number(0.5), Value::Number(0.5), Value::Number(1.0)];
-        assert_eq!(builtin_binom_inv(&too_many).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_binom_inv(&too_many), Value::Error(CellError::Value));
     }
 
     // ===== erf_approx =====
@@ -3944,28 +4190,34 @@ mod tests {
     #[test]
     fn norm_dist_cdf_at_mean() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn norm_dist_cdf_positive_z() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.841_344_746_068_543).abs() < 1e-6);
     }
 
     #[test]
     fn norm_dist_cdf_negative_z() {
         let args = [Value::Number(-1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.158_655_253_931_457).abs() < 1e-6);
     }
 
     #[test]
     fn norm_dist_pdf_at_mean() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
-        assert_close(builtin_norm_dist(&args).unwrap(), 0.398_942_280_401_433);
+        assert_close(
+            match builtin_norm_dist(&args) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.398_942_280_401_433,
+        );
     }
 
     #[test]
@@ -3974,8 +4226,8 @@ mod tests {
             [Value::Number(-1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
         let right =
             [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
-        let l = builtin_norm_dist(&left).unwrap();
-        let r = builtin_norm_dist(&right).unwrap();
+        let Value::Number(l) = builtin_norm_dist(&left) else { panic!("expected Number") };
+        let Value::Number(r) = builtin_norm_dist(&right) else { panic!("expected Number") };
         assert_close(l, r);
     }
 
@@ -3983,33 +4235,33 @@ mod tests {
     fn norm_dist_nonstandard_mean_stdev() {
         let args =
             [Value::Number(42.0), Value::Number(40.0), Value::Number(1.5), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.908_788_780_274_132).abs() < 1e-6);
     }
 
     #[test]
     fn norm_dist_stdev_zero_returns_num() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(0.0), Value::Bool(true)];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_dist_stdev_negative_returns_num() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(-1.0), Value::Bool(true)];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_dist_large_z_cdf_near_one() {
         let args = [Value::Number(5.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!(v > 0.999_999);
     }
 
     #[test]
     fn norm_dist_large_negative_z_cdf_near_zero() {
         let args = [Value::Number(-5.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!(v < 0.000_001);
     }
 
@@ -4021,26 +4273,26 @@ mod tests {
             Value::Number(1.0),
             Value::Bool(true),
         ];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Na));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Na));
     }
 
     #[test]
     fn norm_dist_wrong_arg_count_returns_value() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Value));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Value));
     }
 
     #[test]
     fn norm_dist_cumulative_true_gives_cdf() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!(v > 0.5 && v < 1.0);
     }
 
     #[test]
     fn norm_dist_cumulative_false_gives_pdf() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0), Value::Bool(false)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!(v > 0.0 && v < 0.5);
     }
 
@@ -4048,7 +4300,7 @@ mod tests {
     fn norm_dist_nan_input_returns_num() {
         let args =
             [Value::Number(f64::NAN), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
@@ -4059,7 +4311,7 @@ mod tests {
             Value::Number(1.0),
             Value::Bool(true),
         ];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
@@ -4070,21 +4322,21 @@ mod tests {
             Value::Number(f64::INFINITY),
             Value::Bool(true),
         ];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_dist_coerces_text_to_number() {
         let args =
             [Value::Text("0".into()), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn norm_dist_coerces_number_to_bool_cumulative() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)];
-        let v = builtin_norm_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.5).abs() < 1e-6);
     }
 
@@ -4092,7 +4344,7 @@ mod tests {
     fn norm_dist_text_mismatch_returns_value() {
         let args =
             [Value::Text("abc".into()), Value::Number(0.0), Value::Number(1.0), Value::Bool(true)];
-        assert_eq!(builtin_norm_dist(&args), Err(CellError::Value));
+        assert_eq!(builtin_norm_dist(&args), Value::Error(CellError::Value));
     }
 
     // ===== NORM.INV =====
@@ -4100,7 +4352,7 @@ mod tests {
     #[test]
     fn norm_inv_median() {
         let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(1.0)];
-        let v = builtin_norm_inv(&args).unwrap();
+        let Value::Number(v) = builtin_norm_inv(&args) else { panic!("expected Number") };
         assert!(v.abs() < 1e-6);
     }
 
@@ -4111,111 +4363,113 @@ mod tests {
         let stdev = 3.0;
         let cdf_args =
             [Value::Number(x), Value::Number(mean), Value::Number(stdev), Value::Bool(true)];
-        let p = builtin_norm_dist(&cdf_args).unwrap();
+        let Value::Number(p) = builtin_norm_dist(&cdf_args) else { panic!("expected Number") };
         let inv_args = [Value::Number(p), Value::Number(mean), Value::Number(stdev)];
-        let recovered = builtin_norm_inv(&inv_args).unwrap();
+        let Value::Number(recovered) = builtin_norm_inv(&inv_args) else {
+            panic!("expected Number")
+        };
         assert!((recovered - x).abs() < 1e-6, "round-trip failed: {recovered} != {x}");
     }
 
     #[test]
     fn norm_inv_nonstandard_mean() {
         let args = [Value::Number(0.5), Value::Number(100.0), Value::Number(15.0)];
-        let v = builtin_norm_inv(&args).unwrap();
+        let Value::Number(v) = builtin_norm_inv(&args) else { panic!("expected Number") };
         assert!((v - 100.0).abs() < 1e-6);
     }
 
     #[test]
     fn norm_inv_lower_tail() {
         let args = [Value::Number(0.025), Value::Number(0.0), Value::Number(1.0)];
-        let v = builtin_norm_inv(&args).unwrap();
+        let Value::Number(v) = builtin_norm_inv(&args) else { panic!("expected Number") };
         assert!((v - (-1.959_963_984_540_054)).abs() < 1e-6);
     }
 
     #[test]
     fn norm_inv_upper_tail() {
         let args = [Value::Number(0.975), Value::Number(0.0), Value::Number(1.0)];
-        let v = builtin_norm_inv(&args).unwrap();
+        let Value::Number(v) = builtin_norm_inv(&args) else { panic!("expected Number") };
         assert!((v - 1.959_963_984_540_054).abs() < 1e-6);
     }
 
     #[test]
     fn norm_inv_p_zero_returns_num() {
         let args = [Value::Number(0.0), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_p_one_returns_num() {
         let args = [Value::Number(1.0), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_p_negative_returns_num() {
         let args = [Value::Number(-0.1), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_p_above_one_returns_num() {
         let args = [Value::Number(1.5), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_stdev_zero_returns_num() {
         let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(0.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_stdev_negative_returns_num() {
         let args = [Value::Number(0.5), Value::Number(0.0), Value::Number(-1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_propagates_error() {
         let args = [Value::Error(CellError::Na), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Na));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Na));
     }
 
     #[test]
     fn norm_inv_wrong_arg_count_returns_value() {
         let args = [Value::Number(0.5), Value::Number(0.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Value));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Value));
     }
 
     #[test]
     fn norm_inv_upper_tail_high_p() {
         let args = [Value::Number(0.999), Value::Number(0.0), Value::Number(1.0)];
-        let v = builtin_norm_inv(&args).unwrap();
+        let Value::Number(v) = builtin_norm_inv(&args) else { panic!("expected Number") };
         assert!((v - 3.090_232_306_167_814).abs() < 1e-6);
     }
 
     #[test]
     fn norm_inv_nan_p_returns_num() {
         let args = [Value::Number(f64::NAN), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_mean_infinity_returns_num() {
         let args = [Value::Number(0.5), Value::Number(f64::INFINITY), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Num));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_inv_coerces_text_to_number() {
         let args = [Value::Text("0.5".into()), Value::Number(0.0), Value::Number(1.0)];
-        let v = builtin_norm_inv(&args).unwrap();
+        let Value::Number(v) = builtin_norm_inv(&args) else { panic!("expected Number") };
         assert!(v.abs() < 1e-6);
     }
 
     #[test]
     fn norm_inv_text_mismatch_returns_value() {
         let args = [Value::Text("abc".into()), Value::Number(0.0), Value::Number(1.0)];
-        assert_eq!(builtin_norm_inv(&args), Err(CellError::Value));
+        assert_eq!(builtin_norm_inv(&args), Value::Error(CellError::Value));
     }
 
     // ===== NORM.S.DIST =====
@@ -4223,103 +4477,121 @@ mod tests {
     #[test]
     fn norm_s_dist_cdf_zero() {
         let args = [Value::Number(0.0), Value::Bool(true)];
-        let v = builtin_norm_s_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_s_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.5).abs() < 1e-6, "expected ~0.5, got {v}");
     }
 
     #[test]
     fn norm_s_dist_cdf_positive() {
         let args = [Value::Number(1.96), Value::Bool(true)];
-        let v = builtin_norm_s_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_s_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.975_002_104_859_2).abs() < 1e-6);
     }
 
     #[test]
     fn norm_s_dist_cdf_negative() {
         let args = [Value::Number(-1.96), Value::Bool(true)];
-        let v = builtin_norm_s_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_s_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.024_997_895_148_08).abs() < 1e-6);
     }
 
     #[test]
     fn norm_s_dist_pdf_zero() {
         let args = [Value::Number(0.0), Value::Bool(false)];
-        let v = builtin_norm_s_dist(&args).unwrap();
+        let Value::Number(v) = builtin_norm_s_dist(&args) else { panic!("expected Number") };
         assert!((v - 0.398_942_280_401_433).abs() < 1e-9);
     }
 
     #[test]
     fn norm_s_dist_large_z() {
         let args = [Value::Number(6.0), Value::Bool(true)];
-        assert!(builtin_norm_s_dist(&args).unwrap() > 0.999_999_999);
+        assert!(
+            match builtin_norm_s_dist(&args) {
+                Value::Number(n) => n,
+                _ => panic!("expected Number"),
+            } > 0.999_999_999
+        );
     }
 
     #[test]
     fn norm_s_dist_large_negative_z() {
         let args = [Value::Number(-6.0), Value::Bool(true)];
-        assert!(builtin_norm_s_dist(&args).unwrap() < 0.000_000_001);
+        assert!(
+            match builtin_norm_s_dist(&args) {
+                Value::Number(n) => n,
+                _ => panic!("expected Number"),
+            } < 0.000_000_001
+        );
     }
 
     #[test]
     fn norm_s_dist_propagates_error() {
         let args = [Value::Error(CellError::Na), Value::Bool(true)];
-        assert_eq!(builtin_norm_s_dist(&args).unwrap_err(), CellError::Na);
+        assert_eq!(builtin_norm_s_dist(&args), Value::Error(CellError::Na));
     }
 
     #[test]
     fn norm_s_dist_wrong_arg_count() {
-        assert_eq!(builtin_norm_s_dist(&[Value::Number(1.0)]).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_norm_s_dist(&[Value::Number(1.0)]), Value::Error(CellError::Value));
     }
 
     #[test]
     fn norm_s_dist_nan_z_returns_num() {
         let args = [Value::Number(f64::NAN), Value::Bool(true)];
-        assert_eq!(builtin_norm_s_dist(&args).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_norm_s_dist(&args), Value::Error(CellError::Num));
     }
 
     // ===== NORM.S.INV =====
 
     #[test]
     fn norm_s_inv_median() {
-        assert_close(builtin_norm_s_inv(&[Value::Number(0.5)]).unwrap(), 0.0);
+        assert_close(
+            match builtin_norm_s_inv(&[Value::Number(0.5)]) {
+                Value::Number(n) => n,
+                other => panic!("expected Number, got {other:?}"),
+            },
+            0.0,
+        );
     }
 
     #[test]
     fn norm_s_inv_upper_tail() {
-        let v = builtin_norm_s_inv(&[Value::Number(0.975)]).unwrap();
+        let Value::Number(v) = builtin_norm_s_inv(&[Value::Number(0.975)]) else {
+            panic!("expected Number")
+        };
         assert!((v - 1.959_963_984_540_054).abs() < 1e-5);
     }
 
     #[test]
     fn norm_s_inv_p_zero_returns_num() {
-        assert_eq!(builtin_norm_s_inv(&[Value::Number(0.0)]).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_norm_s_inv(&[Value::Number(0.0)]), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_s_inv_p_one_returns_num() {
-        assert_eq!(builtin_norm_s_inv(&[Value::Number(1.0)]).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_norm_s_inv(&[Value::Number(1.0)]), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_s_inv_p_negative_returns_num() {
-        assert_eq!(builtin_norm_s_inv(&[Value::Number(-0.5)]).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_norm_s_inv(&[Value::Number(-0.5)]), Value::Error(CellError::Num));
     }
 
     #[test]
     fn norm_s_inv_propagates_error() {
         let args = [Value::Error(CellError::Na)];
-        assert_eq!(builtin_norm_s_inv(&args).unwrap_err(), CellError::Na);
+        assert_eq!(builtin_norm_s_inv(&args), Value::Error(CellError::Na));
     }
 
     #[test]
     fn norm_s_inv_wrong_arg_count() {
         let args = [Value::Number(0.5), Value::Number(0.5)];
-        assert_eq!(builtin_norm_s_inv(&args).unwrap_err(), CellError::Value);
+        assert_eq!(builtin_norm_s_inv(&args), Value::Error(CellError::Value));
     }
 
     #[test]
     fn norm_s_inv_nan_p_returns_num() {
-        assert_eq!(builtin_norm_s_inv(&[Value::Number(f64::NAN)]).unwrap_err(), CellError::Num);
+        assert_eq!(builtin_norm_s_inv(&[Value::Number(f64::NAN)]), Value::Error(CellError::Num));
     }
 
     // ===== collect_paired_numerics =====

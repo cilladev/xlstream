@@ -26,15 +26,15 @@ fn resolve_subtotal_fn(raw: f64) -> Option<u8> {
 /// Dispatch a resolved `function_num` (1-11) against a collected value slice.
 fn dispatch_subtotal(fn_num: u8, values: &[Value]) -> Value {
     match fn_num {
-        1 => aggregate::average(values).unwrap_or_else(Value::Error),
-        2 => aggregate::count(values).unwrap_or_else(Value::Error),
-        3 => aggregate::counta(values).unwrap_or_else(Value::Error),
-        4 => aggregate::max(values).unwrap_or_else(Value::Error),
-        5 => aggregate::min(values).unwrap_or_else(Value::Error),
-        6 => aggregate::product(values).unwrap_or_else(Value::Error),
+        1 => aggregate::average(values),
+        2 => aggregate::count(values),
+        3 => aggregate::counta(values),
+        4 => aggregate::max(values),
+        5 => aggregate::min(values),
+        6 => aggregate::product(values),
         7 => statistical::stdev_s(values).map_or_else(Value::Error, Value::Number),
         8 => statistical::stdev_p(values).map_or_else(Value::Error, Value::Number),
-        9 => aggregate::sum(values).unwrap_or_else(Value::Error),
+        9 => aggregate::sum(values),
         10 => statistical::var_s(values).map_or_else(Value::Error, Value::Number),
         11 => statistical::var_p(values).map_or_else(Value::Error, Value::Number),
         _ => Value::Error(CellError::Value),
@@ -47,7 +47,7 @@ fn dispatch_subtotal(fn_num: u8, values: &[Value]) -> Value {
 fn dispatch_aggregate(fn_num: u8, values: &[Value]) -> Value {
     match fn_num {
         1..=11 => dispatch_subtotal(fn_num, values),
-        12 => aggregate::median(values).unwrap_or_else(Value::Error),
+        12 => aggregate::median(values),
         13 => statistical::mode_sngl(values).map_or_else(Value::Error, Value::Number),
         // 14-19 (LARGE, SMALL, PERCENTILE, QUARTILE) deferred to v0.4
         _ => Value::Error(CellError::Value),

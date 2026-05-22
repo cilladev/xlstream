@@ -15,17 +15,28 @@ use xlstream_parse::{FnCaps, FnCategory, FunctionMeta, NodeRef};
 use crate::interp::Interpreter;
 use crate::scope::RowScope;
 
-/// Uniform handler signature. Every builtin is callable through this type.
-pub(crate) type Handler = fn(&[NodeRef<'_>], &Interpreter<'_>, &RowScope<'_>) -> Value;
+/// How a function's arguments are prepared before calling.
+///
+/// Each variant carries the implementation fn pointer. The registry's
+/// [`dispatch`] function matches on this to handle arg preparation
+/// generically — eliminating per-function boilerplate wrappers.
+pub(crate) enum Dispatch {
+    /// Eagerly evaluate all args to `&[Value]`, then call.
+    Eager(fn(&[Value]) -> Value),
+    /// Expand + coerce args for aggregate semantics, then call.
+    Aggregate(fn(&[Value]) -> Value),
+    /// No arg prep — handler receives raw `&[NodeRef]` and does everything.
+    Custom(fn(&[NodeRef<'_>], &Interpreter<'_>, &RowScope<'_>) -> Value),
+}
 
-/// A single function's metadata plus its runtime handler.
+/// A single function's metadata plus its dispatch strategy.
 pub struct FunctionEntry {
     /// Classification metadata (name, caps, category, `agg_kind`).
     pub meta: FunctionMeta,
     /// Alternative names that resolve to this entry (e.g. `CONCATENATE` for `CONCAT`).
     pub aliases: &'static [&'static str],
-    /// The handler invoked at evaluation time.
-    pub(crate) handler: Handler,
+    /// The dispatch strategy and implementation fn pointer.
+    pub(crate) dispatch: Dispatch,
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +53,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_if,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_if),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -52,7 +63,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_ifs,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_ifs),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -62,7 +73,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_switch,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_switch),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -72,7 +83,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_iferror,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_iferror),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -82,7 +93,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_ifna,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_ifna),
     },
     // -- Conditional (SHORT_CIRCUIT | RANGE_EXPAND) --
     FunctionEntry {
@@ -93,7 +104,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_and,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_and),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -103,7 +114,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_or,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_or),
     },
     // -- Conditional (PURE) --
     FunctionEntry {
@@ -114,7 +125,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_not,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_not),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -124,7 +135,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::conditional::builtin_xor,
+        dispatch: Dispatch::Custom(crate::builtins::conditional::builtin_xor),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -134,7 +145,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_true,
+        dispatch: Dispatch::Custom(crate::builtins::handle_true),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -144,7 +155,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_false,
+        dispatch: Dispatch::Custom(crate::builtins::handle_false),
     },
     // -- Multi-conditional aggregate (SHORT_CIRCUIT | NEEDS_PRELUDE) --
     FunctionEntry {
@@ -155,7 +166,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_sumifs,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_sumifs),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -165,7 +176,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_countifs,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_countifs),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -175,7 +186,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_averageifs,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_averageifs),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -185,7 +196,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_sumif,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_sumif),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -195,7 +206,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_countif,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_countif),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -205,7 +216,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_averageif,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_averageif),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -215,7 +226,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_minifs,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_minifs),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -225,7 +236,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::multi_conditional::builtin_maxifs,
+        dispatch: Dispatch::Custom(crate::builtins::multi_conditional::builtin_maxifs),
     },
     // -- Simple aggregate (PURE | RANGE_EXPAND | AGG_COERCE | NEEDS_PRELUDE) --
     FunctionEntry {
@@ -239,7 +250,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Sum),
         },
         aliases: &[],
-        handler: crate::builtins::handle_sum,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::sum),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -252,7 +263,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Count),
         },
         aliases: &[],
-        handler: crate::builtins::handle_count,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::count),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -265,7 +276,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::CountA),
         },
         aliases: &[],
-        handler: crate::builtins::handle_counta,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::counta),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -278,7 +289,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::CountBlank),
         },
         aliases: &[],
-        handler: crate::builtins::handle_countblank,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::countblank),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -291,7 +302,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Average),
         },
         aliases: &[],
-        handler: crate::builtins::handle_average,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::average),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -304,7 +315,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Min),
         },
         aliases: &[],
-        handler: crate::builtins::handle_min,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::min),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -317,7 +328,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Max),
         },
         aliases: &[],
-        handler: crate::builtins::handle_max,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::max),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -330,7 +341,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Median),
         },
         aliases: &[],
-        handler: crate::builtins::handle_median,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::median),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -343,7 +354,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: Some(AggKind::Product),
         },
         aliases: &[],
-        handler: crate::builtins::handle_product,
+        dispatch: Dispatch::Aggregate(crate::builtins::aggregate::product),
     },
     // -- Lookup (LOOKUP | NEEDS_PRELUDE) --
     FunctionEntry {
@@ -354,7 +365,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_vlookup,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_vlookup),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -364,7 +375,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_hlookup,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_hlookup),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -374,7 +385,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_xlookup,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_xlookup),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -384,7 +395,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_match,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_match),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -394,7 +405,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_xmatch,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_xmatch),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -404,7 +415,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_index,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_index),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -414,7 +425,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::lookup::builtin_choose,
+        dispatch: Dispatch::Custom(crate::builtins::lookup::builtin_choose),
     },
     // -- Volatile (VOLATILE) --
     FunctionEntry {
@@ -425,7 +436,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::date::builtin_today,
+        dispatch: Dispatch::Custom(crate::builtins::date::builtin_today),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -435,7 +446,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::date::builtin_now,
+        dispatch: Dispatch::Custom(crate::builtins::date::builtin_now),
     },
     // -- Date pure (PURE) --
     FunctionEntry {
@@ -446,7 +457,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_date,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_date),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -456,7 +467,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_year,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_year),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -466,7 +477,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_month,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_month),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -476,7 +487,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_day,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_day),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -486,7 +497,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_weekday,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_weekday),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -496,7 +507,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_edate,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_edate),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -506,7 +517,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_eomonth,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_eomonth),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -516,7 +527,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_datedif,
+        dispatch: Dispatch::Eager(crate::builtins::date::builtin_datedif),
     },
     // -- Date range-expanding (PURE | RANGE_EXPAND) --
     FunctionEntry {
@@ -527,7 +538,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::date::builtin_networkdays,
+        dispatch: Dispatch::Custom(crate::builtins::date::builtin_networkdays),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -537,7 +548,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::date::builtin_workday,
+        dispatch: Dispatch::Custom(crate::builtins::date::builtin_workday),
     },
     // -- String pure eager (PURE) --
     FunctionEntry {
@@ -548,7 +559,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_left,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_left),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -558,7 +569,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_right,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_right),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -568,7 +579,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_mid,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_mid),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -578,7 +589,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_len,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_len),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -588,7 +599,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_upper,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_upper),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -598,7 +609,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_lower,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_lower),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -608,7 +619,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_proper,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_proper),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -618,7 +629,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_trim,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_trim),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -628,7 +639,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_clean,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_clean),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -638,7 +649,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_find,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_find),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -648,7 +659,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_search,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_search),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -658,7 +669,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_substitute,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_substitute),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -668,7 +679,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_replace,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_replace),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -678,7 +689,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_text,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_text),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -688,7 +699,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_value,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_value),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -698,7 +709,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_exact,
+        dispatch: Dispatch::Eager(crate::builtins::string::builtin_exact),
     },
     // -- String range-expanding (PURE | RANGE_EXPAND) --
     FunctionEntry {
@@ -709,7 +720,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &["CONCATENATE"],
-        handler: crate::builtins::string::builtin_concat,
+        dispatch: Dispatch::Custom(crate::builtins::string::builtin_concat),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -719,7 +730,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::string::builtin_textjoin,
+        dispatch: Dispatch::Custom(crate::builtins::string::builtin_textjoin),
     },
     // -- Math pure (PURE) --
     FunctionEntry {
@@ -730,7 +741,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_round,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_round),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -740,7 +751,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_roundup,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_roundup),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -750,7 +761,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_rounddown,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_rounddown),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -760,7 +771,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_int,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_int),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -770,7 +781,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_mod,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_mod),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -780,7 +791,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_abs,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_abs),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -790,7 +801,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sign,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_sign),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -800,7 +811,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sqrt,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_sqrt),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -810,7 +821,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_power,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_power),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -820,7 +831,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_ceiling,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_ceiling),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -830,7 +841,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_floor,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_floor),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -840,7 +851,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_even,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_even),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -850,7 +861,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_odd,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_odd),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -860,7 +871,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_trunc,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_trunc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -870,7 +881,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_mround,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_mround),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -880,7 +891,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_ceiling_math,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_ceiling_math),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -890,7 +901,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_floor_math,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_floor_math),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -900,7 +911,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &["ISO.CEILING"],
-        handler: crate::builtins::handle_ceiling_precise,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_ceiling_precise),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -910,7 +921,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_floor_precise,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_floor_precise),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -920,7 +931,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_pi,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_pi),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -930,7 +941,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_ln,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_ln),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -940,7 +951,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_log,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_log),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -950,7 +961,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_log10,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_log10),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -960,7 +971,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_exp,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_exp),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -970,7 +981,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sin,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_sin),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -980,7 +991,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_cos,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_cos),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -990,7 +1001,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_tan,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_tan),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1000,7 +1011,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_asin,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_asin),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1010,7 +1021,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_acos,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_acos),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1020,7 +1031,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_atan,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_atan),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1030,7 +1041,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_atan2,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_atan2),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1040,7 +1051,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_fact,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_fact),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1050,7 +1061,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_factdouble,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_factdouble),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1060,7 +1071,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_permut,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_permut),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1070,7 +1081,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_permutationa,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_permutationa),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1080,7 +1091,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_combin,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_combin),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1090,7 +1101,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_combina,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_combina),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1100,7 +1111,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_gcd,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_gcd),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1110,7 +1121,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_lcm,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_lcm),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1120,7 +1131,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_roman,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_roman),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1130,7 +1141,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_arabic,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_arabic),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1140,7 +1151,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_acosh,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_acosh),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1150,7 +1161,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_asinh,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_asinh),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1160,7 +1171,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_atanh,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_atanh),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1170,7 +1181,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_cosh,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_cosh),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1180,7 +1191,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sinh,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_sinh),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1190,7 +1201,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_tanh,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_tanh),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1200,7 +1211,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_cot,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_cot),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1210,7 +1221,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_csc,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_csc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1220,7 +1231,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sec,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_sec),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1230,7 +1241,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_coth,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_coth),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1240,7 +1251,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_csch,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_csch),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1250,7 +1261,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sech,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_sech),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1260,7 +1271,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_degrees,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_degrees),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1270,7 +1281,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_radians,
+        dispatch: Dispatch::Eager(crate::builtins::math::builtin_radians),
     },
     // -- Info pure (PURE) --
     FunctionEntry {
@@ -1281,7 +1292,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_isblank,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_isblank),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1291,7 +1302,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_isnumber,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_isnumber),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1301,7 +1312,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_istext,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_istext),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1311,7 +1322,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_iserror,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_iserror),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1321,7 +1332,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_isna,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_isna),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1331,7 +1342,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_islogical,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_islogical),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1341,7 +1352,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_isnontext,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_isnontext),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1351,7 +1362,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_isref,
+        dispatch: Dispatch::Custom(crate::builtins::handle_isref),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1361,7 +1372,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_na,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_na),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1371,7 +1382,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_type,
+        dispatch: Dispatch::Eager(crate::builtins::info::builtin_type),
     },
     // -- Info range-metadata (RANGE_METADATA) --
     FunctionEntry {
@@ -1382,7 +1393,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_row,
+        dispatch: Dispatch::Custom(crate::builtins::handle_row),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1392,7 +1403,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_column,
+        dispatch: Dispatch::Custom(crate::builtins::handle_column),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1402,7 +1413,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_rows,
+        dispatch: Dispatch::Custom(crate::builtins::handle_rows),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1412,7 +1423,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_columns,
+        dispatch: Dispatch::Custom(crate::builtins::handle_columns),
     },
     // -- Financial pure (PURE) --
     FunctionEntry {
@@ -1423,7 +1434,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_pmt,
+        dispatch: Dispatch::Eager(crate::builtins::financial::builtin_pmt),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1433,7 +1444,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_pv,
+        dispatch: Dispatch::Eager(crate::builtins::financial::builtin_pv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1443,7 +1454,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_fv,
+        dispatch: Dispatch::Eager(crate::builtins::financial::builtin_fv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1453,7 +1464,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_rate,
+        dispatch: Dispatch::Eager(crate::builtins::financial::builtin_rate),
     },
     // -- Financial range-expanding (PURE | RANGE_EXPAND) --
     FunctionEntry {
@@ -1464,7 +1475,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::financial::builtin_npv,
+        dispatch: Dispatch::Custom(crate::builtins::financial::builtin_npv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1474,7 +1485,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::financial::builtin_irr,
+        dispatch: Dispatch::Custom(crate::builtins::financial::builtin_irr),
     },
     // -- Meta-dispatch (SHORT_CIRCUIT | RANGE_EXPAND) --
     FunctionEntry {
@@ -1485,7 +1496,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::subtotal::builtin_subtotal,
+        dispatch: Dispatch::Custom(crate::builtins::subtotal::builtin_subtotal),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1495,7 +1506,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::subtotal::builtin_aggregate,
+        dispatch: Dispatch::Custom(crate::builtins::subtotal::builtin_aggregate),
     },
     // -- Statistical range-expanding (PURE | RANGE_EXPAND) --
     FunctionEntry {
@@ -1506,7 +1517,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sumproduct,
+        dispatch: Dispatch::Custom(crate::builtins::handle_sumproduct),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1516,7 +1527,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_avedev,
+        dispatch: Dispatch::Custom(crate::builtins::handle_avedev),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1526,7 +1537,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_large,
+        dispatch: Dispatch::Custom(crate::builtins::handle_large),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1536,7 +1547,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_small,
+        dispatch: Dispatch::Custom(crate::builtins::handle_small),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1546,7 +1557,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_var_s,
+        dispatch: Dispatch::Custom(crate::builtins::handle_var_s),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1556,7 +1567,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_var_p,
+        dispatch: Dispatch::Custom(crate::builtins::handle_var_p),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1566,7 +1577,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_stdev_s,
+        dispatch: Dispatch::Custom(crate::builtins::handle_stdev_s),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1576,7 +1587,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_stdev_p,
+        dispatch: Dispatch::Custom(crate::builtins::handle_stdev_p),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1586,7 +1597,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_skew,
+        dispatch: Dispatch::Custom(crate::builtins::handle_skew),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1596,7 +1607,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_skew_p,
+        dispatch: Dispatch::Custom(crate::builtins::handle_skew_p),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1606,7 +1617,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_kurt,
+        dispatch: Dispatch::Custom(crate::builtins::handle_kurt),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1616,7 +1627,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_mode_sngl,
+        dispatch: Dispatch::Custom(crate::builtins::handle_mode_sngl),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1626,7 +1637,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_percentile_inc,
+        dispatch: Dispatch::Custom(crate::builtins::handle_percentile_inc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1636,7 +1647,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_percentile_exc,
+        dispatch: Dispatch::Custom(crate::builtins::handle_percentile_exc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1646,7 +1657,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_quartile_inc,
+        dispatch: Dispatch::Custom(crate::builtins::handle_quartile_inc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1656,7 +1667,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_quartile_exc,
+        dispatch: Dispatch::Custom(crate::builtins::handle_quartile_exc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1666,7 +1677,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_rank_eq,
+        dispatch: Dispatch::Custom(crate::builtins::handle_rank_eq),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1676,7 +1687,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_rank_avg,
+        dispatch: Dispatch::Custom(crate::builtins::handle_rank_avg),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1686,7 +1697,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_expon_dist,
+        dispatch: Dispatch::Custom(crate::builtins::handle_expon_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1696,7 +1707,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_correl,
+        dispatch: Dispatch::Custom(crate::builtins::handle_correl),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1706,7 +1717,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_covariance_p,
+        dispatch: Dispatch::Custom(crate::builtins::handle_covariance_p),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1716,7 +1727,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_covariance_s,
+        dispatch: Dispatch::Custom(crate::builtins::handle_covariance_s),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1726,7 +1737,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_slope,
+        dispatch: Dispatch::Custom(crate::builtins::handle_slope),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1736,7 +1747,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_intercept,
+        dispatch: Dispatch::Custom(crate::builtins::handle_intercept),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1746,7 +1757,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_rsq,
+        dispatch: Dispatch::Custom(crate::builtins::handle_rsq),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1756,7 +1767,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_forecast_linear,
+        dispatch: Dispatch::Custom(crate::builtins::handle_forecast_linear),
     },
     // -- Statistical pure (PURE) --
     FunctionEntry {
@@ -1767,7 +1778,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &["POISSON"],
-        handler: crate::builtins::handle_poisson_dist,
+        dispatch: Dispatch::Custom(crate::builtins::handle_poisson_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1777,7 +1788,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_t_dist,
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_t_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1787,7 +1798,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_t_dist_rt,
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_t_dist_rt),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1797,7 +1808,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_t_dist_2t,
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_t_dist_2t),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1807,7 +1818,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_t_inv,
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_t_inv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1817,7 +1828,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_t_inv_2t,
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_t_inv_2t),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1827,7 +1838,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_binom_dist,
+        dispatch: Dispatch::Custom(crate::builtins::handle_binom_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1837,7 +1848,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_binom_inv,
+        dispatch: Dispatch::Custom(crate::builtins::handle_binom_inv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1847,7 +1858,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_norm_dist,
+        dispatch: Dispatch::Custom(crate::builtins::handle_norm_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1857,7 +1868,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_norm_inv,
+        dispatch: Dispatch::Custom(crate::builtins::handle_norm_inv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1867,7 +1878,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_norm_s_dist,
+        dispatch: Dispatch::Custom(crate::builtins::handle_norm_s_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1877,7 +1888,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_norm_s_inv,
+        dispatch: Dispatch::Custom(crate::builtins::handle_norm_s_inv),
     },
     // -- Engineering pure (PURE) --
     FunctionEntry {
@@ -1888,7 +1899,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_hex2dec,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_hex2dec),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1898,7 +1909,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_dec2hex,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_dec2hex),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1908,7 +1919,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_complex,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_complex),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1918,7 +1929,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_imreal,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_imreal),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1928,7 +1939,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_imaginary,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_imaginary),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1938,7 +1949,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bitand,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bitand),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1948,7 +1959,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bitor,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bitor),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1958,7 +1969,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bitxor,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bitxor),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1968,7 +1979,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bitlshift,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bitlshift),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1978,7 +1989,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bitrshift,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bitrshift),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1988,7 +1999,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bin2dec,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bin2dec),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1998,7 +2009,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_dec2bin,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_dec2bin),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2008,7 +2019,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_oct2dec,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_oct2dec),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2018,7 +2029,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_dec2oct,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_dec2oct),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2028,7 +2039,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_hex2bin,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_hex2bin),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2038,7 +2049,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bin2hex,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bin2hex),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2048,7 +2059,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_hex2oct,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_hex2oct),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2058,7 +2069,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_oct2hex,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_oct2hex),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2068,7 +2079,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_bin2oct,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_bin2oct),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2078,7 +2089,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_oct2bin,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_oct2bin),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2088,7 +2099,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_base,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_base),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2098,7 +2109,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_delta,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_delta),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2108,7 +2119,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_gestep,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_gestep),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2118,7 +2129,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_erf,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_erf),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2128,7 +2139,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_erfc,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_erfc),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2138,7 +2149,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_erf_precise,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_erf_precise),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -2148,7 +2159,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_erfc_precise,
+        dispatch: Dispatch::Eager(crate::builtins::engineering::builtin_erfc_precise),
     },
     // -- Conversion pure (PURE) --
     FunctionEntry {
@@ -2159,7 +2170,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_convert,
+        dispatch: Dispatch::Eager(crate::builtins::convert::builtin_convert),
     },
 ];
 
@@ -2220,7 +2231,7 @@ pub fn lookup_meta(name: &str) -> Option<&'static FunctionMeta> {
     lookup(name).map(|e| &e.meta)
 }
 
-/// Dispatch a function call by name: look up the handler and invoke it.
+/// Dispatch a function call by name: look up, prepare args, invoke.
 ///
 /// Returns `None` for unknown function names.
 pub(crate) fn dispatch(
@@ -2229,7 +2240,14 @@ pub(crate) fn dispatch(
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Option<Value> {
-    lookup(name).map(|entry| (entry.handler)(args, interp, scope))
+    let entry = lookup(name)?;
+    Some(match &entry.dispatch {
+        Dispatch::Eager(f) => f(&crate::builtins::eval_args(args, interp, scope)),
+        Dispatch::Aggregate(f) => {
+            f(&crate::builtins::expand_args_for_aggregate(args, interp, scope))
+        }
+        Dispatch::Custom(f) => f(args, interp, scope),
+    })
 }
 
 /// Iterate over all registered function entries.

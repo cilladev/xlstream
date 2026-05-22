@@ -1,4 +1,4 @@
-# Feature: EvalMode Dispatch
+# Feature: Dispatch Enum
 
 **Branch:** `feat/eval-mode-dispatch`
 **Effort:** ~0.5 day
@@ -6,7 +6,7 @@
 
 ## What
 
-Replace ~134 boilerplate handler wrappers in `builtins/mod.rs` with a 3-variant `EvalMode` enum on each registry entry. The registry's `dispatch()` function matches on the variant and handles arg preparation (eval_args / expand_args_for_aggregate) generically. ~34 Custom wrappers stay as the glue layer between eval types and pure-math sub-modules.
+Replace ~134 boilerplate handler wrappers in `builtins/mod.rs` with a 3-variant `Dispatch` enum on each registry entry. The registry's `dispatch()` function matches on the variant and handles arg preparation (eval_args / expand_args_for_aggregate) generically. ~41 Custom wrappers stay as the glue layer between eval types and pure-math sub-modules.
 
 ```
 Before: adding an eager function = 1 registry entry + 1 handle_* wrapper in mod.rs
@@ -34,16 +34,16 @@ These are pure boilerplate — the only difference is which arg-preparation func
 
 ## Design
 
-### EvalMode enum
+### Dispatch enum
 
 ```rust
 // registry.rs
-pub(crate) enum EvalMode {
-    /// eval_args() then call fn(&[Value]) -> Value
+pub(crate) enum Dispatch {
+    /// eval_args() first, then call with &[Value]
     Eager(fn(&[Value]) -> Value),
-    /// expand_args_for_aggregate() then call fn(&[Value]) -> Value
+    /// expand_args_for_aggregate() first, then call with &[Value]
     Aggregate(fn(&[Value]) -> Value),
-    /// handler does everything — arg unpacking, coercion, delegation
+    /// no arg prep — handler receives raw &[NodeRef] and does everything
     Custom(fn(&[NodeRef], &Interpreter, &RowScope) -> Value),
 }
 ```
@@ -54,7 +54,7 @@ pub(crate) enum EvalMode {
 pub struct FunctionEntry {
     pub meta: FunctionMeta,
     pub aliases: &'static [&'static str],
-    pub eval_mode: EvalMode,  // replaces `handler: Handler`
+    pub(crate) dispatch: Dispatch,
 }
 ```
 
@@ -68,13 +68,10 @@ pub(crate) fn dispatch(
     scope: &RowScope<'_>,
 ) -> Option<Value> {
     let entry = lookup(name)?;
-    Some(match entry.eval_mode {
-        EvalMode::Eager(f) => f(&eval_args(args, interp, scope)),
-        EvalMode::Aggregate(f) => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            f(&vals).unwrap_or_else(Value::Error)
-        }
-        EvalMode::Custom(f) => f(args, interp, scope),
+    Some(match &entry.dispatch {
+        Dispatch::Eager(f) => f(&eval_args(args, interp, scope)),
+        Dispatch::Aggregate(f) => f(&expand_args_for_aggregate(args, interp, scope)),
+        Dispatch::Custom(f) => f(args, interp, scope),
     })
 }
 ```
@@ -86,42 +83,41 @@ pub(crate) fn dispatch(
 FunctionEntry {
     meta: ...,
     aliases: &[],
-    eval_mode: EvalMode::Eager(crate::builtins::math::builtin_round),
+    dispatch: Dispatch::Eager(crate::builtins::math::builtin_round),
 },
 
 // Aggregate — no wrapper needed
 FunctionEntry {
     meta: ...,
     aliases: &[],
-    eval_mode: EvalMode::Aggregate(crate::builtins::aggregate::sum_value),
+    dispatch: Dispatch::Aggregate(crate::builtins::aggregate::sum_as_value),
 },
 
 // Custom — keeps existing handler in mod.rs
 FunctionEntry {
     meta: ...,
     aliases: &[],
-    eval_mode: EvalMode::Custom(crate::builtins::handle_rank_eq),
+    dispatch: Dispatch::Custom(crate::builtins::handle_rank_eq),
 },
 ```
 
 ## What stays in mod.rs
 
-~34 Custom handlers that contain real glue logic (arg validation, coercion, `expand_range` calls). These are the bridge between eval types (`NodeRef`, `Interpreter`) and pure-math sub-modules (`&[Value]`, `&[f64]`). They stay because moving them into sub-modules would pollute the pure-math layer with eval-aware imports.
+~41 Custom handlers that contain real glue logic (arg validation, coercion, `expand_range` calls). These are the bridge between eval types (`NodeRef`, `Interpreter`) and pure-math sub-modules (`&[Value]`, `&[f64]`). They stay because moving them into sub-modules would pollute the pure-math layer with eval-aware imports.
 
 ## What changes in sub-modules
 
 ### Aggregate functions
 
-`aggregate::sum`, `aggregate::count`, etc. currently return `Result<Value, CellError>`. `EvalMode::Aggregate` needs `fn(&[Value]) -> Value`. Two options:
+`aggregate::sum`, `aggregate::count`, etc. currently return `Result<Value, CellError>`. `Dispatch::Aggregate` needs `fn(&[Value]) -> Value`. Add thin `_as_value` wrappers:
 
-1. Add `_value` wrappers: `pub fn sum_value(vals: &[Value]) -> Value { sum(vals).unwrap_or_else(Value::Error) }`
-2. Change return type to `Value` directly
-
-Option 1 is safer — doesn't break existing callers. Option 2 is cleaner if no other code calls `sum()` with Result handling.
+```rust
+pub fn sum_as_value(vals: &[Value]) -> Value { sum(vals).unwrap_or_else(Value::Error) }
+```
 
 ### Statistical Result-returning functions
 
-`builtin_poisson_dist`, `builtin_binom_dist`, etc. return `Result<f64, CellError>`. Same two options. Currently wrapped by eager handlers that do `.map_or_else(Value::Error, Value::Number)`. With EvalMode::Eager these need to return `Value` directly.
+`builtin_poisson_dist`, `builtin_binom_dist`, etc. return `Result<f64, CellError>`. Change to return `Value` directly so they fit `Dispatch::Eager`. Wrap the internal `Result` at the end of each function.
 
 ## Layering invariant
 
@@ -143,4 +139,4 @@ No new tests needed — pure refactor. All ~2700 existing tests must pass.
 | File | Change |
 |---|---|
 | `CHANGELOG.md` | Add entry under `[Unreleased]` |
-| `docs/roadmap/v0.4/README.md` | Tick the EvalMode dispatch checkbox |
+| `docs/roadmap/v0.4/README.md` | Tick the "EvalMode dispatch" checkbox |

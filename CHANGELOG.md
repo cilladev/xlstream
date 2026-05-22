@@ -7,6 +7,7 @@ Semver.
 
 ### Changed
 - Centralize formula registration — single registry replaces 9 scattered function-name registration sites. `classify()`, `rewrite()`, and `collect_lookup_keys()` now take a `fn_lookup` callback. Dispatch uses `registry::dispatch()` instead of 200-arm match.
+- Replace 134 handler wrappers with `Dispatch` enum (Eager/Aggregate/Custom). Aggregate and statistical functions return `Value` directly instead of `Result`.
 
 ## [0.3.0] - 2026-05-19
 
