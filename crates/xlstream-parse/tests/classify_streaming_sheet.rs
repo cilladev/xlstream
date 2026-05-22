@@ -1,13 +1,19 @@
 //! Integration tests: lookup/aggregate behaviour against the streaming sheet.
 
-use xlstream_parse::{classify, parse, Classification, ClassificationContext, UnsupportedReason};
+use xlstream_parse::{
+    classify, parse, Classification, ClassificationContext, FunctionMeta, UnsupportedReason,
+};
+
+fn no_meta(_: &str) -> Option<&FunctionMeta> {
+    None
+}
 
 #[test]
 fn vlookup_with_unqualified_range_resolves_to_streaming_sheet_and_is_refused() {
     let ast = parse("VLOOKUP(A2, A:C, 2, FALSE)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx),
+        classify(&ast, &ctx, &no_meta),
         Classification::Unsupported(UnsupportedReason::LookupIntoStreamingSheet)
     );
 }
@@ -17,7 +23,7 @@ fn vlookup_explicitly_into_main_sheet_is_refused() {
     let ast = parse("VLOOKUP(A2, Sheet1!A:C, 2, FALSE)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx),
+        classify(&ast, &ctx, &no_meta),
         Classification::Unsupported(UnsupportedReason::LookupIntoStreamingSheet)
     );
 }
@@ -26,12 +32,12 @@ fn vlookup_explicitly_into_main_sheet_is_refused() {
 fn aggregate_with_unqualified_range_on_main_sheet_is_aggregate_only() {
     let ast = parse("SUM(A:A)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }
 
 #[test]
 fn aggregate_explicitly_into_main_sheet_is_aggregate_only() {
     let ast = parse("SUM(Sheet1!A:A)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }

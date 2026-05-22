@@ -1073,6 +1073,10 @@ fn eval_column(
     }
 }
 
+fn no_meta(_: &str) -> Option<&xlstream_parse::FunctionMeta> {
+    None
+}
+
 /// Parse + classify all formula columns for `main_sheet`. Returns the
 /// topo-sorted column evaluation order and the per-column [`Ast`] cache.
 #[allow(clippy::type_complexity, clippy::too_many_lines)]
@@ -1116,7 +1120,7 @@ fn build_eval_plan(
                 ctx = ctx.with_lookup_sheet(name);
             }
         }
-        let verdict = classify(&first_ast, &ctx);
+        let verdict = classify(&first_ast, &ctx, &no_meta);
         if let Classification::Unsupported(ref reason) = verdict {
             return Err(XlStreamError::Unsupported {
                 address: format!("{}!{}", main_sheet, col_row_to_a1(col + 1, first_row + 1)),
@@ -1126,8 +1130,8 @@ fn build_eval_plan(
             });
         }
 
-        let rewritten = rewrite(first_ast.clone(), &ctx, &verdict);
-        all_lookup_keys.extend(collect_lookup_keys(&rewritten));
+        let rewritten = rewrite(first_ast.clone(), &ctx, &verdict, &no_meta);
+        all_lookup_keys.extend(collect_lookup_keys(&rewritten, &no_meta));
         col_asts.insert(col, rewritten);
         col_templates.insert(
             col,
@@ -1166,7 +1170,7 @@ fn build_eval_plan(
                     row_ctx = row_ctx.with_lookup_sheet(name);
                 }
             }
-            let row_verdict = classify(&ast, &row_ctx);
+            let row_verdict = classify(&ast, &row_ctx, &no_meta);
             if let Classification::Unsupported(ref reason) = row_verdict {
                 return Err(XlStreamError::Unsupported {
                     address: format!("{}!{}", main_sheet, col_row_to_a1(col + 1, row + 1)),
@@ -1176,8 +1180,8 @@ fn build_eval_plan(
                 });
             }
 
-            let rewritten = rewrite(ast, &row_ctx, &row_verdict);
-            all_lookup_keys.extend(collect_lookup_keys(&rewritten));
+            let rewritten = rewrite(ast, &row_ctx, &row_verdict, &no_meta);
+            all_lookup_keys.extend(collect_lookup_keys(&rewritten, &no_meta));
             row_overrides.entry(col).or_default().insert(*row, rewritten);
             row_override_texts.entry(col).or_default().insert(*row, formula_str.to_string());
         }

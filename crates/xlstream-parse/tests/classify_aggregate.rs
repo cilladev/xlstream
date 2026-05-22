@@ -1,33 +1,37 @@
 //! Integration tests: formulas that classify as `AggregateOnly`.
 
-use xlstream_parse::{classify, parse, Classification, ClassificationContext};
+use xlstream_parse::{classify, parse, Classification, ClassificationContext, FunctionMeta};
+
+fn no_meta(_: &str) -> Option<&FunctionMeta> {
+    None
+}
 
 #[test]
 fn sum_whole_column_is_aggregate_only() {
     let ast = parse("SUM(A:A)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }
 
 #[test]
 fn sumif_with_static_criterion_is_aggregate_only() {
     let ast = parse("SUMIF(A:A, \"EMEA\", B:B)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }
 
 #[test]
 fn count_whole_column_is_aggregate_only() {
     let ast = parse("COUNT(A:A)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }
 
 #[test]
 fn nested_aggregates_are_still_aggregate_only() {
     let ast = parse("SUM(A:A)+COUNT(B:B)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }
 
 #[test]
@@ -59,26 +63,26 @@ fn aggregate_set_recognises_each_listed_function() {
 fn aggregate_with_range_on_main_streaming_sheet_is_aggregate_only() {
     let ast = parse("SUM(A:A)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 10, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
 }
 
 #[test]
 fn sumif_with_row_varying_criterion_classifies_as_mixed() {
     let ast = parse("SUMIF(A:A, B2, C:C)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::Mixed);
 }
 
 #[test]
 fn countif_with_row_varying_criterion_classifies_as_mixed() {
     let ast = parse("COUNTIF(A:A, A2)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::Mixed);
 }
 
 #[test]
 fn sumifs_with_row_varying_criterion_classifies_as_mixed() {
     let ast = parse("SUMIFS(C:C, A:A, D2, B:B, E2)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 6);
-    assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::Mixed);
 }

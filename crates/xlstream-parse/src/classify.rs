@@ -332,17 +332,27 @@ enum FnKind {
 /// Walks the AST to determine whether each sub-expression is row-local,
 /// aggregate-only, lookup-only, mixed, or unsupported.
 ///
+/// `fn_lookup` resolves a function name to its [`FunctionMeta`] (if
+/// registered). Pass `|_| None` when no registry is available.
+///
+/// [`FunctionMeta`]: crate::function_meta::FunctionMeta
+///
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{classify, parse, Classification, ClassificationContext};
+/// use xlstream_parse::{classify, parse, Classification, ClassificationContext, FunctionMeta};
 /// let ast = parse("1+2").unwrap();
 /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
-/// assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+/// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
+/// assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
 /// ```
 #[must_use]
-pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification {
-    let d = disposition(&ast.root, ctx, None);
+pub fn classify(
+    ast: &Ast,
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Classification {
+    let d = disposition(&ast.root, ctx, None, fn_lookup);
     match d {
         Disposition::RowLocal => Classification::RowLocal,
         Disposition::Aggregate => Classification::AggregateOnly,
@@ -352,22 +362,28 @@ pub fn classify(ast: &Ast, ctx: &ClassificationContext) -> Classification {
     }
 }
 
-fn disposition(node: &Node, ctx: &ClassificationContext, parent: Option<FnKind>) -> Disposition {
+fn disposition(
+    node: &Node,
+    ctx: &ClassificationContext,
+    parent: Option<FnKind>,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Disposition {
     match node {
         Node::Literal(_) | Node::Text(_) | Node::Error(_) | Node::PreludeRef(_) => {
             Disposition::RowLocal
         }
         Node::Reference(r) => classify_reference(r, ctx, parent),
-        Node::UnaryOp { expr, .. } => disposition(expr, ctx, parent),
-        Node::BinaryOp { left, right, .. } => {
-            fold(disposition(left, ctx, parent), disposition(right, ctx, parent))
-        }
-        Node::Function { name, args } => classify_function(name, args, ctx),
+        Node::UnaryOp { expr, .. } => disposition(expr, ctx, parent, fn_lookup),
+        Node::BinaryOp { left, right, .. } => fold(
+            disposition(left, ctx, parent, fn_lookup),
+            disposition(right, ctx, parent, fn_lookup),
+        ),
+        Node::Function { name, args } => classify_function(name, args, ctx, fn_lookup),
         Node::Array(rows) => {
             let mut acc = Disposition::RowLocal;
             for row in rows {
                 for cell in row {
-                    acc = fold(acc, disposition(cell, ctx, parent));
+                    acc = fold(acc, disposition(cell, ctx, parent, fn_lookup));
                     if matches!(acc, Disposition::Unsupported(_)) {
                         return acc;
                     }
@@ -450,7 +466,14 @@ fn classify_reference(
     }
 }
 
-fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> Disposition {
+fn classify_function(
+    name: &str,
+    args: &[Node],
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Disposition {
+    let _ = fn_lookup;
+
     if sets::is_unsupported(name) {
         return Disposition::Unsupported(UnsupportedReason::UnsupportedFunction(
             name.to_uppercase(),
@@ -466,34 +489,39 @@ fn classify_function(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
     }
 
     if sets::is_aggregate(name) {
-        return classify_aggregate(name, args, ctx);
+        return classify_aggregate(name, args, ctx, fn_lookup);
     }
 
     if sets::is_lookup(name) {
-        return fold_fn_args(args, ctx, FnKind::Lookup);
+        return fold_fn_args(args, ctx, FnKind::Lookup, fn_lookup);
     }
 
     if sets::is_range_expanding(name) {
-        return fold_args(args, ctx, Some(FnKind::RangeExpanding));
+        return fold_args(args, ctx, Some(FnKind::RangeExpanding), fn_lookup);
     }
 
-    fold_args(args, ctx, None)
+    fold_args(args, ctx, None, fn_lookup)
 }
 
-fn classify_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) -> Disposition {
+fn classify_aggregate(
+    name: &str,
+    args: &[Node],
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Disposition {
     let upper = name.to_uppercase();
     let mut has_row_local_criteria = false;
     let mut has_aggregate_arg = false;
     for (i, arg) in args.iter().enumerate() {
         if is_criteria_arg(&upper, i) && contains_row_local_ref(arg, ctx) {
             has_row_local_criteria = true;
-            let d = disposition(arg, ctx, None);
+            let d = disposition(arg, ctx, None, fn_lookup);
             if matches!(d, Disposition::Unsupported(_)) {
                 return d;
             }
             continue;
         }
-        let d = disposition(arg, ctx, Some(FnKind::Aggregate));
+        let d = disposition(arg, ctx, Some(FnKind::Aggregate), fn_lookup);
         if matches!(d, Disposition::Unsupported(_)) {
             return d;
         }
@@ -536,14 +564,19 @@ fn contains_row_local_ref(node: &Node, ctx: &ClassificationContext) -> bool {
 /// For lookup functions, the function's own kind determines the
 /// disposition. `RowLocal` args (keys, column indices, match type) are
 /// absorbed — only `Unsupported` propagates.
-fn fold_fn_args(args: &[Node], ctx: &ClassificationContext, kind: FnKind) -> Disposition {
+fn fold_fn_args(
+    args: &[Node],
+    ctx: &ClassificationContext,
+    kind: FnKind,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Disposition {
     let target = match kind {
         FnKind::Aggregate => Disposition::Aggregate,
         FnKind::Lookup => Disposition::Lookup,
         FnKind::RangeExpanding => Disposition::RowLocal,
     };
     for arg in args {
-        let d = disposition(arg, ctx, Some(kind));
+        let d = disposition(arg, ctx, Some(kind), fn_lookup);
         if let Disposition::Unsupported(_) = d {
             return d;
         }
@@ -551,17 +584,22 @@ fn fold_fn_args(args: &[Node], ctx: &ClassificationContext, kind: FnKind) -> Dis
     target
 }
 
-fn fold_args(args: &[Node], ctx: &ClassificationContext, parent: Option<FnKind>) -> Disposition {
+fn fold_args(
+    args: &[Node],
+    ctx: &ClassificationContext,
+    parent: Option<FnKind>,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Disposition {
     let mut iter = args.iter();
     let mut acc = match iter.next() {
-        Some(first) => disposition(first, ctx, parent),
+        Some(first) => disposition(first, ctx, parent, fn_lookup),
         None => return Disposition::RowLocal,
     };
     for arg in iter {
         if matches!(acc, Disposition::Unsupported(_)) {
             return acc;
         }
-        acc = fold(acc, disposition(arg, ctx, parent));
+        acc = fold(acc, disposition(arg, ctx, parent, fn_lookup));
     }
     acc
 }
@@ -584,11 +622,15 @@ mod tests {
 
     use super::*;
 
+    fn no_meta(_: &str) -> Option<&crate::function_meta::FunctionMeta> {
+        None
+    }
+
     #[test]
     fn classify_literal_is_row_local() {
         let ast = crate::parse("1+2").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
@@ -639,7 +681,7 @@ mod tests {
     fn cross_sheet_cell_ref_to_lookup_sheet_is_lookup() {
         let ast = crate::parse("'Tax Rates'!A1").unwrap();
         let ctx = ClassificationContext::for_cell("Main", 2, 1).with_lookup_sheet("Tax Rates");
-        assert_eq!(classify(&ast, &ctx), Classification::LookupOnly);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::LookupOnly);
     }
 
     #[test]
@@ -647,7 +689,7 @@ mod tests {
         let ast = crate::parse("'Other'!A1").unwrap();
         let ctx = ClassificationContext::for_cell("Main", 2, 1).with_lookup_sheet("Tax Rates");
         assert_eq!(
-            classify(&ast, &ctx),
+            classify(&ast, &ctx, &no_meta),
             Classification::Unsupported(UnsupportedReason::NonCurrentRowRef)
         );
     }
@@ -656,7 +698,7 @@ mod tests {
     fn cross_sheet_cell_ref_mixed_with_row_local() {
         let ast = crate::parse("A2+'Tax Rates'!B1").unwrap();
         let ctx = ClassificationContext::for_cell("Main", 2, 3).with_lookup_sheet("Tax Rates");
-        assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::Mixed);
     }
 
     #[test]
@@ -684,7 +726,7 @@ mod tests {
     fn irr_with_bounded_range_classifies_as_mixed() {
         let ast = crate::parse("IRR(B2:B10)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(matches!(result, Classification::Mixed), "expected Mixed, got {result:?}");
     }
 
@@ -692,14 +734,14 @@ mod tests {
     fn irr_with_unbounded_range_is_unsupported() {
         let ast = crate::parse("IRR(B:B)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert!(matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+        assert!(matches!(classify(&ast, &ctx, &no_meta), Classification::Unsupported(_)));
     }
 
     #[test]
     fn concat_with_bounded_range_classifies() {
         let ast = crate::parse("CONCAT(A2:A5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(
             !matches!(result, Classification::Unsupported(_)),
             "expected non-unsupported, got {result:?}"
@@ -710,70 +752,70 @@ mod tests {
     fn concat_multi_column_range_is_unsupported() {
         let ast = crate::parse("CONCAT(A2:C5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert!(matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+        assert!(matches!(classify(&ast, &ctx, &no_meta), Classification::Unsupported(_)));
     }
 
     #[test]
     fn sum_whole_column_still_classifies_as_aggregate() {
         let ast = crate::parse("SUM(A:A)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
     }
 
     #[test]
     fn networkdays_without_holidays_classifies() {
         let ast = crate::parse("NETWORKDAYS(A2, B2)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert!(!matches!(classify(&ast, &ctx), Classification::Unsupported(_)));
+        assert!(!matches!(classify(&ast, &ctx, &no_meta), Classification::Unsupported(_)));
     }
 
     #[test]
     fn sumif_with_row_local_criteria_classifies_as_mixed() {
         let ast = crate::parse("SUMIF(A:A,A2,B:B)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::Mixed);
     }
 
     #[test]
     fn countif_with_row_local_criteria_classifies_as_mixed() {
         let ast = crate::parse("COUNTIF(A:A,A2)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::Mixed);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::Mixed);
     }
 
     #[test]
     fn sumif_with_static_criteria_still_classifies_as_aggregate() {
         let ast = crate::parse("SUMIF(A:A,\"EMEA\",B:B)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
     }
 
     #[test]
     fn aggregate_with_literal_args_is_row_local() {
         let ast = crate::parse("PRODUCT(2,3,4)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn aggregate_with_cell_ref_args_is_row_local() {
         let ast = crate::parse("PRODUCT(A2,B2)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn aggregate_with_range_arg_stays_aggregate() {
         let ast = crate::parse("PRODUCT(A:A)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
-        assert_eq!(classify(&ast, &ctx), Classification::AggregateOnly);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::AggregateOnly);
     }
 
     #[test]
     fn sum_with_literal_args_is_row_local() {
         let ast = crate::parse("SUM(1,2,3)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     // -- Named range classification (v0.2) --
@@ -794,7 +836,7 @@ mod tests {
         for ls in lookup_sheets {
             ctx = ctx.with_lookup_sheet(ls);
         }
-        classify(&resolved, &ctx)
+        classify(&resolved, &ctx, &no_meta)
     }
 
     #[test]
@@ -893,7 +935,7 @@ mod tests {
     fn sumproduct_two_bounded_ranges_classifies_as_streamable() {
         let ast = crate::parse("SUMPRODUCT(A1:A3, B1:B3)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
@@ -904,7 +946,7 @@ mod tests {
     fn sumproduct_single_bounded_range_classifies_as_streamable() {
         let ast = crate::parse("SUMPRODUCT(A1:A5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
@@ -915,7 +957,7 @@ mod tests {
     fn sumproduct_three_bounded_ranges_classifies_as_streamable() {
         let ast = crate::parse("SUMPRODUCT(A1:A3, B1:B3, C1:C3)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
@@ -926,7 +968,7 @@ mod tests {
     fn sumproduct_case_insensitive() {
         let ast = crate::parse("sumproduct(A1:A5, B1:B5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
@@ -937,7 +979,7 @@ mod tests {
     fn sumproduct_nested_inside_if() {
         let ast = crate::parse("IF(D2, SUMPRODUCT(A1:A3, B1:B3), 0)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        let result = classify(&ast, &ctx);
+        let result = classify(&ast, &ctx, &no_meta);
         assert!(
             !matches!(result, Classification::Unsupported(_)),
             "expected streamable, got {result:?}"
@@ -948,28 +990,28 @@ mod tests {
     fn self_reference_classifies_as_row_local() {
         let ast = crate::parse("E2+1").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn self_reference_in_if_classifies_as_row_local() {
         let ast = crate::parse("IF(A2=\"Risk_KC\",E2*-1,E2)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn self_reference_mixed_with_other_deps_classifies_as_row_local() {
         let ast = crate::parse("E2+D2").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn cross_column_same_row_ref_is_row_local_individually() {
         let ast = crate::parse("B2+1").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 3);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     // -- Table reference classification (v0.2) --
@@ -1018,7 +1060,7 @@ mod tests {
         for ls in lookup_sheets {
             ctx = ctx.with_lookup_sheet(ls);
         }
-        classify(&resolved, &ctx)
+        classify(&resolved, &ctx, &no_meta)
     }
 
     #[test]
@@ -1130,90 +1172,90 @@ mod tests {
     fn row_with_cell_ref_classifies_as_row_local() {
         let ast = crate::parse("ROW(A5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn column_with_cell_ref_classifies_as_row_local() {
         let ast = crate::parse("COLUMN(C3)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn row_no_args_classifies_as_row_local() {
         let ast = crate::parse("ROW()").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn column_no_args_classifies_as_row_local() {
         let ast = crate::parse("COLUMN()").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn rows_bounded_range_classifies_as_row_local() {
         let ast = crate::parse("ROWS(A1:A10)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn columns_bounded_range_classifies_as_row_local() {
         let ast = crate::parse("COLUMNS(A1:C1)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn rows_whole_column_classifies_as_row_local() {
         let ast = crate::parse("ROWS(A:A)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn columns_whole_row_classifies_as_row_local() {
         let ast = crate::parse("COLUMNS(1:1)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn row_case_insensitive_classifies_as_row_local() {
         let ast = crate::parse("row(a5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn rows_cross_sheet_classifies_as_row_local() {
         let ast = crate::parse("ROWS(Sheet2!A1:A20)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn row_nested_in_if_classifies_as_row_local() {
         let ast = crate::parse("IF(ROW()>5,\"big\",\"small\")").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn row_plus_column_classifies_as_row_local() {
         let ast = crate::parse("ROW()+COLUMN()").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 
     #[test]
     fn row_with_whole_row_ref_classifies_as_row_local() {
         let ast = crate::parse("ROW(1:5)").unwrap();
         let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-        assert_eq!(classify(&ast, &ctx), Classification::RowLocal);
+        assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
     }
 }

@@ -147,6 +147,10 @@ fn run(cli: Cli) -> Result<(), xlstream_core::XlStreamError> {
     }
 }
 
+fn no_meta(_: &str) -> Option<&xlstream_parse::FunctionMeta> {
+    None
+}
+
 #[allow(clippy::print_stdout)]
 fn run_classify(
     formula: &str,
@@ -172,7 +176,7 @@ fn run_classify(
         ctx = ctx.with_lookup_sheet(s);
     }
 
-    let verdict = xlstream_parse::classify(&ast, &ctx);
+    let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
     println!("{formula}\t{verdict:?}");
     Ok(())
 }
