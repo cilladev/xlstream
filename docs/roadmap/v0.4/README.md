@@ -4,6 +4,9 @@
 **Target:** 2026 Q4
 **Theme:** LET variable binding, advanced financial functions, multi-format I/O
 
+## Cleanup
+- [] Formula registry clean up
+
 ## LET
 
 - [ ] **LET** — scoped variable binding inside formulas. `=LET(x, A2*1.1, y, B2*0.9, IF(x>y, x, y))`. No spill, no closures, no recursion — just name substitution evaluated left-to-right. ~2 days.
