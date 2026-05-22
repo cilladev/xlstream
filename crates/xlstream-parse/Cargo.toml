@@ -19,6 +19,9 @@ smallvec = { workspace = true }
 phf = { workspace = true }
 bitflags = { workspace = true }
 
+[dev-dependencies]
+xlstream-eval = { path = "../xlstream-eval" }
+
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
