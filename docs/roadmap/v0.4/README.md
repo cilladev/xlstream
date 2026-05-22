@@ -6,6 +6,7 @@
 
 ## Cleanup
 - [x] Formula registry clean up
+- [ ] EvalMode dispatch — replace ~134 eager/aggregate handler wrappers in builtins/mod.rs with a 3-variant enum (Eager/Aggregate/Custom) in registry. Keep ~34 Custom wrappers as glue layer. ~0.5 day.
 
 ## LET
 
