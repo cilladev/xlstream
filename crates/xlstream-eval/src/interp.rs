@@ -309,6 +309,78 @@ mod tests {
     }
 
     #[test]
+    fn sum_literal_bool_coercion() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("SUM(TRUE,1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(2.0));
+    }
+
+    #[test]
+    fn sum_literal_false_coerces_to_zero() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("SUM(FALSE)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(0.0));
+    }
+
+    #[test]
+    fn sum_literal_numeric_text_coercion() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("SUM(\"3\",1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(4.0));
+    }
+
+    #[test]
+    fn sum_literal_non_numeric_text_returns_value_error() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("SUM(\"hello\",1)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn sum_literal_error_propagates() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("SUM(1,1/0)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Div0));
+    }
+
+    #[test]
+    fn average_literal_args() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("AVERAGE(1,2,3)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(2.0));
+    }
+
+    #[test]
+    fn count_literal_args() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("COUNT(1,2,3)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(3.0));
+    }
+
+    #[test]
+    fn product_literal_bool_coercion() {
+        let prelude = Prelude::empty();
+        let interp = make_interp(&prelude);
+        let ast = parse("PRODUCT(TRUE,5)").unwrap();
+        let scope = RowScope::new(&[], 0);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(5.0));
+    }
+
+    #[test]
     fn eval_binary_add() {
         let prelude = Prelude::empty();
         let interp = make_interp(&prelude);

@@ -88,9 +88,10 @@ pub(crate) fn expand_range(
 /// Expand args for aggregate builtins with Excel's scalar coercion.
 ///
 /// Range args use range semantics (bools/text skipped by the aggregate
-/// function). Scalar args are coerced: `TRUE`→`1`, `FALSE`→`0`,
-/// numeric text→number. This matches Excel's behavior where
-/// `SUM(TRUE,1)` = 2 but `SUM(A1:A2)` with A1=TRUE, A2=1 = 1.
+/// function itself). Scalar args are coerced to numbers via
+/// [`coerce::to_number`]: `TRUE`→1, `FALSE`→0, numeric text→number,
+/// non-numeric text→`#VALUE!`, errors propagate. This matches Excel
+/// where `SUM(TRUE,1)` = 2 but `SUM(A1:A2)` with A1=TRUE, A2=1 = 1.
 fn expand_args_for_aggregate(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
@@ -102,14 +103,26 @@ fn expand_args_for_aggregate(
                 expand_range(a, interp, scope)
             } else {
                 let val = interp.eval(a, scope);
-                let coerced = match &val {
-                    Value::Bool(b) => Value::Number(if *b { 1.0 } else { 0.0 }),
-                    _ => val,
+                let coerced = match coerce::to_number(&val) {
+                    Ok(n) => Value::Number(n),
+                    Err(e) => Value::Error(e),
                 };
                 vec![coerced]
             }
         })
         .collect()
+}
+
+/// Dispatch an aggregate function: expand + coerce args, call `f`.
+#[allow(clippy::unnecessary_wraps)]
+fn agg(
+    f: fn(&[Value]) -> Result<Value, CellError>,
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Option<Value> {
+    let vals = expand_args_for_aggregate(args, interp, scope);
+    Some(f(&vals).unwrap_or_else(Value::Error))
 }
 
 /// Look up `name` (case-insensitive) and call the matching builtin.
@@ -144,42 +157,15 @@ pub(crate) fn dispatch(
         "AVERAGEIF" => Some(multi_conditional::builtin_averageif(args, interp, scope)),
         "MINIFS" => Some(multi_conditional::builtin_minifs(args, interp, scope)),
         "MAXIFS" => Some(multi_conditional::builtin_maxifs(args, interp, scope)),
-        "SUM" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::sum(&vals).unwrap_or_else(Value::Error))
-        }
-        "COUNT" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::count(&vals).unwrap_or_else(Value::Error))
-        }
-        "COUNTA" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::counta(&vals).unwrap_or_else(Value::Error))
-        }
-        "COUNTBLANK" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::countblank(&vals).unwrap_or_else(Value::Error))
-        }
-        "AVERAGE" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::average(&vals).unwrap_or_else(Value::Error))
-        }
-        "MIN" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::min(&vals).unwrap_or_else(Value::Error))
-        }
-        "MAX" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::max(&vals).unwrap_or_else(Value::Error))
-        }
-        "MEDIAN" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::median(&vals).unwrap_or_else(Value::Error))
-        }
-        "PRODUCT" => {
-            let vals = expand_args_for_aggregate(args, interp, scope);
-            Some(aggregate::product(&vals).unwrap_or_else(Value::Error))
-        }
+        "SUM" => agg(aggregate::sum, args, interp, scope),
+        "COUNT" => agg(aggregate::count, args, interp, scope),
+        "COUNTA" => agg(aggregate::counta, args, interp, scope),
+        "COUNTBLANK" => agg(aggregate::countblank, args, interp, scope),
+        "AVERAGE" => agg(aggregate::average, args, interp, scope),
+        "MIN" => agg(aggregate::min, args, interp, scope),
+        "MAX" => agg(aggregate::max, args, interp, scope),
+        "MEDIAN" => agg(aggregate::median, args, interp, scope),
+        "PRODUCT" => agg(aggregate::product, args, interp, scope),
         "VLOOKUP" => Some(lookup::builtin_vlookup(args, interp, scope)),
         "XLOOKUP" | "_XLFN.XLOOKUP" => Some(lookup::builtin_xlookup(args, interp, scope)),
         "HLOOKUP" => Some(lookup::builtin_hlookup(args, interp, scope)),
