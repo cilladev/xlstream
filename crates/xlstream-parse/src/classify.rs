@@ -344,7 +344,7 @@ enum FnKind {
 /// let ast = parse("1+2").unwrap();
 /// let ctx = ClassificationContext::for_cell("Sheet1", 1, 1);
 /// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
-/// assert_eq!(classify(&ast, &ctx, &test_meta), Classification::RowLocal);
+/// assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
 /// ```
 #[must_use]
 pub fn classify(
@@ -732,6 +732,12 @@ mod tests {
         category: FnCategory::Info,
         agg_kind: None,
     };
+    static VLOOKUP_M: FunctionMeta = FunctionMeta {
+        name: "VLOOKUP",
+        caps: FnCaps::LOOKUP.union(FnCaps::NEEDS_PRELUDE),
+        category: FnCategory::Lookup,
+        agg_kind: None,
+    };
 
     fn test_meta(name: &str) -> Option<&FunctionMeta> {
         match name.to_ascii_uppercase().as_str() {
@@ -751,6 +757,7 @@ mod tests {
             "COLUMN" => Some(&COLUMN_M),
             "ROWS" => Some(&ROWS_M),
             "COLUMNS" => Some(&COLUMNS_M),
+            "VLOOKUP" => Some(&VLOOKUP_M),
             _ => None,
         }
     }

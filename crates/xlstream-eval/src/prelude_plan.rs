@@ -206,11 +206,13 @@ impl Default for FoldState {
 /// use xlstream_parse::{parse, classify, rewrite, ClassificationContext, FunctionMeta};
 /// use xlstream_eval::prelude_plan::collect_aggregate_keys;
 ///
-/// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
+/// fn real_meta(name: &str) -> Option<&FunctionMeta> {
+///     xlstream_eval::registry::lookup_meta(name)
+/// }
 /// let ast = parse("SUM(A:A)").unwrap();
 /// let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-/// let verdict = classify(&ast, &ctx, &no_meta);
-/// let rewritten = rewrite(ast, &ctx, &verdict, &no_meta);
+/// let verdict = classify(&ast, &ctx, &real_meta);
+/// let rewritten = rewrite(ast, &ctx, &verdict, &real_meta);
 /// let keys = collect_aggregate_keys(&rewritten);
 /// assert_eq!(keys.len(), 1);
 /// ```
@@ -1225,8 +1227,8 @@ mod tests {
 
     use super::*;
 
-    fn no_meta(_: &str) -> Option<&xlstream_parse::FunctionMeta> {
-        None
+    fn real_meta(name: &str) -> Option<&xlstream_parse::FunctionMeta> {
+        crate::registry::lookup_meta(name)
     }
 
     // ===== FoldState: SUM =====
@@ -1444,8 +1446,8 @@ mod tests {
     fn collect_keys_from_rewritten_sum() {
         let ast = xlstream_parse::parse("SUM(A:A)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_aggregate_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].kind, AggKind::Sum);
@@ -1456,8 +1458,8 @@ mod tests {
     fn collect_keys_empty_for_row_local() {
         let ast = xlstream_parse::parse("A1+B1").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 1, 3);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_aggregate_keys(&rewritten);
         assert!(keys.is_empty());
     }
@@ -1466,8 +1468,8 @@ mod tests {
     fn collect_multi_keys_extracts_sumif() {
         let ast = xlstream_parse::parse("SUMIF(A:A,A2,B:B)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].kind, AggKind::Sum);
@@ -1479,8 +1481,8 @@ mod tests {
     fn collect_multi_keys_extracts_countif() {
         let ast = xlstream_parse::parse("COUNTIF(A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].kind, AggKind::Count);
@@ -1492,8 +1494,8 @@ mod tests {
     fn collect_multi_keys_extracts_averageif() {
         let ast = xlstream_parse::parse("AVERAGEIF(A:A,A2,B:B)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].kind, AggKind::Average);
@@ -1505,8 +1507,8 @@ mod tests {
     fn collect_multi_keys_sumif_without_sum_range_uses_criteria_col() {
         let ast = xlstream_parse::parse("SUMIF(A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sum_col, 1);
@@ -1518,8 +1520,8 @@ mod tests {
         let ast = xlstream_parse::parse("SUMIF(RefData!A:A,A2,RefData!B:B)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Main", 2, 5)
             .with_lookup_sheet("RefData");
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
@@ -1532,8 +1534,8 @@ mod tests {
         let ast = xlstream_parse::parse("COUNTIF(RefData!A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Main", 2, 5)
             .with_lookup_sheet("RefData");
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
@@ -1545,8 +1547,8 @@ mod tests {
         let ast = xlstream_parse::parse("AVERAGEIF(RefData!A:A,A2,RefData!B:B)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Main", 2, 5)
             .with_lookup_sheet("RefData");
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
@@ -1559,8 +1561,8 @@ mod tests {
         let ast = xlstream_parse::parse("SUMIFS(RefData!B:B,RefData!A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Main", 2, 5)
             .with_lookup_sheet("RefData");
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
@@ -1572,8 +1574,8 @@ mod tests {
     fn collect_multi_keys_extracts_minifs() {
         let ast = xlstream_parse::parse("MINIFS(B:B,A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].kind, AggKind::Min);
@@ -1585,8 +1587,8 @@ mod tests {
     fn collect_multi_keys_extracts_maxifs() {
         let ast = xlstream_parse::parse("MAXIFS(B:B,A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].kind, AggKind::Max);
@@ -1598,8 +1600,8 @@ mod tests {
     fn collect_multi_keys_extracts_minifs_two_criteria() {
         let ast = xlstream_parse::parse("MINIFS(C:C,A:A,A2,B:B,B2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].criteria_cols, vec![1, 2]);
@@ -1610,8 +1612,8 @@ mod tests {
         let ast = xlstream_parse::parse("MINIFS(RefData!B:B,RefData!A:A,A2)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Main", 2, 5)
             .with_lookup_sheet("RefData");
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
@@ -1671,8 +1673,8 @@ mod tests {
     fn is_prelude_evaluable_rejects_prelude_ref() {
         let ast = xlstream_parse::parse("SUM(A:A)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         assert!(!is_prelude_evaluable(&rewritten));
     }
 
@@ -1681,8 +1683,8 @@ mod tests {
         // A2 is row-local at row 2; SUM(B:B) becomes a PreludeRef after rewrite.
         let ast = xlstream_parse::parse("A2+SUM(B:B)").unwrap();
         let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 5);
-        let verdict = xlstream_parse::classify(&ast, &ctx, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
         assert!(!is_prelude_evaluable(&rewritten));
     }
 
@@ -1770,8 +1772,8 @@ mod tests {
     fn evaluate_row_formulas_errors_on_unevaluable_aggregate_col() {
         let ast = xlstream_parse::parse("SUM(A:A)").unwrap();
         let ctx_c = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 2);
-        let verdict = xlstream_parse::classify(&ast, &ctx_c, &no_meta);
-        let rewritten = xlstream_parse::rewrite(ast, &ctx_c, &verdict, &no_meta);
+        let verdict = xlstream_parse::classify(&ast, &ctx_c, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx_c, &verdict, &real_meta);
 
         let mut col_asts = HashMap::new();
         col_asts.insert(1u32, rewritten);

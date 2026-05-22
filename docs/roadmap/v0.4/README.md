@@ -5,7 +5,7 @@
 **Theme:** LET variable binding, advanced financial functions, multi-format I/O
 
 ## Cleanup
-- [] Formula registry clean up
+- [x] Formula registry clean up
 
 ## LET
 

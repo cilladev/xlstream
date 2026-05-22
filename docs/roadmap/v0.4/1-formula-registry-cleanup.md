@@ -1,6 +1,8 @@
 # Plan: Centralize Formula Registration
 
-**Status:** Approved (v4)
+> **Superseded by [`02-formula-registry-cleanup-v2.md`](02-formula-registry-cleanup-v2.md).**
+
+**Status:** Superseded
 **Scope:** Architectural refactor — touches xlstream-parse + xlstream-eval
 **Motivation:** Issue #140 exposed that adding/fixing a function requires touching 5+ files with redundant string matching. There's no single source of truth for "what functions exist and how do they behave."
 

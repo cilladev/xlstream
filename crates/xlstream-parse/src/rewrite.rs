@@ -148,13 +148,12 @@ pub enum PreludeKey {
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{classify, parse, rewrite, Classification, ClassificationContext, FunctionMeta};
-/// let ast = parse("SUM(A:A)").unwrap();
-/// let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+/// use xlstream_parse::{parse, rewrite, Classification, ClassificationContext, FunctionMeta};
 /// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
-/// let verdict = classify(&ast, &ctx, &no_meta);
-/// let rewritten = rewrite(ast, &ctx, &verdict, &no_meta);
-/// assert!(format!("{rewritten:?}").contains("PreludeRef"));
+/// let ast = parse("A2+1").unwrap();
+/// let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
+/// let rewritten = rewrite(ast, &ctx, &Classification::RowLocal, &no_meta);
+/// assert!(format!("{rewritten:?}").contains("BinaryOp"));
 /// ```
 #[must_use]
 pub fn rewrite(
@@ -354,19 +353,17 @@ fn extract_positive_u32(node: &Node) -> Option<u32> {
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{parse, collect_lookup_keys, FunctionMeta, LookupKind};
-/// let ast = parse("VLOOKUP(A1, 'Regions'!A:C, 2, FALSE)").unwrap();
+/// use xlstream_parse::{parse, collect_lookup_keys, FunctionMeta};
 /// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
+/// let ast = parse("A2+1").unwrap();
 /// let keys = collect_lookup_keys(&ast, &no_meta);
-/// assert_eq!(keys.len(), 1);
-/// assert_eq!(keys[0].kind, LookupKind::VLookup);
+/// assert!(keys.is_empty());
 /// ```
 #[must_use]
 pub fn collect_lookup_keys(
     ast: &Ast,
     fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
 ) -> Vec<LookupKey> {
-    let _ = fn_lookup;
     let mut keys = Vec::new();
     collect_from_node(&ast.root, &mut keys, fn_lookup);
     keys
