@@ -25,7 +25,7 @@ pub struct FunctionEntry {
     /// Alternative names that resolve to this entry (e.g. `CONCATENATE` for `CONCAT`).
     pub aliases: &'static [&'static str],
     /// The handler invoked at evaluation time.
-    pub handler: Handler,
+    pub(crate) handler: Handler,
 }
 
 // ---------------------------------------------------------------------------
@@ -1681,7 +1681,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
     FunctionEntry {
         meta: FunctionMeta {
             name: "EXPON.DIST",
-            caps: FnCaps::PURE.union(FnCaps::RANGE_EXPAND),
+            caps: FnCaps::PURE,
             category: FnCategory::Statistical,
             agg_kind: None,
         },
@@ -2376,7 +2376,23 @@ mod tests {
     }
 
     #[test]
-    fn entry_count_at_least_200() {
-        assert!(all().count() >= 200, "expected at least 200 entries, got {}", all().count());
+    fn entry_count_is_exact() {
+        assert_eq!(all().count(), 208, "registry entry count changed — update this test");
+    }
+
+    #[test]
+    fn aggregate_category_implies_needs_prelude() {
+        let meta_dispatch = ["SUBTOTAL", "AGGREGATE"];
+        for entry in all() {
+            if entry.meta.category == FnCategory::Aggregate
+                && !meta_dispatch.contains(&entry.meta.name)
+            {
+                assert!(
+                    entry.meta.caps.contains(FnCaps::NEEDS_PRELUDE),
+                    "{}: Aggregate category must imply NEEDS_PRELUDE",
+                    entry.meta.name
+                );
+            }
+        }
     }
 }

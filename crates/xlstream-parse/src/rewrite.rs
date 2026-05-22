@@ -378,8 +378,7 @@ fn collect_from_node(
         Node::Function { name, args } => {
             if let Some(meta) = fn_lookup(name) {
                 if meta.caps.contains(crate::function_meta::FnCaps::LOOKUP) {
-                    let upper = name.to_uppercase();
-                    match upper.as_str() {
+                    match meta.name {
                         "VLOOKUP" => {
                             if let Some(key) = extract_vlookup_key(args) {
                                 keys.push(key);
