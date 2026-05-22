@@ -24,7 +24,7 @@ bitflags! {
     /// assert!(!caps.contains(FnCaps::LOOKUP));
     /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct FnCaps: u8 {
+    pub struct FnCaps: u16 {
         /// Deterministic, no side effects.
         const PURE           = 0b0000_0001;
         /// Lazy arg evaluation (IF, AND, OR).
