@@ -2223,7 +2223,6 @@ pub fn lookup_meta(name: &str) -> Option<&'static FunctionMeta> {
 /// Dispatch a function call by name: look up the handler and invoke it.
 ///
 /// Returns `None` for unknown function names.
-#[allow(dead_code)]
 pub(crate) fn dispatch(
     name: &str,
     args: &[NodeRef<'_>],
@@ -2247,4 +2246,137 @@ pub(crate) fn dispatch(
 /// ```
 pub fn all() -> impl Iterator<Item = &'static FunctionEntry> {
     ALL_ENTRIES.iter()
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn lookup_sum_returns_correct_metadata() {
+        let entry = lookup("SUM").unwrap();
+        assert_eq!(entry.meta.name, "SUM");
+        assert_eq!(entry.meta.category, FnCategory::Aggregate);
+        assert!(entry.meta.caps.contains(FnCaps::PURE));
+        assert!(entry.meta.caps.contains(FnCaps::AGG_COERCE));
+        assert!(entry.meta.caps.contains(FnCaps::NEEDS_PRELUDE));
+        assert_eq!(entry.meta.agg_kind, Some(AggKind::Sum));
+    }
+
+    #[test]
+    fn lookup_case_insensitive() {
+        let a = lookup("sum").unwrap();
+        let b = lookup("SUM").unwrap();
+        let c = lookup("Sum").unwrap();
+        assert_eq!(a.meta.name, b.meta.name);
+        assert_eq!(b.meta.name, c.meta.name);
+    }
+
+    #[test]
+    fn lookup_xlfn_prefix_stripped() {
+        let entry = lookup("_XLFN.XLOOKUP").unwrap();
+        assert_eq!(entry.meta.name, "XLOOKUP");
+    }
+
+    #[test]
+    fn lookup_unknown_returns_none() {
+        assert!(lookup("NOTAFUNCTION").is_none());
+    }
+
+    #[test]
+    fn lookup_alias_resolves_to_canonical() {
+        let entry = lookup("CONCATENATE").unwrap();
+        assert_eq!(entry.meta.name, "CONCAT");
+    }
+
+    #[test]
+    fn all_entries_have_uppercase_names() {
+        for entry in all() {
+            assert_eq!(
+                entry.meta.name,
+                entry.meta.name.to_uppercase(),
+                "entry name {:?} must be uppercase",
+                entry.meta.name
+            );
+        }
+    }
+
+    #[test]
+    fn lookup_implies_needs_prelude() {
+        for entry in all() {
+            if entry.meta.caps.contains(FnCaps::LOOKUP) {
+                assert!(
+                    entry.meta.caps.contains(FnCaps::NEEDS_PRELUDE),
+                    "{}: LOOKUP must imply NEEDS_PRELUDE",
+                    entry.meta.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn agg_coerce_implies_range_expand() {
+        for entry in all() {
+            if entry.meta.caps.contains(FnCaps::AGG_COERCE) {
+                assert!(
+                    entry.meta.caps.contains(FnCaps::RANGE_EXPAND),
+                    "{}: AGG_COERCE must imply RANGE_EXPAND",
+                    entry.meta.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn agg_kind_implies_agg_coerce() {
+        for entry in all() {
+            if entry.meta.agg_kind.is_some() {
+                assert!(
+                    entry.meta.caps.contains(FnCaps::AGG_COERCE),
+                    "{}: agg_kind requires AGG_COERCE",
+                    entry.meta.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn no_duplicate_names() {
+        let mut seen = std::collections::HashSet::new();
+        for entry in all() {
+            assert!(seen.insert(entry.meta.name), "duplicate name: {}", entry.meta.name);
+        }
+    }
+
+    #[test]
+    fn all_aliases_resolve_to_canonical_entry() {
+        for entry in all() {
+            for &alias in entry.aliases {
+                let resolved = lookup(alias).unwrap_or_else(|| {
+                    panic!("alias {alias:?} of {} not found in registry", entry.meta.name)
+                });
+                assert_eq!(
+                    resolved.meta.name, entry.meta.name,
+                    "alias {alias:?} should resolve to {}",
+                    entry.meta.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn all_aliases_are_uppercase() {
+        for entry in all() {
+            for &alias in entry.aliases {
+                assert_eq!(alias, alias.to_uppercase(), "alias {alias:?} must be uppercase");
+            }
+        }
+    }
+
+    #[test]
+    fn entry_count_at_least_200() {
+        assert!(all().count() >= 200, "expected at least 200 entries, got {}", all().count());
+    }
 }
