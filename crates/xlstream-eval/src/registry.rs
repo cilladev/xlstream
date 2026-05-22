@@ -42,7 +42,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_if,
+        handler: crate::builtins::conditional::builtin_if,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -52,7 +52,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_ifs,
+        handler: crate::builtins::conditional::builtin_ifs,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -62,7 +62,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_switch,
+        handler: crate::builtins::conditional::builtin_switch,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -72,7 +72,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_iferror,
+        handler: crate::builtins::conditional::builtin_iferror,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -82,7 +82,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_ifna,
+        handler: crate::builtins::conditional::builtin_ifna,
     },
     // -- Conditional (SHORT_CIRCUIT | RANGE_EXPAND) --
     FunctionEntry {
@@ -93,7 +93,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_and,
+        handler: crate::builtins::conditional::builtin_and,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -103,7 +103,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_or,
+        handler: crate::builtins::conditional::builtin_or,
     },
     // -- Conditional (PURE) --
     FunctionEntry {
@@ -114,7 +114,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_not,
+        handler: crate::builtins::conditional::builtin_not,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -124,7 +124,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_xor,
+        handler: crate::builtins::conditional::builtin_xor,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -155,7 +155,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sumifs,
+        handler: crate::builtins::multi_conditional::builtin_sumifs,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -165,7 +165,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_countifs,
+        handler: crate::builtins::multi_conditional::builtin_countifs,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -175,7 +175,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_averageifs,
+        handler: crate::builtins::multi_conditional::builtin_averageifs,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -185,7 +185,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_sumif,
+        handler: crate::builtins::multi_conditional::builtin_sumif,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -195,7 +195,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_countif,
+        handler: crate::builtins::multi_conditional::builtin_countif,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -205,7 +205,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_averageif,
+        handler: crate::builtins::multi_conditional::builtin_averageif,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -215,7 +215,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_minifs,
+        handler: crate::builtins::multi_conditional::builtin_minifs,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -225,7 +225,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_maxifs,
+        handler: crate::builtins::multi_conditional::builtin_maxifs,
     },
     // -- Simple aggregate (PURE | RANGE_EXPAND | AGG_COERCE | NEEDS_PRELUDE) --
     FunctionEntry {
@@ -354,7 +354,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_vlookup,
+        handler: crate::builtins::lookup::builtin_vlookup,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -364,7 +364,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_hlookup,
+        handler: crate::builtins::lookup::builtin_hlookup,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -374,7 +374,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_xlookup,
+        handler: crate::builtins::lookup::builtin_xlookup,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -384,7 +384,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_match,
+        handler: crate::builtins::lookup::builtin_match,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -394,7 +394,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_xmatch,
+        handler: crate::builtins::lookup::builtin_xmatch,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -404,7 +404,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_index,
+        handler: crate::builtins::lookup::builtin_index,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -414,7 +414,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_choose,
+        handler: crate::builtins::lookup::builtin_choose,
     },
     // -- Volatile (VOLATILE) --
     FunctionEntry {
@@ -425,7 +425,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_today,
+        handler: crate::builtins::date::builtin_today,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -435,7 +435,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_now,
+        handler: crate::builtins::date::builtin_now,
     },
     // -- Date pure (PURE) --
     FunctionEntry {
@@ -527,7 +527,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_networkdays,
+        handler: crate::builtins::date::builtin_networkdays,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -537,7 +537,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_workday,
+        handler: crate::builtins::date::builtin_workday,
     },
     // -- String pure eager (PURE) --
     FunctionEntry {
@@ -709,7 +709,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &["CONCATENATE"],
-        handler: crate::builtins::handle_concat,
+        handler: crate::builtins::string::builtin_concat,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -719,7 +719,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_textjoin,
+        handler: crate::builtins::string::builtin_textjoin,
     },
     // -- Math pure (PURE) --
     FunctionEntry {
@@ -1464,7 +1464,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_npv,
+        handler: crate::builtins::financial::builtin_npv,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1474,7 +1474,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_irr,
+        handler: crate::builtins::financial::builtin_irr,
     },
     // -- Meta-dispatch (SHORT_CIRCUIT | RANGE_EXPAND) --
     FunctionEntry {
@@ -1485,7 +1485,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_subtotal,
+        handler: crate::builtins::subtotal::builtin_subtotal,
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1495,7 +1495,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        handler: crate::builtins::handle_aggregate,
+        handler: crate::builtins::subtotal::builtin_aggregate,
     },
     // -- Statistical range-expanding (PURE | RANGE_EXPAND) --
     FunctionEntry {
