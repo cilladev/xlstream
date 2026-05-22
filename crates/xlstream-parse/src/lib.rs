@@ -22,6 +22,7 @@
 
 mod ast;
 mod classify;
+pub mod function_meta;
 mod parser;
 mod references;
 mod resolve;
@@ -32,6 +33,7 @@ mod view;
 
 pub use ast::Ast;
 pub use classify::{classify, Classification, ClassificationContext, UnsupportedReason};
+pub use function_meta::{FnCaps, FnCategory, FunctionMeta};
 pub use parser::parse;
 pub use references::{extract_references, Reference, References};
 pub use resolve::{resolve_named_ranges, stamp_prelude_sheet};
