@@ -140,50 +140,66 @@ pub enum PreludeKey {
 /// Only rewrites formulas classified as `AggregateOnly`, `LookupOnly`, or
 /// `Mixed`. `RowLocal` and `Unsupported` pass through untouched.
 ///
+/// `fn_lookup` resolves a function name to its [`FunctionMeta`] (if
+/// registered). Pass `|_| None` when no registry is available.
+///
+/// [`FunctionMeta`]: crate::function_meta::FunctionMeta
+///
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{classify, parse, rewrite, Classification, ClassificationContext};
+/// use xlstream_parse::{classify, parse, rewrite, Classification, ClassificationContext, FunctionMeta};
 /// let ast = parse("SUM(A:A)").unwrap();
 /// let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-/// let verdict = classify(&ast, &ctx);
-/// let rewritten = rewrite(ast, &ctx, &verdict);
+/// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
+/// let verdict = classify(&ast, &ctx, &no_meta);
+/// let rewritten = rewrite(ast, &ctx, &verdict, &no_meta);
 /// assert!(format!("{rewritten:?}").contains("PreludeRef"));
 /// ```
 #[must_use]
-pub fn rewrite(ast: Ast, ctx: &ClassificationContext, verdict: &Classification) -> Ast {
+pub fn rewrite(
+    ast: Ast,
+    ctx: &ClassificationContext,
+    verdict: &Classification,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Ast {
     match verdict {
         Classification::Unsupported(_) | Classification::RowLocal => ast,
         Classification::AggregateOnly | Classification::LookupOnly | Classification::Mixed => {
-            let new_root = rewrite_node(ast.root, ctx);
+            let new_root = rewrite_node(ast.root, ctx, fn_lookup);
             Ast { upstream: ast.upstream, root: new_root }
         }
     }
 }
 
-fn rewrite_node(node: Node, ctx: &ClassificationContext) -> Node {
+fn rewrite_node(
+    node: Node,
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Node {
     match node {
         Node::Function { ref name, ref args } => {
             let upper = name.to_uppercase();
             if crate::sets::is_aggregate(&upper) {
-                rewrite_aggregate(name, args, ctx)
+                rewrite_aggregate(name, args, ctx, fn_lookup)
             } else if crate::sets::is_lookup(&upper) {
-                rewrite_lookup(name, args, ctx).unwrap_or_else(|| recurse_function(node, ctx))
+                rewrite_lookup(name, args, ctx, fn_lookup)
+                    .unwrap_or_else(|| recurse_function(node, ctx, fn_lookup))
             } else {
-                recurse_function(node, ctx)
+                recurse_function(node, ctx, fn_lookup)
             }
         }
         Node::BinaryOp { op, left, right } => Node::BinaryOp {
             op,
-            left: Box::new(rewrite_node(*left, ctx)),
-            right: Box::new(rewrite_node(*right, ctx)),
+            left: Box::new(rewrite_node(*left, ctx, fn_lookup)),
+            right: Box::new(rewrite_node(*right, ctx, fn_lookup)),
         },
         Node::UnaryOp { op, expr } => {
-            Node::UnaryOp { op, expr: Box::new(rewrite_node(*expr, ctx)) }
+            Node::UnaryOp { op, expr: Box::new(rewrite_node(*expr, ctx, fn_lookup)) }
         }
         Node::Array(rows) => Node::Array(
             rows.into_iter()
-                .map(|row| row.into_iter().map(|n| rewrite_node(n, ctx)).collect())
+                .map(|row| row.into_iter().map(|n| rewrite_node(n, ctx, fn_lookup)).collect())
                 .collect(),
         ),
         // Leaves pass through.
@@ -195,11 +211,16 @@ fn rewrite_node(node: Node, ctx: &ClassificationContext) -> Node {
     }
 }
 
-fn recurse_function(node: Node, ctx: &ClassificationContext) -> Node {
+fn recurse_function(
+    node: Node,
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Node {
     match node {
-        Node::Function { name, args } => {
-            Node::Function { name, args: args.into_iter().map(|a| rewrite_node(a, ctx)).collect() }
-        }
+        Node::Function { name, args } => Node::Function {
+            name,
+            args: args.into_iter().map(|a| rewrite_node(a, ctx, fn_lookup)).collect(),
+        },
         other => other,
     }
 }
@@ -249,9 +270,14 @@ fn aggregate_key_from_range(kind: AggKind, reference: &Reference) -> Option<Aggr
     }
 }
 
-fn rewrite_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) -> Node {
+fn rewrite_aggregate(
+    name: &str,
+    args: &[Node],
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Node {
     let Some(kind) = agg_kind_for(name) else {
-        return recurse_function_owned(name, args, ctx);
+        return recurse_function_owned(name, args, ctx, fn_lookup);
     };
 
     // Single-arg whole-column: collapse the entire Function node.
@@ -268,7 +294,7 @@ fn rewrite_aggregate(name: &str, args: &[Node], ctx: &ClassificationContext) -> 
             if let Some(key) = try_aggregate_key(kind, arg) {
                 Node::PreludeRef(PreludeKey::Aggregate(key))
             } else {
-                rewrite_node(arg.clone(), ctx)
+                rewrite_node(arg.clone(), ctx, fn_lookup)
             }
         })
         .collect();
@@ -282,14 +308,25 @@ fn try_aggregate_key(kind: AggKind, node: &Node) -> Option<AggregateKey> {
     }
 }
 
-fn recurse_function_owned(name: &str, args: &[Node], ctx: &ClassificationContext) -> Node {
+fn recurse_function_owned(
+    name: &str,
+    args: &[Node],
+    ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Node {
     Node::Function {
         name: name.to_owned(),
-        args: args.iter().map(|a| rewrite_node(a.clone(), ctx)).collect(),
+        args: args.iter().map(|a| rewrite_node(a.clone(), ctx, fn_lookup)).collect(),
     }
 }
 
-fn rewrite_lookup(_name: &str, _args: &[Node], _ctx: &ClassificationContext) -> Option<Node> {
+fn rewrite_lookup(
+    _name: &str,
+    _args: &[Node],
+    _ctx: &ClassificationContext,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Option<Node> {
+    let _ = fn_lookup;
     None
 }
 
@@ -326,23 +363,38 @@ fn extract_positive_u32(node: &Node) -> Option<u32> {
 /// Used by the prelude loader to know which sheets to load and which
 /// columns to index. Does not modify the AST.
 ///
+/// `fn_lookup` resolves a function name to its [`FunctionMeta`] (if
+/// registered). Pass `|_| None` when no registry is available.
+///
+/// [`FunctionMeta`]: crate::function_meta::FunctionMeta
+///
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{parse, collect_lookup_keys, LookupKind};
+/// use xlstream_parse::{parse, collect_lookup_keys, FunctionMeta, LookupKind};
 /// let ast = parse("VLOOKUP(A1, 'Regions'!A:C, 2, FALSE)").unwrap();
-/// let keys = collect_lookup_keys(&ast);
+/// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
+/// let keys = collect_lookup_keys(&ast, &no_meta);
 /// assert_eq!(keys.len(), 1);
 /// assert_eq!(keys[0].kind, LookupKind::VLookup);
 /// ```
 #[must_use]
-pub fn collect_lookup_keys(ast: &Ast) -> Vec<LookupKey> {
+pub fn collect_lookup_keys(
+    ast: &Ast,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) -> Vec<LookupKey> {
+    let _ = fn_lookup;
     let mut keys = Vec::new();
-    collect_from_node(&ast.root, &mut keys);
+    collect_from_node(&ast.root, &mut keys, fn_lookup);
     keys
 }
 
-fn collect_from_node(node: &Node, keys: &mut Vec<LookupKey>) {
+#[allow(clippy::only_used_in_recursion)]
+fn collect_from_node(
+    node: &Node,
+    keys: &mut Vec<LookupKey>,
+    fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
+) {
     match node {
         Node::Function { name, args } => {
             let upper = name.to_uppercase();
@@ -389,18 +441,18 @@ fn collect_from_node(node: &Node, keys: &mut Vec<LookupKey>) {
                 _ => {}
             }
             for arg in args {
-                collect_from_node(arg, keys);
+                collect_from_node(arg, keys, fn_lookup);
             }
         }
         Node::BinaryOp { left, right, .. } => {
-            collect_from_node(left, keys);
-            collect_from_node(right, keys);
+            collect_from_node(left, keys, fn_lookup);
+            collect_from_node(right, keys, fn_lookup);
         }
-        Node::UnaryOp { expr, .. } => collect_from_node(expr, keys),
+        Node::UnaryOp { expr, .. } => collect_from_node(expr, keys, fn_lookup),
         Node::Array(rows) => {
             for row in rows {
                 for cell in row {
-                    collect_from_node(cell, keys);
+                    collect_from_node(cell, keys, fn_lookup);
                 }
             }
         }
