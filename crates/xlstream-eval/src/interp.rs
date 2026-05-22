@@ -148,7 +148,7 @@ impl<'ctx> Interpreter<'ctx> {
 
             NodeView::Function { name } => {
                 let args = node.args();
-                if let Some(result) = crate::builtins::dispatch(name, &args, self, scope) {
+                if let Some(result) = crate::registry::dispatch(name, &args, self, scope) {
                     result
                 } else {
                     Value::Error(CellError::Value)
