@@ -17,6 +17,7 @@ formualizer-parse = { workspace = true }
 formualizer-common = { workspace = true }
 smallvec = { workspace = true }
 phf = { workspace = true }
+bitflags = { workspace = true }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

@@ -2005,6 +2005,7 @@ dependencies = [
 name = "xlstream-parse"
 version = "0.3.0"
 dependencies = [
+ "bitflags",
  "formualizer-common",
  "formualizer-parse",
  "phf",
