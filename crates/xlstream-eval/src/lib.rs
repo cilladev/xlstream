@@ -36,6 +36,7 @@ pub mod lookup;
 pub mod ops;
 pub mod prelude;
 pub mod prelude_plan;
+pub mod registry;
 mod scope;
 pub mod topo;
 

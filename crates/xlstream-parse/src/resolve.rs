@@ -95,12 +95,13 @@ fn resolve_node<S: BuildHasher>(
 /// # Examples
 ///
 /// ```
-/// use xlstream_parse::{parse, classify, rewrite, ClassificationContext, stamp_prelude_sheet};
+/// use xlstream_parse::{parse, classify, rewrite, ClassificationContext, FunctionMeta, stamp_prelude_sheet};
 ///
+/// fn no_meta(_: &str) -> Option<&FunctionMeta> { None }
 /// let ast = parse("SUM(A:A)").unwrap();
 /// let ctx = ClassificationContext::for_cell("Sales", 2, 5);
-/// let verdict = classify(&ast, &ctx);
-/// let rewritten = rewrite(ast, &ctx, &verdict);
+/// let verdict = classify(&ast, &ctx, &no_meta);
+/// let rewritten = rewrite(ast, &ctx, &verdict, &no_meta);
 /// let stamped = stamp_prelude_sheet(rewritten, "Sales");
 /// let dbg = format!("{stamped:?}");
 /// assert!(dbg.contains("Sales"), "expected sheet name in: {dbg}");
