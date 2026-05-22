@@ -6,20 +6,20 @@
 
 pub mod aggregate;
 mod compatibility;
-mod conditional;
+pub(crate) mod conditional;
 pub mod convert;
 mod database;
 pub(crate) mod date;
 pub mod engineering;
 pub mod financial;
 pub mod info;
-mod lookup;
+pub(crate) mod lookup;
 pub(crate) mod math;
-mod multi_conditional;
+pub(crate) mod multi_conditional;
 mod specfn;
 pub mod statistical;
 pub(crate) mod string;
-mod subtotal;
+pub(crate) mod subtotal;
 
 use xlstream_core::{coerce, CellError, Value};
 use xlstream_parse::{NodeRef, NodeView};
@@ -117,7 +117,7 @@ fn expand_args_for_aggregate(
 ///
 /// Expands each arg via [`expand_range`] to collect arrays, then
 /// delegates to [`aggregate::sumproduct`].
-fn builtin_sumproduct(
+pub(crate) fn handle_sumproduct(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -132,7 +132,11 @@ fn builtin_sumproduct(
 }
 
 /// `VAR.S(range, ...)` — sample variance. Range-expanding.
-fn builtin_var_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_var_s(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -141,7 +145,11 @@ fn builtin_var_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScop
 }
 
 /// `VAR.P(range, ...)` — population variance. Range-expanding.
-fn builtin_var_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_var_p(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -150,7 +158,11 @@ fn builtin_var_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScop
 }
 
 /// `STDEV.S(range, ...)` — sample standard deviation. Range-expanding.
-fn builtin_stdev_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_stdev_s(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -159,7 +171,11 @@ fn builtin_stdev_s(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSc
 }
 
 /// `STDEV.P(range, ...)` — population standard deviation. Range-expanding.
-fn builtin_stdev_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_stdev_p(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -168,7 +184,11 @@ fn builtin_stdev_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSc
 }
 
 /// `SKEW(range, ...)` — sample skewness. Range-expanding.
-fn builtin_skew(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_skew(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -177,7 +197,11 @@ fn builtin_skew(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope
 }
 
 /// `SKEW.P(range, ...)` — population skewness. Range-expanding.
-fn builtin_skew_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_skew_p(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -186,7 +210,11 @@ fn builtin_skew_p(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSco
 }
 
 /// `KURT(range, ...)` — excess kurtosis. Range-expanding.
-fn builtin_kurt(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_kurt(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.is_empty() {
         return Value::Error(CellError::Value);
     }
@@ -195,7 +223,7 @@ fn builtin_kurt(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope
 }
 
 /// `MODE.SNGL(range, ...)` — most frequent value. Range-expanding.
-fn builtin_mode_sngl(
+pub(crate) fn handle_mode_sngl(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -208,13 +236,17 @@ fn builtin_mode_sngl(
 }
 
 /// `AVEDEV(range, ...)` — average absolute deviation. Range-expanding.
-fn builtin_avedev(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_avedev(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     let values: Vec<Value> = args.iter().flat_map(|&a| expand_range(a, interp, scope)).collect();
     statistical::builtin_avedev(&values).map_or_else(Value::Error, Value::Number)
 }
 
 /// `PERCENTILE.INC(range, k)` — inclusive percentile. Two-arg: range + scalar.
-fn builtin_percentile_inc(
+pub(crate) fn handle_percentile_inc(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -231,7 +263,7 @@ fn builtin_percentile_inc(
 }
 
 /// `PERCENTILE.EXC(range, k)` — exclusive percentile. Two-arg: range + scalar.
-fn builtin_percentile_exc(
+pub(crate) fn handle_percentile_exc(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -248,7 +280,7 @@ fn builtin_percentile_exc(
 }
 
 /// `QUARTILE.INC(range, quart)` — inclusive quartile. Two-arg: range + scalar.
-fn builtin_quartile_inc(
+pub(crate) fn handle_quartile_inc(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -270,7 +302,7 @@ fn builtin_quartile_inc(
 }
 
 /// `QUARTILE.EXC(range, quart)` — exclusive quartile. Two-arg: range + scalar.
-fn builtin_quartile_exc(
+pub(crate) fn handle_quartile_exc(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -292,7 +324,7 @@ fn builtin_quartile_exc(
 }
 
 /// `LARGE(array, k)` / `SMALL(array, k)` — k-th largest or smallest.
-fn builtin_large_small(
+pub(crate) fn handle_large_small(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -308,7 +340,11 @@ fn builtin_large_small(
 }
 
 /// `RANK.EQ(number, ref, [order])` — rank with ties getting top rank.
-fn builtin_rank_eq(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_rank_eq(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
@@ -333,7 +369,11 @@ fn builtin_rank_eq(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSc
 }
 
 /// `RANK.AVG(number, ref, [order])` — rank with ties getting average rank.
-fn builtin_rank_avg(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_rank_avg(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
     }
@@ -358,7 +398,7 @@ fn builtin_rank_avg(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowS
 }
 
 /// `EXPON.DIST(x, lambda, cumulative)` — exponential distribution.
-fn builtin_expon_dist(
+pub(crate) fn handle_expon_dist(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -383,7 +423,11 @@ fn builtin_expon_dist(
 }
 
 /// `CORREL(array1, array2)` — Pearson correlation coefficient. Two-arg range-expanding.
-fn builtin_correl(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_correl(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() != 2 {
         return Value::Error(CellError::Value);
     }
@@ -393,7 +437,7 @@ fn builtin_correl(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowSco
 }
 
 /// `COVARIANCE.P(array1, array2)` — population covariance. Two-arg range-expanding.
-fn builtin_covariance_p(
+pub(crate) fn handle_covariance_p(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -407,7 +451,7 @@ fn builtin_covariance_p(
 }
 
 /// `COVARIANCE.S(array1, array2)` — sample covariance. Two-arg range-expanding.
-fn builtin_covariance_s(
+pub(crate) fn handle_covariance_s(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -421,7 +465,11 @@ fn builtin_covariance_s(
 }
 
 /// `SLOPE(known_ys, known_xs)` — slope of least-squares regression line.
-fn builtin_slope(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_slope(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() != 2 {
         return Value::Error(CellError::Value);
     }
@@ -431,7 +479,7 @@ fn builtin_slope(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScop
 }
 
 /// `INTERCEPT(known_ys, known_xs)` — y-intercept of least-squares line.
-fn builtin_intercept(
+pub(crate) fn handle_intercept(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -445,7 +493,11 @@ fn builtin_intercept(
 }
 
 /// `RSQ(known_ys, known_xs)` — coefficient of determination.
-fn builtin_rsq(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<'_>) -> Value {
+pub(crate) fn handle_rsq(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
     if args.len() != 2 {
         return Value::Error(CellError::Value);
     }
@@ -455,7 +507,7 @@ fn builtin_rsq(args: &[NodeRef<'_>], interp: &Interpreter<'_>, scope: &RowScope<
 }
 
 /// `FORECAST.LINEAR(x, known_ys, known_xs)` — predict Y from X.
-fn builtin_forecast_linear(
+pub(crate) fn handle_forecast_linear(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
@@ -482,78 +534,6 @@ fn builtin_forecast_linear(
 
 // -- Conditional --
 
-pub(crate) fn handle_if(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_if(args, interp, scope)
-}
-
-pub(crate) fn handle_ifs(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_ifs(args, interp, scope)
-}
-
-pub(crate) fn handle_switch(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_switch(args, interp, scope)
-}
-
-pub(crate) fn handle_iferror(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_iferror(args, interp, scope)
-}
-
-pub(crate) fn handle_ifna(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_ifna(args, interp, scope)
-}
-
-pub(crate) fn handle_and(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_and(args, interp, scope)
-}
-
-pub(crate) fn handle_or(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_or(args, interp, scope)
-}
-
-pub(crate) fn handle_not(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_not(args, interp, scope)
-}
-
-pub(crate) fn handle_xor(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    conditional::builtin_xor(args, interp, scope)
-}
-
 pub(crate) fn handle_true(
     args: &[NodeRef<'_>],
     _interp: &Interpreter<'_>,
@@ -571,70 +551,6 @@ pub(crate) fn handle_false(
 }
 
 // -- Multi-conditional aggregates --
-
-pub(crate) fn handle_sumifs(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_sumifs(args, interp, scope)
-}
-
-pub(crate) fn handle_countifs(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_countifs(args, interp, scope)
-}
-
-pub(crate) fn handle_averageifs(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_averageifs(args, interp, scope)
-}
-
-pub(crate) fn handle_sumif(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_sumif(args, interp, scope)
-}
-
-pub(crate) fn handle_countif(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_countif(args, interp, scope)
-}
-
-pub(crate) fn handle_averageif(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_averageif(args, interp, scope)
-}
-
-pub(crate) fn handle_minifs(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_minifs(args, interp, scope)
-}
-
-pub(crate) fn handle_maxifs(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    multi_conditional::builtin_maxifs(args, interp, scope)
-}
 
 // -- Simple aggregates --
 
@@ -721,79 +637,7 @@ pub(crate) fn handle_product(
 
 // -- Lookup --
 
-pub(crate) fn handle_vlookup(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_vlookup(args, interp, scope)
-}
-
-pub(crate) fn handle_hlookup(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_hlookup(args, interp, scope)
-}
-
-pub(crate) fn handle_xlookup(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_xlookup(args, interp, scope)
-}
-
-pub(crate) fn handle_match(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_match(args, interp, scope)
-}
-
-pub(crate) fn handle_xmatch(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_xmatch(args, interp, scope)
-}
-
-pub(crate) fn handle_index(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_index(args, interp, scope)
-}
-
-pub(crate) fn handle_choose(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    lookup::builtin_choose(args, interp, scope)
-}
-
 // -- Date (volatile) --
-
-pub(crate) fn handle_today(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    date::builtin_today(args, interp, scope)
-}
-
-pub(crate) fn handle_now(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    date::builtin_now(args, interp, scope)
-}
 
 // -- Date (pure, eager eval) --
 
@@ -862,22 +706,6 @@ pub(crate) fn handle_datedif(
 }
 
 // -- Date (range-expanding) --
-
-pub(crate) fn handle_networkdays(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    date::builtin_networkdays(args, interp, scope)
-}
-
-pub(crate) fn handle_workday(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    date::builtin_workday(args, interp, scope)
-}
 
 // -- String (pure, eager eval) --
 
@@ -1010,22 +838,6 @@ pub(crate) fn handle_exact(
 }
 
 // -- String (range-expanding) --
-
-pub(crate) fn handle_concat(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    string::builtin_concat(args, interp, scope)
-}
-
-pub(crate) fn handle_textjoin(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    string::builtin_textjoin(args, interp, scope)
-}
 
 // -- Math (pure, eager eval) --
 
@@ -1643,64 +1455,16 @@ pub(crate) fn handle_rate(
 
 // -- Financial (range-expanding) --
 
-pub(crate) fn handle_npv(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    financial::builtin_npv(args, interp, scope)
-}
-
-pub(crate) fn handle_irr(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    financial::builtin_irr(args, interp, scope)
-}
-
 // -- Meta-dispatch (SUBTOTAL, AGGREGATE) --
 
-pub(crate) fn handle_subtotal(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    subtotal::builtin_subtotal(args, interp, scope)
-}
-
-pub(crate) fn handle_aggregate(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    subtotal::builtin_aggregate(args, interp, scope)
-}
-
 // -- Statistical (range-expanding) --
-
-pub(crate) fn handle_sumproduct(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_sumproduct(args, interp, scope)
-}
-
-pub(crate) fn handle_avedev(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_avedev(args, interp, scope)
-}
 
 pub(crate) fn handle_large(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    builtin_large_small(args, interp, scope, true)
+    handle_large_small(args, interp, scope, true)
 }
 
 pub(crate) fn handle_small(
@@ -1708,183 +1472,7 @@ pub(crate) fn handle_small(
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    builtin_large_small(args, interp, scope, false)
-}
-
-pub(crate) fn handle_var_s(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_var_s(args, interp, scope)
-}
-
-pub(crate) fn handle_var_p(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_var_p(args, interp, scope)
-}
-
-pub(crate) fn handle_stdev_s(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_stdev_s(args, interp, scope)
-}
-
-pub(crate) fn handle_stdev_p(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_stdev_p(args, interp, scope)
-}
-
-pub(crate) fn handle_skew(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_skew(args, interp, scope)
-}
-
-pub(crate) fn handle_skew_p(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_skew_p(args, interp, scope)
-}
-
-pub(crate) fn handle_kurt(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_kurt(args, interp, scope)
-}
-
-pub(crate) fn handle_mode_sngl(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_mode_sngl(args, interp, scope)
-}
-
-pub(crate) fn handle_percentile_inc(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_percentile_inc(args, interp, scope)
-}
-
-pub(crate) fn handle_percentile_exc(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_percentile_exc(args, interp, scope)
-}
-
-pub(crate) fn handle_quartile_inc(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_quartile_inc(args, interp, scope)
-}
-
-pub(crate) fn handle_quartile_exc(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_quartile_exc(args, interp, scope)
-}
-
-pub(crate) fn handle_rank_eq(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_rank_eq(args, interp, scope)
-}
-
-pub(crate) fn handle_rank_avg(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_rank_avg(args, interp, scope)
-}
-
-pub(crate) fn handle_expon_dist(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_expon_dist(args, interp, scope)
-}
-
-pub(crate) fn handle_correl(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_correl(args, interp, scope)
-}
-
-pub(crate) fn handle_covariance_p(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_covariance_p(args, interp, scope)
-}
-
-pub(crate) fn handle_covariance_s(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_covariance_s(args, interp, scope)
-}
-
-pub(crate) fn handle_slope(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_slope(args, interp, scope)
-}
-
-pub(crate) fn handle_intercept(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_intercept(args, interp, scope)
-}
-
-pub(crate) fn handle_rsq(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_rsq(args, interp, scope)
-}
-
-pub(crate) fn handle_forecast_linear(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    builtin_forecast_linear(args, interp, scope)
+    handle_large_small(args, interp, scope, false)
 }
 
 // -- Statistical (pure, eager eval with Result) --
