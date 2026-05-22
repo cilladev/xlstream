@@ -1,11 +1,9 @@
 //! Integration tests: formulas that classify as `Unsupported`.
 
-use xlstream_parse::{
-    classify, parse, Classification, ClassificationContext, FunctionMeta, UnsupportedReason,
-};
+use xlstream_parse::{classify, parse, Classification, ClassificationContext, UnsupportedReason};
 
-fn no_meta(_: &str) -> Option<&FunctionMeta> {
-    None
+fn real_meta(name: &str) -> Option<&xlstream_parse::FunctionMeta> {
+    xlstream_eval::registry::lookup_meta(name)
 }
 
 #[test]
@@ -13,7 +11,7 @@ fn offset_is_refused_with_unsupported_function() {
     let ast = parse("OFFSET(A1,1,0)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnsupportedFunction("OFFSET".into()))
     );
 }
@@ -23,7 +21,7 @@ fn indirect_is_refused() {
     let ast = parse("INDIRECT(\"A1\")").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnsupportedFunction("INDIRECT".into()))
     );
 }
@@ -33,7 +31,7 @@ fn non_current_row_ref_is_refused() {
     let ast = parse("A1+B1").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::NonCurrentRowRef)
     );
 }
@@ -43,7 +41,7 @@ fn self_reference_classifies_as_row_local() {
     // Cell E2 references E2 — self-referential, handled by iterative calc
     let ast = parse("E2+1").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
+    assert_eq!(classify(&ast, &ctx, &real_meta), Classification::RowLocal);
 }
 
 #[test]
@@ -51,7 +49,7 @@ fn filter_dynamic_array_is_refused() {
     let ast = parse("FILTER(A:A, B:B>0)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnsupportedFunction("FILTER".into()))
     );
 }
@@ -61,7 +59,7 @@ fn unique_dynamic_array_is_refused() {
     let ast = parse("UNIQUE(A:A)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnsupportedFunction("UNIQUE".into()))
     );
 }
@@ -71,7 +69,7 @@ fn rand_volatile_is_refused() {
     let ast = parse("RAND()").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnsupportedFunction("RAND".into()))
     );
 }
@@ -81,7 +79,7 @@ fn bare_whole_column_is_refused() {
     let ast = parse("A:A*2").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnboundedRange)
     );
 }
@@ -91,7 +89,7 @@ fn nested_unsupported_propagates() {
     let ast = parse("IF(A2>0, OFFSET(A1,1,0), 0)").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::UnsupportedFunction("OFFSET".into()))
     );
 }
@@ -101,7 +99,7 @@ fn external_reference_is_refused() {
     let ast = parse("[OtherBook.xlsx]Sheet1!A1").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::ExternalReference)
     );
 }
@@ -111,7 +109,7 @@ fn table_reference_is_refused() {
     let ast = parse("MyTable[Col1]").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
     assert_eq!(
-        classify(&ast, &ctx, &no_meta),
+        classify(&ast, &ctx, &real_meta),
         Classification::Unsupported(UnsupportedReason::TableReference)
     );
 }
@@ -120,5 +118,5 @@ fn table_reference_is_refused() {
 fn named_range_unknown_passes_classification_as_row_local() {
     let ast = parse("MyRange+1").unwrap();
     let ctx = ClassificationContext::for_cell("Sheet1", 2, 5);
-    assert_eq!(classify(&ast, &ctx, &no_meta), Classification::RowLocal);
+    assert_eq!(classify(&ast, &ctx, &real_meta), Classification::RowLocal);
 }

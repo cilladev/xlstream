@@ -1,13 +1,10 @@
 //! Function-name sets used by the classifier.
 //!
-//! Sets are stored in upper-case; lookups normalise the incoming name to
-//! upper-case to give Excel-style case-insensitivity.
+//! Only unsupported-function detection remains here. All other function
+//! routing (aggregate, lookup, volatile, range-expanding, range-metadata)
+//! is now handled by the centralized registry via [`FunctionMeta`] flags.
 //!
-//! The classifier checks `is_unsupported` first and emits
-//! `UnsupportedFunction(name)` for all entries. The sub-sets
-//! (`DYNAMIC_ARRAY_FUNCTIONS`, `VOLATILE_UNSUPPORTED`) exist for future
-//! use when the evaluator needs to distinguish refusal categories at
-//! runtime — the classifier itself does not use them today.
+//! [`FunctionMeta`]: crate::function_meta::FunctionMeta
 
 use phf::{phf_set, Set};
 
@@ -34,25 +31,6 @@ pub(crate) static VOLATILE_UNSUPPORTED: Set<&'static str> = phf_set! {
     "RAND", "RANDBETWEEN",
 };
 
-/// Functions evaluable in a single column pre-pass.
-pub(crate) static AGGREGATE_FUNCTIONS: Set<&'static str> = phf_set! {
-    "SUM", "COUNT", "COUNTA", "COUNTBLANK", "AVERAGE", "MIN", "MAX", "PRODUCT",
-    "SUMIF", "COUNTIF", "AVERAGEIF",
-    "SUMIFS", "COUNTIFS", "AVERAGEIFS", "MINIFS", "MAXIFS",
-    "MEDIAN",
-};
-
-/// Lookup functions allowed against pre-loaded lookup sheets.
-pub(crate) static LOOKUP_FUNCTIONS: Set<&'static str> = phf_set! {
-    "VLOOKUP", "HLOOKUP", "XLOOKUP", "MATCH", "XMATCH", "INDEX", "CHOOSE",
-};
-
-/// Volatile functions whose semantics fit single-evaluation-per-run
-/// (the evaluator memoises in Phase 4).
-pub(crate) static VOLATILE_STREAMING_OK: Set<&'static str> = phf_set! {
-    "TODAY", "NOW",
-};
-
 /// `true` if `name` is in `UNSUPPORTED_FUNCTIONS` (case-insensitive).
 ///
 /// # Examples
@@ -64,45 +42,6 @@ pub(crate) static VOLATILE_STREAMING_OK: Set<&'static str> = phf_set! {
 #[must_use]
 pub fn is_unsupported(name: &str) -> bool {
     UNSUPPORTED_FUNCTIONS.contains(name.to_uppercase().as_str())
-}
-
-/// `true` if `name` is in `AGGREGATE_FUNCTIONS` (case-insensitive).
-///
-/// # Examples
-///
-/// ```
-/// use xlstream_parse::sets::is_aggregate;
-/// assert!(is_aggregate("Sum"));
-/// ```
-#[must_use]
-pub fn is_aggregate(name: &str) -> bool {
-    AGGREGATE_FUNCTIONS.contains(name.to_uppercase().as_str())
-}
-
-/// `true` if `name` is in `LOOKUP_FUNCTIONS` (case-insensitive).
-///
-/// # Examples
-///
-/// ```
-/// use xlstream_parse::sets::is_lookup;
-/// assert!(is_lookup("vlookup"));
-/// ```
-#[must_use]
-pub fn is_lookup(name: &str) -> bool {
-    LOOKUP_FUNCTIONS.contains(name.to_uppercase().as_str())
-}
-
-/// `true` if `name` is in `VOLATILE_STREAMING_OK` (case-insensitive).
-///
-/// # Examples
-///
-/// ```
-/// use xlstream_parse::sets::is_volatile_streaming_ok;
-/// assert!(is_volatile_streaming_ok("TODAY"));
-/// ```
-#[must_use]
-pub fn is_volatile_streaming_ok(name: &str) -> bool {
-    VOLATILE_STREAMING_OK.contains(name.to_uppercase().as_str())
 }
 
 /// `true` if `name` is in `DYNAMIC_ARRAY_FUNCTIONS` (case-insensitive).
@@ -131,74 +70,11 @@ pub fn is_volatile_unsupported(name: &str) -> bool {
     VOLATILE_UNSUPPORTED.contains(name.to_uppercase().as_str())
 }
 
-/// Functions whose range arguments should be expanded row-by-row
-/// rather than treated as aggregates or refused outright. Only
-/// bounded single-column ranges are accepted; unbounded or
-/// multi-column ranges are still refused.
-pub(crate) static RANGE_EXPANDING_FUNCTIONS: Set<&'static str> = phf_set! {
-    "IRR", "NPV", "CONCAT", "CONCATENATE", "TEXTJOIN",
-    "NETWORKDAYS", "WORKDAY", "AND", "OR", "SUMPRODUCT",
-    "VAR.S", "VAR.P", "STDEV.S", "STDEV.P",
-    "SKEW", "SKEW.P", "KURT", "AVEDEV",
-    "MODE.SNGL",
-    "PERCENTILE.INC", "PERCENTILE.EXC", "QUARTILE.INC", "QUARTILE.EXC",
-    "LARGE", "SMALL",
-    "RANK.EQ", "RANK.AVG",
-    "CORREL",
-    "COVARIANCE.P", "COVARIANCE.S",
-    "SLOPE", "INTERCEPT", "RSQ", "FORECAST.LINEAR",
-    "SUBTOTAL", "AGGREGATE",
-};
-
-/// `true` if `name` is in `RANGE_EXPANDING_FUNCTIONS` (case-insensitive).
-///
-/// # Examples
-///
-/// ```
-/// use xlstream_parse::sets::is_range_expanding;
-/// assert!(is_range_expanding("IRR"));
-/// assert!(is_range_expanding("concat"));
-/// assert!(!is_range_expanding("SUM"));
-/// ```
-#[must_use]
-pub fn is_range_expanding(name: &str) -> bool {
-    RANGE_EXPANDING_FUNCTIONS.contains(name.to_uppercase().as_str())
-}
-
-/// Functions that inspect range/cell reference metadata (row/column
-/// position or count) without reading cell values. The classifier
-/// returns `RowLocal` unconditionally — ranges passed to these
-/// functions are never expanded or evaluated.
-pub(crate) static RANGE_METADATA_FUNCTIONS: Set<&'static str> = phf_set! {
-    "ROW", "COLUMN", "ROWS", "COLUMNS",
-};
-
-/// `true` if `name` is in `RANGE_METADATA_FUNCTIONS` (case-insensitive).
-///
-/// # Examples
-///
-/// ```
-/// use xlstream_parse::sets::is_range_metadata;
-/// assert!(is_range_metadata("ROWS"));
-/// assert!(is_range_metadata("column"));
-/// ```
-#[must_use]
-pub fn is_range_metadata(name: &str) -> bool {
-    RANGE_METADATA_FUNCTIONS.contains(name.to_uppercase().as_str())
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
-
-    #[test]
-    fn aggregate_set_recognises_sum_case_insensitively() {
-        assert!(is_aggregate("SUM"));
-        assert!(is_aggregate("sum"));
-        assert!(is_aggregate("Sum"));
-    }
 
     #[test]
     fn unsupported_set_lists_offset_indirect_filter_rand() {
@@ -209,31 +85,6 @@ mod tests {
         assert!(is_unsupported("RANDBETWEEN"));
         assert!(!is_unsupported("ROWS"));
         assert!(!is_unsupported("COLUMNS"));
-    }
-
-    #[test]
-    fn range_metadata_set_lists_row_column_rows_columns() {
-        assert!(is_range_metadata("ROW"));
-        assert!(is_range_metadata("COLUMN"));
-        assert!(is_range_metadata("ROWS"));
-        assert!(is_range_metadata("COLUMNS"));
-        assert!(is_range_metadata("row"));
-        assert!(is_range_metadata("columns"));
-        assert!(!is_range_metadata("SUM"));
-    }
-
-    #[test]
-    fn lookup_set_lists_vlookup_xlookup_index() {
-        assert!(is_lookup("VLOOKUP"));
-        assert!(is_lookup("XLOOKUP"));
-        assert!(is_lookup("INDEX"));
-    }
-
-    #[test]
-    fn volatile_streaming_ok_set_lists_today_now() {
-        assert!(is_volatile_streaming_ok("TODAY"));
-        assert!(is_volatile_streaming_ok("NOW"));
-        assert!(!is_volatile_streaming_ok("RAND"));
     }
 
     #[test]
@@ -253,58 +104,9 @@ mod tests {
     }
 
     #[test]
-    fn range_expanding_set_lists_irr_concat_networkdays() {
-        assert!(is_range_expanding("IRR"));
-        assert!(is_range_expanding("irr"));
-        assert!(is_range_expanding("CONCAT"));
-        assert!(is_range_expanding("CONCATENATE"));
-        assert!(is_range_expanding("TEXTJOIN"));
-        assert!(is_range_expanding("NETWORKDAYS"));
-        assert!(is_range_expanding("WORKDAY"));
-        assert!(is_range_expanding("AND"));
-        assert!(is_range_expanding("OR"));
-        assert!(is_range_expanding("NPV"));
-        assert!(is_range_expanding("SUMPRODUCT"));
-        assert!(is_range_expanding("sumproduct"));
-        assert!(is_range_expanding("VAR.S"));
-        assert!(is_range_expanding("VAR.P"));
-        assert!(is_range_expanding("STDEV.S"));
-        assert!(is_range_expanding("STDEV.P"));
-        assert!(is_range_expanding("var.s"));
-        assert!(is_range_expanding("SKEW"));
-        assert!(is_range_expanding("SKEW.P"));
-        assert!(is_range_expanding("KURT"));
-        assert!(is_range_expanding("MODE.SNGL"));
-        assert!(is_range_expanding("mode.sngl"));
-        assert!(is_range_expanding("PERCENTILE.INC"));
-        assert!(is_range_expanding("PERCENTILE.EXC"));
-        assert!(is_range_expanding("QUARTILE.INC"));
-        assert!(is_range_expanding("QUARTILE.EXC"));
-        assert!(is_range_expanding("RANK.EQ"));
-        assert!(is_range_expanding("RANK.AVG"));
-        assert!(is_range_expanding("CORREL"));
-        assert!(is_range_expanding("correl"));
-        assert!(is_range_expanding("COVARIANCE.P"));
-        assert!(is_range_expanding("COVARIANCE.S"));
-        assert!(is_range_expanding("SUBTOTAL"));
-        assert!(is_range_expanding("AGGREGATE"));
-        assert!(is_range_expanding("subtotal"));
-        assert!(!is_range_expanding("SUM"));
-    }
-
-    #[test]
     #[allow(clippy::explicit_iter_loop)]
     fn all_set_entries_are_uppercase() {
-        for set in [
-            &UNSUPPORTED_FUNCTIONS,
-            &AGGREGATE_FUNCTIONS,
-            &LOOKUP_FUNCTIONS,
-            &VOLATILE_STREAMING_OK,
-            &DYNAMIC_ARRAY_FUNCTIONS,
-            &VOLATILE_UNSUPPORTED,
-            &RANGE_EXPANDING_FUNCTIONS,
-            &RANGE_METADATA_FUNCTIONS,
-        ] {
+        for set in [&UNSUPPORTED_FUNCTIONS, &DYNAMIC_ARRAY_FUNCTIONS, &VOLATILE_UNSUPPORTED] {
             for &entry in set.iter() {
                 assert_eq!(entry, entry.to_uppercase(), "set entry {entry:?} must be uppercase");
             }

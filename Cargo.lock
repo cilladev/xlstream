@@ -2011,6 +2011,7 @@ dependencies = [
  "phf",
  "smallvec",
  "xlstream-core",
+ "xlstream-eval",
 ]
 
 [[package]]

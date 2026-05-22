@@ -179,12 +179,15 @@ fn rewrite_node(
 ) -> Node {
     match node {
         Node::Function { ref name, ref args } => {
-            let upper = name.to_uppercase();
-            if crate::sets::is_aggregate(&upper) {
-                rewrite_aggregate(name, args, ctx, fn_lookup)
-            } else if crate::sets::is_lookup(&upper) {
-                rewrite_lookup(name, args, ctx, fn_lookup)
-                    .unwrap_or_else(|| recurse_function(node, ctx, fn_lookup))
+            if let Some(meta) = fn_lookup(name) {
+                if meta.category == crate::function_meta::FnCategory::Aggregate {
+                    rewrite_aggregate(name, args, ctx, fn_lookup)
+                } else if meta.caps.contains(crate::function_meta::FnCaps::LOOKUP) {
+                    rewrite_lookup(name, args, ctx, fn_lookup)
+                        .unwrap_or_else(|| recurse_function(node, ctx, fn_lookup))
+                } else {
+                    recurse_function(node, ctx, fn_lookup)
+                }
             } else {
                 recurse_function(node, ctx, fn_lookup)
             }
@@ -225,27 +228,6 @@ fn recurse_function(
     }
 }
 
-/// Try to extract an [`AggKind`] from a function name.
-///
-/// Conditional aggregates (SUMIF, COUNTIF, AVERAGEIF, *IFS) are
-/// excluded — they carry criteria the prelude can't discard. They fall
-/// through to `recurse_function_owned` and keep their Function node
-/// intact. Phase 7 handles them with per-criteria groupby tables.
-fn agg_kind_for(name: &str) -> Option<AggKind> {
-    match name.to_uppercase().as_str() {
-        "SUM" => Some(AggKind::Sum),
-        "COUNT" => Some(AggKind::Count),
-        "COUNTA" => Some(AggKind::CountA),
-        "AVERAGE" => Some(AggKind::Average),
-        "MIN" => Some(AggKind::Min),
-        "MAX" => Some(AggKind::Max),
-        "PRODUCT" => Some(AggKind::Product),
-        "MEDIAN" => Some(AggKind::Median),
-        "COUNTBLANK" => Some(AggKind::CountBlank),
-        _ => None,
-    }
-}
-
 /// Try to build an [`AggregateKey`] from a single range reference node.
 ///
 /// Normalizes inverted bounds (A10:A2 -> start=2, end=10) to match Excel.
@@ -276,7 +258,8 @@ fn rewrite_aggregate(
     ctx: &ClassificationContext,
     fn_lookup: &dyn Fn(&str) -> Option<&crate::function_meta::FunctionMeta>,
 ) -> Node {
-    let Some(kind) = agg_kind_for(name) else {
+    let kind = fn_lookup(name).and_then(|m| m.agg_kind);
+    let Some(kind) = kind else {
         return recurse_function_owned(name, args, ctx, fn_lookup);
     };
 
@@ -389,7 +372,6 @@ pub fn collect_lookup_keys(
     keys
 }
 
-#[allow(clippy::only_used_in_recursion)]
 fn collect_from_node(
     node: &Node,
     keys: &mut Vec<LookupKey>,
@@ -397,48 +379,52 @@ fn collect_from_node(
 ) {
     match node {
         Node::Function { name, args } => {
-            let upper = name.to_uppercase();
-            match upper.as_str() {
-                "VLOOKUP" => {
-                    if let Some(key) = extract_vlookup_key(args) {
-                        keys.push(key);
-                    }
-                }
-                "HLOOKUP" => {
-                    if let Some(key) = extract_hlookup_key(args) {
-                        keys.push(key);
-                    }
-                }
-                "XLOOKUP" => {
-                    if let Some(key) = extract_xlookup_key(args) {
-                        keys.push(key);
-                    }
-                }
-                "MATCH" | "XMATCH" => {
-                    if args.len() >= 2 {
-                        if let Some((sheet, col, _)) = extract_range_info(&args[1]) {
-                            keys.push(LookupKey {
-                                kind: LookupKind::VLookup,
-                                sheet,
-                                key_index: col,
-                                value_index: col,
-                            });
+            if let Some(meta) = fn_lookup(name) {
+                if meta.caps.contains(crate::function_meta::FnCaps::LOOKUP) {
+                    let upper = name.to_uppercase();
+                    match upper.as_str() {
+                        "VLOOKUP" => {
+                            if let Some(key) = extract_vlookup_key(args) {
+                                keys.push(key);
+                            }
                         }
-                    }
-                }
-                "INDEX" => {
-                    if !args.is_empty() {
-                        if let Some((sheet, col, _)) = extract_range_info(&args[0]) {
-                            keys.push(LookupKey {
-                                kind: LookupKind::VLookup,
-                                sheet,
-                                key_index: col,
-                                value_index: col,
-                            });
+                        "HLOOKUP" => {
+                            if let Some(key) = extract_hlookup_key(args) {
+                                keys.push(key);
+                            }
                         }
+                        "XLOOKUP" => {
+                            if let Some(key) = extract_xlookup_key(args) {
+                                keys.push(key);
+                            }
+                        }
+                        "MATCH" | "XMATCH" => {
+                            if args.len() >= 2 {
+                                if let Some((sheet, col, _)) = extract_range_info(&args[1]) {
+                                    keys.push(LookupKey {
+                                        kind: LookupKind::VLookup,
+                                        sheet,
+                                        key_index: col,
+                                        value_index: col,
+                                    });
+                                }
+                            }
+                        }
+                        "INDEX" => {
+                            if !args.is_empty() {
+                                if let Some((sheet, col, _)) = extract_range_info(&args[0]) {
+                                    keys.push(LookupKey {
+                                        kind: LookupKind::VLookup,
+                                        sheet,
+                                        key_index: col,
+                                        value_index: col,
+                                    });
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
             for arg in args {
                 collect_from_node(arg, keys, fn_lookup);
