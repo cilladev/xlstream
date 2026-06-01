@@ -78,3 +78,8 @@ fn issue_139_prelude_formula_eval() {
 fn issue_140_aggregate_literal_args() {
     super::conformance::run_conformance("issues/issue-140-aggregate-literal-args.xlsx");
 }
+
+#[test]
+fn issue_141_countif_equals_criteria() {
+    super::conformance::run_conformance("issues/issue-141-countif-equals-criteria.xlsx");
+}

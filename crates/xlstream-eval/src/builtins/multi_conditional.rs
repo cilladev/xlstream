@@ -26,7 +26,8 @@ fn extract_static_criteria(
     scope: &RowScope<'_>,
 ) -> String {
     let val = interp.eval(node, scope);
-    coerce::to_text(&val).to_ascii_lowercase()
+    let text = coerce::to_text(&val).to_ascii_lowercase();
+    text.strip_prefix('=').unwrap_or(&text).to_string()
 }
 
 /// Extract column index and optional sheet from a range reference argument.

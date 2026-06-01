@@ -468,12 +468,11 @@ impl Prelude {
                 }
             }
 
-            if let Some(result) = try_operator_criteria(key, inner, composite_key) {
-                if let Ok(mut cache) = self.operator_cache.write() {
-                    return cache.entry(cache_key).or_insert(result).clone();
-                }
-                return result;
+            let result = try_operator_criteria(key, inner, composite_key);
+            if let Ok(mut cache) = self.operator_cache.write() {
+                return cache.entry(cache_key).or_insert(result).clone();
             }
+            return result;
         }
         match key.kind {
             AggKind::Average => Value::Error(CellError::Div0),
@@ -600,12 +599,9 @@ fn try_operator_criteria(
     key: &MultiConditionalAggKey,
     inner: &HashMap<String, Value>,
     composite_key: &str,
-) -> Option<Value> {
+) -> Value {
     let parts: Vec<&str> = composite_key.split('\0').collect();
     let criteria: Vec<crate::Criteria> = parts.iter().map(|p| crate::Criteria::parse(p)).collect();
-    if criteria.iter().all(|c| matches!(c, crate::Criteria::Equals(_))) {
-        return None;
-    }
     let mut fold = crate::prelude_plan::FoldState::new();
     for (stored_key, stored_val) in inner {
         let stored_parts: Vec<&str> = stored_key.split('\0').collect();
@@ -620,7 +616,7 @@ fn try_operator_criteria(
             fold.feed(stored_val);
         }
     }
-    Some(fold.finish(key.kind))
+    fold.finish(key.kind)
 }
 
 #[cfg(test)]
