@@ -109,15 +109,11 @@ FunctionEntry {
 
 ### Aggregate functions
 
-`aggregate::sum`, `aggregate::count`, etc. currently return `Result<Value, CellError>`. `Dispatch::Aggregate` needs `fn(&[Value]) -> Value`. Add thin `_as_value` wrappers:
+`aggregate::sum`, `aggregate::count`, etc. were changed from `Result<Value, CellError>` to `-> Value` directly. Error conditions are now returned as `Value::Error(...)` instead of `Err(...)`. This avoids wrapper functions and gives `Dispatch::Aggregate` the `fn(&[Value]) -> Value` signature it needs.
 
-```rust
-pub fn sum_as_value(vals: &[Value]) -> Value { sum(vals).unwrap_or_else(Value::Error) }
-```
+### Statistical distribution functions
 
-### Statistical Result-returning functions
-
-`builtin_poisson_dist`, `builtin_binom_dist`, etc. return `Result<f64, CellError>`. Change to return `Value` directly so they fit `Dispatch::Eager`. Wrap the internal `Result` at the end of each function.
+`builtin_poisson_dist`, `builtin_binom_dist`, `builtin_binom_inv`, `builtin_norm_dist`, `builtin_norm_inv`, `builtin_norm_s_dist`, `builtin_norm_s_inv` were changed to return `Value` directly (internal `Result` unwrapped via `.map_or_else(Value::Error, Value::Number)`) so they fit `Dispatch::Eager`.
 
 ## Layering invariant
 

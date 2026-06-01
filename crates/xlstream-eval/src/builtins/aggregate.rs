@@ -14,10 +14,6 @@ use xlstream_core::{CellError, Value};
 ///
 /// Empty range returns `0`.
 ///
-/// # Errors
-///
-/// Returns `Err(CellError)` if any value is an error.
-///
 /// # Examples
 ///
 /// ```
@@ -45,10 +41,6 @@ pub fn sum(values: &[Value]) -> Value {
 /// `COUNT` — count of numeric values. Text/bool/empty skipped. Errors
 /// skipped.
 ///
-/// # Errors
-///
-/// Never returns an error.
-///
 /// # Examples
 ///
 /// ```
@@ -73,10 +65,6 @@ pub fn count(values: &[Value]) -> Value {
 /// `COUNTA` — count of non-empty values. Errors count. Only `Empty` is
 /// excluded.
 ///
-/// # Errors
-///
-/// Never returns an error.
-///
 /// # Examples
 ///
 /// ```
@@ -99,10 +87,6 @@ pub fn counta(values: &[Value]) -> Value {
 
 /// `COUNTBLANK` — count of empty/blank values. Errors and text are
 /// non-blank.
-///
-/// # Errors
-///
-/// Never returns an error.
 ///
 /// # Examples
 ///
@@ -128,11 +112,6 @@ pub fn countblank(values: &[Value]) -> Value {
 /// Errors propagate.
 ///
 /// Empty numeric range returns `#DIV/0!`.
-///
-/// # Errors
-///
-/// Returns `Err(CellError::Div0)` if no numeric values exist.
-/// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
 ///
@@ -176,10 +155,6 @@ pub fn average(values: &[Value]) -> Value {
 ///
 /// Empty numeric range returns `0` (Excel behaviour).
 ///
-/// # Errors
-///
-/// Returns `Err(CellError)` if any value is an error.
-///
 /// # Examples
 ///
 /// ```
@@ -214,10 +189,6 @@ pub fn min(values: &[Value]) -> Value {
 /// `MAX` — maximum of numeric values. Text/bool skipped. Errors propagate.
 ///
 /// Empty numeric range returns `0` (Excel behaviour).
-///
-/// # Errors
-///
-/// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
 ///
@@ -254,10 +225,6 @@ pub fn max(values: &[Value]) -> Value {
 /// propagate.
 ///
 /// If no numeric values exist, returns `0` (Excel behaviour).
-///
-/// # Errors
-///
-/// Returns `Err(CellError)` if any value is an error.
 ///
 /// # Examples
 ///
@@ -302,11 +269,6 @@ pub fn product(values: &[Value]) -> Value {
 ///
 /// Returns `#NUM!` if no numeric values exist.
 ///
-/// # Errors
-///
-/// Returns `Err(CellError::Num)` if no numeric values exist.
-/// Returns `Err(CellError)` if any value is an error.
-///
 /// # Examples
 ///
 /// ```
@@ -347,11 +309,9 @@ pub fn median(values: &[Value]) -> Value {
 /// booleans become 1/0, empty becomes 0, errors propagate, text that
 /// cannot parse as a number returns `#VALUE!`.
 ///
-/// # Errors
-///
-/// Returns `Value::Error(CellError::Value)` if no arrays are provided or if
-/// arrays have different lengths. Returns `Err(CellError)` if any
-/// value is an error or non-numeric text.
+/// Returns `Value::Error(CellError::Value)` if no arrays are provided
+/// or if arrays have different lengths. Error values and non-numeric
+/// text propagate as `Value::Error`.
 ///
 /// # Examples
 ///

@@ -63,12 +63,9 @@ const SQRT_2PI: f64 = 2.506_628_274_631_000_5;
 /// When `cumulative` is true, returns the CDF: P(X <= x).
 /// When false, returns the PDF: density at x.
 ///
-/// # Errors
-///
-/// Returns `Err(CellError::Value)` if arg count != 4.
-/// Returns `Err(CellError::Num)` if any numeric arg is non-finite or
-/// `standard_dev` <= 0.
-/// Returns `Err(CellError)` if any arg is an error.
+/// Returns `Value::Error(CellError::Value)` if arg count != 4.
+/// Returns `Value::Error(CellError::Num)` if any numeric arg is
+/// non-finite or `standard_dev` <= 0. Error args propagate.
 ///
 /// # Examples
 ///
@@ -162,12 +159,9 @@ fn norm_inv_standard(p: f64) -> f64 {
 ///
 /// Returns the value x such that `NORM.DIST(x, mean, stdev, TRUE) = probability`.
 ///
-/// # Errors
-///
-/// Returns `Err(CellError::Value)` if arg count != 3.
-/// Returns `Err(CellError::Num)` if probability <= 0 or >= 1, stdev <= 0,
-/// or any numeric arg is non-finite.
-/// Returns `Err(CellError)` if any arg is an error.
+/// Returns `Value::Error(CellError::Value)` if arg count != 3.
+/// Returns `Value::Error(CellError::Num)` if probability <= 0 or >= 1,
+/// stdev <= 0, or any numeric arg is non-finite. Error args propagate.
 ///
 /// # Examples
 ///
@@ -202,10 +196,9 @@ pub fn builtin_norm_inv(args: &[Value]) -> Value {
 
 /// `NORM.S.DIST(z, cumulative)` — standard normal distribution (mean=0, stdev=1).
 ///
-/// # Errors
-///
-/// Returns `Err(CellError::Num)` if `z` is non-finite or result is non-finite.
-/// Returns `Err(CellError::Value)` if arg count != 2 or coercion fails.
+/// Returns `Value::Error(CellError::Num)` if `z` is non-finite or
+/// result is non-finite. Returns `Value::Error(CellError::Value)` if
+/// arg count != 2 or coercion fails.
 ///
 /// # Examples
 ///
@@ -240,11 +233,10 @@ pub fn builtin_norm_s_dist(args: &[Value]) -> Value {
 ///
 /// Returns z such that `NORM.S.DIST(z, TRUE) = probability`.
 ///
-/// # Errors
-///
-/// Returns `Err(CellError::Num)` if `probability` is not in (0, 1)
-/// or result is non-finite.
-/// Returns `Err(CellError::Value)` if arg count != 1 or coercion fails.
+/// Returns `Value::Error(CellError::Num)` if `probability` is not in
+/// (0, 1) or result is non-finite. Returns
+/// `Value::Error(CellError::Value)` if arg count != 1 or coercion
+/// fails.
 ///
 /// # Examples
 ///
@@ -1116,12 +1108,9 @@ pub fn expon_dist(x: f64, lambda: f64, cumulative: bool) -> Result<f64, CellErro
 /// `x` is truncated to a non-negative integer. `mean` must be ≥ 0.
 /// When `mean` = 0: returns 1.0 if `x` = 0, 0.0 otherwise (degenerate).
 ///
-/// # Errors
-///
-/// Returns `Err(CellError::Value)` if arg count ≠ 3.
-/// Returns `Err(CellError::Num)` if `x` < 0, `mean` < 0, or either is
-/// non-finite (NaN/Infinity).
-/// Returns `Err(CellError)` if any input is an error.
+/// Returns `Value::Error(CellError::Value)` if arg count != 3.
+/// Returns `Value::Error(CellError::Num)` if `x` < 0, `mean` < 0, or
+/// either is non-finite. Error args propagate.
 ///
 /// # Examples
 ///
@@ -1487,14 +1476,11 @@ fn binom_pmf(k: f64, n: f64, p: f64) -> f64 {
 ///
 /// `number_s` and `trials` are truncated to integers.
 ///
-/// # Errors
-///
-/// Propagates any `CellError` from input `Value::Error` variants.
-/// Returns `Err(CellError::Value)` if arg count != 4 or text is
-/// non-numeric.
-/// Returns `Err(CellError::Num)` if any numeric arg is NaN/Infinity,
-/// `trials` < 0 or > 1 000 000, `number_s` not in `[0, trials]`,
-/// `probability_s` not in `[0, 1]`, or result is non-finite.
+/// Returns `Value::Error(CellError::Value)` if arg count != 4 or text
+/// is non-numeric. Returns `Value::Error(CellError::Num)` if any
+/// numeric arg is NaN/Infinity, `trials` < 0 or > 1 000 000,
+/// `number_s` not in `[0, trials]`, `probability_s` not in `[0, 1]`,
+/// or result is non-finite. Error args propagate.
 ///
 /// # Examples
 ///
@@ -1553,14 +1539,11 @@ pub fn builtin_binom_dist(args: &[Value]) -> Value {
 /// `BINOM.DIST(k, trials, probability_s, TRUE) >= alpha`.
 /// `trials` is truncated to an integer.
 ///
-/// # Errors
-///
-/// Propagates any `CellError` from input `Value::Error` variants.
-/// Returns `Err(CellError::Value)` if arg count != 3 or text is
-/// non-numeric.
-/// Returns `Err(CellError::Num)` if any numeric arg is NaN/Infinity,
-/// `trials` < 0 or > 1 000 000, `probability_s` not in `[0, 1]`, or
-/// `alpha` not in `(0, 1]`.
+/// Returns `Value::Error(CellError::Value)` if arg count != 3 or text
+/// is non-numeric. Returns `Value::Error(CellError::Num)` if any
+/// numeric arg is NaN/Infinity, `trials` < 0 or > 1 000 000,
+/// `probability_s` not in `[0, 1]`, or `alpha` not in `(0, 1]`.
+/// Error args propagate.
 ///
 /// # Examples
 ///

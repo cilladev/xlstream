@@ -1778,7 +1778,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &["POISSON"],
-        dispatch: Dispatch::Custom(crate::builtins::handle_poisson_dist),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_poisson_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1838,7 +1838,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        dispatch: Dispatch::Custom(crate::builtins::handle_binom_dist),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_binom_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1848,7 +1848,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        dispatch: Dispatch::Custom(crate::builtins::handle_binom_inv),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_binom_inv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1858,7 +1858,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        dispatch: Dispatch::Custom(crate::builtins::handle_norm_dist),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_norm_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1868,7 +1868,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        dispatch: Dispatch::Custom(crate::builtins::handle_norm_inv),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_norm_inv),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1878,7 +1878,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        dispatch: Dispatch::Custom(crate::builtins::handle_norm_s_dist),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_norm_s_dist),
     },
     FunctionEntry {
         meta: FunctionMeta {
@@ -1888,7 +1888,7 @@ static ALL_ENTRIES: &[FunctionEntry] = &[
             agg_kind: None,
         },
         aliases: &[],
-        dispatch: Dispatch::Custom(crate::builtins::handle_norm_s_inv),
+        dispatch: Dispatch::Eager(crate::builtins::statistical::builtin_norm_s_inv),
     },
     // -- Engineering pure (PURE) --
     FunctionEntry {
@@ -2354,6 +2354,19 @@ mod tests {
                 assert!(
                     entry.meta.caps.contains(FnCaps::AGG_COERCE),
                     "{}: agg_kind requires AGG_COERCE",
+                    entry.meta.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn agg_kind_implies_dispatch_aggregate() {
+        for entry in all() {
+            if entry.meta.agg_kind.is_some() {
+                assert!(
+                    matches!(entry.dispatch, Dispatch::Aggregate(_)),
+                    "{}: has agg_kind but not Dispatch::Aggregate",
                     entry.meta.name
                 );
             }

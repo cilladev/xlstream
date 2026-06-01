@@ -662,64 +662,6 @@ pub(crate) fn handle_small(
     handle_large_small(args, interp, scope, false)
 }
 
-// -- Statistical (pure, eager eval with Result) --
-
-pub(crate) fn handle_poisson_dist(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_poisson_dist(&eval_args(args, interp, scope))
-}
-
-pub(crate) fn handle_binom_dist(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_binom_dist(&eval_args(args, interp, scope))
-}
-
-pub(crate) fn handle_binom_inv(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_binom_inv(&eval_args(args, interp, scope))
-}
-
-pub(crate) fn handle_norm_dist(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_norm_dist(&eval_args(args, interp, scope))
-}
-
-pub(crate) fn handle_norm_inv(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_norm_inv(&eval_args(args, interp, scope))
-}
-
-pub(crate) fn handle_norm_s_dist(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_norm_s_dist(&eval_args(args, interp, scope))
-}
-
-pub(crate) fn handle_norm_s_inv(
-    args: &[NodeRef<'_>],
-    interp: &Interpreter<'_>,
-    scope: &RowScope<'_>,
-) -> Value {
-    statistical::builtin_norm_s_inv(&eval_args(args, interp, scope))
-}
-
 // -- Engineering (pure, eager eval) --
 
 // -- Conversion --
