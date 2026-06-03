@@ -242,8 +242,9 @@ impl Criteria {
             Criteria::GreaterOrEq(n) => numeric_for_compare(v).is_some_and(|vn| vn >= *n),
             Criteria::Less(n) => numeric_for_compare(v).is_some_and(|vn| vn < *n),
             Criteria::LessOrEq(n) => numeric_for_compare(v).is_some_and(|vn| vn <= *n),
-            // Excel wildcards match text cells only. Numbers, booleans, dates,
-            // errors, and blanks never match, regardless of their text form.
+            // Excel wildcards match text cells only. Numbers (including
+            // integers), booleans, dates, errors, and blanks never match,
+            // regardless of their text form.
             Criteria::Wildcard(pat) => match v {
                 Value::Text(s) => pat.matches(s),
                 _ => false,
@@ -455,6 +456,19 @@ mod tests {
         assert!(!star.matches(&Value::Bool(true)));
         assert!(!star.matches(&Value::Empty));
         assert!(!star.matches(&Value::Error(xlstream_core::CellError::Value)));
+        // Dates are numeric-backed: their text form is a serial like "45000",
+        // so a coercion-based matcher would wrongly match "*". Guard against
+        // that regression explicitly.
+        assert!(!star.matches(&Value::Date(xlstream_core::ExcelDate::from_serial(45000.0))));
+    }
+
+    #[test]
+    fn wildcard_star_matches_empty_text() {
+        // Excel's "*" matches any text cell, including a zero-length string
+        // (e.g. a ="" cell is counted by COUNTIF(range,"*")). Pin this as
+        // intended: the cell type is text, so it matches.
+        let star = Criteria::parse("*");
+        assert!(star.matches(&Value::Text("".into())));
     }
 
     #[test]
