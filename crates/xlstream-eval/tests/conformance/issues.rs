@@ -83,3 +83,8 @@ fn issue_140_aggregate_literal_args() {
 fn issue_141_countif_equals_criteria() {
     super::conformance::run_conformance("issues/issue-141-countif-equals-criteria.xlsx");
 }
+
+#[test]
+fn issue_142_sumif_wildcard_text_only() {
+    super::conformance::run_conformance("issues/issue-142-sumif-wildcard-text-only.xlsx");
+}

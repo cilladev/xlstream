@@ -5,7 +5,7 @@
 //! [`Criteria::parse`] converts that string into a structured enum, and
 //! [`Criteria::matches`] tests a [`Value`] against it.
 
-use xlstream_core::{coerce, Value};
+use xlstream_core::Value;
 
 /// A parsed criteria expression for conditional aggregate functions.
 ///
@@ -242,10 +242,12 @@ impl Criteria {
             Criteria::GreaterOrEq(n) => numeric_for_compare(v).is_some_and(|vn| vn >= *n),
             Criteria::Less(n) => numeric_for_compare(v).is_some_and(|vn| vn < *n),
             Criteria::LessOrEq(n) => numeric_for_compare(v).is_some_and(|vn| vn <= *n),
-            Criteria::Wildcard(pat) => {
-                let text = coerce::to_text(v);
-                pat.matches(&text)
-            }
+            // Excel wildcards match text cells only. Numbers, booleans, dates,
+            // errors, and blanks never match, regardless of their text form.
+            Criteria::Wildcard(pat) => match v {
+                Value::Text(s) => pat.matches(s),
+                _ => false,
+            },
         }
     }
 }
@@ -440,6 +442,28 @@ mod tests {
         let c = Criteria::parse("HELLO*");
         assert!(c.matches(&Value::Text("hello world".into())));
         assert!(c.matches(&Value::Text("HELLO".into())));
+    }
+
+    #[test]
+    fn wildcard_skips_non_text() {
+        // Excel wildcards only match text cells. Numbers, booleans, dates,
+        // errors, and blanks never match a wildcard criteria, even "*".
+        let star = Criteria::parse("*");
+        assert!(star.matches(&Value::Text("anything".into())));
+        assert!(!star.matches(&Value::Number(123.0)));
+        assert!(!star.matches(&Value::Integer(7)));
+        assert!(!star.matches(&Value::Bool(true)));
+        assert!(!star.matches(&Value::Empty));
+        assert!(!star.matches(&Value::Error(xlstream_core::CellError::Value)));
+    }
+
+    #[test]
+    fn wildcard_does_not_match_numeric_pattern() {
+        // "1*" must not match the number 123 — the cell type, not its text
+        // rendering, decides eligibility.
+        let c = Criteria::parse("1*");
+        assert!(!c.matches(&Value::Number(123.0)));
+        assert!(c.matches(&Value::Text("123".into())));
     }
 
     // -- Matching --
