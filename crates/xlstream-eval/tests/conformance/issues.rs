@@ -88,3 +88,8 @@ fn issue_141_countif_equals_criteria() {
 fn issue_142_sumif_wildcard_text_only() {
     super::conformance::run_conformance("issues/issue-142-sumif-wildcard-text-only.xlsx");
 }
+
+#[test]
+fn issue_143_lookup_range_bounds() {
+    super::conformance::run_conformance("issues/issue-143-lookup-range-bounds.xlsx");
+}
