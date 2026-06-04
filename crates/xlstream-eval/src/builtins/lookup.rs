@@ -7,6 +7,12 @@ use xlstream_parse::{NodeRef, NodeView};
 use crate::interp::Interpreter;
 use crate::scope::RowScope;
 
+/// Number of columns a range spans, given its 1-based start and end columns.
+/// Saturating arithmetic keeps it panic-free on degenerate inputs.
+fn range_col_width(start_col: u32, end_col: u32) -> u32 {
+    end_col.saturating_sub(start_col).saturating_add(1)
+}
+
 /// `VLOOKUP(lookup_value, table_array, col_index_num, [range_lookup])`
 pub(crate) fn builtin_vlookup(
     args: &[NodeRef<'_>],
@@ -48,10 +54,12 @@ pub(crate) fn builtin_vlookup(
     };
 
     // col_index must fall within the table_array's declared width. Excel
-    // returns #REF! when it points past the last column of the range.
+    // returns #REF! when it points past the last column of the range, and that
+    // error takes precedence over a missing-key #N/A, so this check runs before
+    // the lookup. A `None` end_col (whole-row ref) can't reach here: the
+    // `start_col: Some(..)` guard above already rejected it with #VALUE!.
     if let Some(end_col) = range_end_col {
-        let width = end_col.saturating_sub(range_start_col).saturating_add(1);
-        if col_index > width {
+        if col_index > range_col_width(range_start_col, end_col) {
             return Value::Error(CellError::Ref);
         }
     }
@@ -376,11 +384,11 @@ pub(crate) fn builtin_index(
         1
     };
 
-    // col_num must fall within the range's declared width. Excel returns
-    // #REF! when it points past the last column of the range.
+    // col_num must fall within the range's declared width. Excel returns #REF!
+    // when it points past the last column. A `None` end_col (whole-row ref)
+    // can't reach here: the `start_col: Some(..)` guard above rejected it.
     if let Some(end_col) = range_end_col {
-        let width = end_col.saturating_sub(range_start_col).saturating_add(1) as usize;
-        if col_num > width {
+        if col_num > range_col_width(range_start_col, end_col) as usize {
             return Value::Error(CellError::Ref);
         }
     }
@@ -554,11 +562,35 @@ mod tests {
     }
 
     #[test]
-    fn vlookup_col_index_past_range_returns_ref() {
-        // table_array is 3 columns (A:C); col_index 4 points past it.
+    fn vlookup_col_index_past_declared_width_returns_ref() {
+        // The sheet physically holds 3 columns, but the declared range is A:B
+        // (width 2). col_index 3 would read the loaded column C (Number 2.0)
+        // before the fix; the declared-width check is the sole reason for #REF!.
         let prelude = prelude_with_region_lookup();
         let interp = Interpreter::new(&prelude);
-        let ast = parse("VLOOKUP(\"APAC\", 'Region Info'!A:C, 4, FALSE)").unwrap();
+        let ast = parse("VLOOKUP(\"APAC\", 'Region Info'!A:B, 3, FALSE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn vlookup_single_column_range_returns_ref() {
+        // The issue's own repro: a 1-column range A:A with col_index 2. Column B
+        // exists in the loaded sheet, so only the width check yields #REF!.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("VLOOKUP(\"APAC\", 'Region Info'!A:A, 2, FALSE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn vlookup_col_out_of_range_beats_missing_key() {
+        // #REF! (col past range) takes precedence over #N/A (key not found):
+        // the width check runs before the lookup.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("VLOOKUP(\"nonexistent\", 'Region Info'!A:B, 3, FALSE)").unwrap();
         let scope = RowScope::new(&[], 1);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
     }
@@ -740,13 +772,37 @@ mod tests {
     }
 
     #[test]
-    fn index_col_past_range_returns_ref() {
-        // range is 3 columns (A:C); col_num 4 points past it.
+    fn index_col_past_declared_width_returns_ref() {
+        // The sheet holds 3 columns, but the declared range is A:B (width 2).
+        // col_num 3 would read the loaded column C before the fix; the
+        // declared-width check is the sole reason for #REF!.
         let prelude = prelude_with_region_lookup();
         let interp = Interpreter::new(&prelude);
-        let ast = parse("INDEX('Region Info'!A:C, 1, 4)").unwrap();
+        let ast = parse("INDEX('Region Info'!A:B, 1, 3)").unwrap();
         let scope = RowScope::new(&[], 1);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn index_single_column_range_returns_ref() {
+        // 1-column range A:A with col_num 2. Column B exists in the loaded
+        // sheet, so only the width check yields #REF!.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("INDEX('Region Info'!A:A, 1, 2)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn index_col_at_range_width_ok() {
+        // col_num 3 is the last column of a 3-column range — still valid.
+        // Guards the `>` (not `>=`) boundary in the usize comparison.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("INDEX('Region Info'!A:C, 1, 3)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(1.0));
     }
 
     #[test]
