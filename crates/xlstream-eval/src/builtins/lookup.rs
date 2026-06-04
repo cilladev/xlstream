@@ -22,8 +22,12 @@ pub(crate) fn builtin_vlookup(
         return Value::Error(e);
     }
 
-    let NodeView::RangeRef { sheet: Some(sheet_name), start_col: Some(range_start_col), .. } =
-        args[1].view()
+    let NodeView::RangeRef {
+        sheet: Some(sheet_name),
+        start_col: Some(range_start_col),
+        end_col: range_end_col,
+        ..
+    } = args[1].view()
     else {
         return Value::Error(CellError::Value);
     };
@@ -42,6 +46,15 @@ pub(crate) fn builtin_vlookup(
         }
         Err(e) => return Value::Error(e),
     };
+
+    // col_index must fall within the table_array's declared width. Excel
+    // returns #REF! when it points past the last column of the range.
+    if let Some(end_col) = range_end_col {
+        let width = end_col.saturating_sub(range_start_col).saturating_add(1);
+        if col_index > width {
+            return Value::Error(CellError::Ref);
+        }
+    }
 
     let exact_match = if let Some(arg3) = args.get(3) {
         let v = interp.eval(*arg3, scope);
@@ -319,8 +332,12 @@ pub(crate) fn builtin_index(
         return Value::Error(CellError::Value);
     }
 
-    let NodeView::RangeRef { sheet: Some(sheet_name), start_col: Some(range_start_col), .. } =
-        args[0].view()
+    let NodeView::RangeRef {
+        sheet: Some(sheet_name),
+        start_col: Some(range_start_col),
+        end_col: range_end_col,
+        ..
+    } = args[0].view()
     else {
         return Value::Error(CellError::Value);
     };
@@ -358,6 +375,15 @@ pub(crate) fn builtin_index(
     } else {
         1
     };
+
+    // col_num must fall within the range's declared width. Excel returns
+    // #REF! when it points past the last column of the range.
+    if let Some(end_col) = range_end_col {
+        let width = end_col.saturating_sub(range_start_col).saturating_add(1) as usize;
+        if col_num > width {
+            return Value::Error(CellError::Ref);
+        }
+    }
 
     let Some(sheet) = interp.prelude().lookup_sheet(sheet_name) else {
         return Value::Error(CellError::Ref);
@@ -527,6 +553,26 @@ mod tests {
         assert_eq!(interp.eval(ast.root(), &scope), Value::Text("num-one".into()));
     }
 
+    #[test]
+    fn vlookup_col_index_past_range_returns_ref() {
+        // table_array is 3 columns (A:C); col_index 4 points past it.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("VLOOKUP(\"APAC\", 'Region Info'!A:C, 4, FALSE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn vlookup_col_index_at_range_width_ok() {
+        // col_index 3 is the last column of a 3-column range — still valid.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("VLOOKUP(\"APAC\", 'Region Info'!A:C, 3, FALSE)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Number(2.0));
+    }
+
     // --- XLOOKUP ---
 
     #[test]
@@ -689,6 +735,16 @@ mod tests {
         let prelude = prelude_with_region_lookup();
         let interp = Interpreter::new(&prelude);
         let ast = parse("INDEX('Region Info'!A:C, 100, 1)").unwrap();
+        let scope = RowScope::new(&[], 1);
+        assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
+    }
+
+    #[test]
+    fn index_col_past_range_returns_ref() {
+        // range is 3 columns (A:C); col_num 4 points past it.
+        let prelude = prelude_with_region_lookup();
+        let interp = Interpreter::new(&prelude);
+        let ast = parse("INDEX('Region Info'!A:C, 1, 4)").unwrap();
         let scope = RowScope::new(&[], 1);
         assert_eq!(interp.eval(ast.root(), &scope), Value::Error(CellError::Ref));
     }
