@@ -43,6 +43,8 @@ pub use value::Value;
 pub const EXCEL_MAX_ROWS: u64 = 1_048_576;
 /// Maximum column count in an Excel xlsx worksheet (2^14).
 pub const EXCEL_MAX_COLS: u16 = 16_384;
+/// Maximum date serial in Excel (9999-12-31).
+pub const EXCEL_MAX_DATE_SERIAL: f64 = 2_958_465.0;
 
 /// Minimum data rows on the main sheet before the evaluator spawns parallel
 /// workers. Below this threshold single-threaded evaluation is faster.
