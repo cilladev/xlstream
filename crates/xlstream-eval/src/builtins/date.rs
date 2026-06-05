@@ -75,19 +75,26 @@ pub(crate) fn builtin_date(args: &[Value]) -> Value {
         Err(e) => return Value::Error(e),
     };
 
+    // Reject non-finite inputs (NaN, Inf) before any arithmetic or cast.
+    // NaN survives range checks silently; Inf saturates i32 on cast.
+    if !y.is_finite() || !m.is_finite() || !d.is_finite() {
+        return Value::Error(CellError::Num);
+    }
+
     // Excel adds 1900 to the year argument when 0 <= year <= 1899.
     let adjusted_y = if (0.0..1900.0).contains(&y) { y + 1900.0 } else { y };
 
-    // Negative years produce negative serials; Excel returns #NUM!.
-    if adjusted_y < 0.0 {
+    // Reject years outside the computable range before casting to i32.
+    // from_ymd loops over 1900..year, so unclamped values stall the evaluator.
+    if !(0.0..=9999.0).contains(&adjusted_y) {
         return Value::Error(CellError::Num);
     }
 
     #[allow(clippy::cast_possible_truncation)]
     let date = ExcelDate::from_ymd(adjusted_y as i32, m as i32, d as i32);
 
-    // Excel returns #NUM! for dates past 9999-12-31 (serial 2958465) or
-    // when month/day rollover pushes the result negative.
+    // Defense-in-depth: month/day rollover can push the serial past Excel's
+    // max (9999-12-31 = 2958465) or negative. Catch it here.
     if date.serial < 0.0 || date.serial > xlstream_core::EXCEL_MAX_DATE_SERIAL {
         return Value::Error(CellError::Num);
     }
@@ -628,6 +635,83 @@ mod tests {
             builtin_date(&[Value::Number(9999.0), Value::Number(12.0), Value::Number(31.0)]);
         if let Value::Date(d) = result {
             assert_eq!(d.serial, xlstream_core::EXCEL_MAX_DATE_SERIAL);
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_month_rollover_past_9999_returns_num() {
+        // DATE(9999, 13, 1) rolls to year 10000 → serial > max → #NUM!.
+        assert_eq!(
+            builtin_date(&[Value::Number(9999.0), Value::Number(13.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_negative_month_rollover_returns_num() {
+        // DATE(1900, -24, 1) rolls back to 1897 → negative serial → #NUM!.
+        assert_eq!(
+            builtin_date(&[Value::Number(1900.0), Value::Number(-24.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_bool_coercion_enters_adjustment() {
+        // TRUE coerces to 1.0 → adjusted to 1901.
+        let result = builtin_date(&[Value::Bool(true), Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.year_month_day(), (1901, 1, 1));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_nan_returns_num() {
+        assert_eq!(
+            builtin_date(&[Value::Number(f64::NAN), Value::Number(1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_infinity_returns_num() {
+        assert_eq!(
+            builtin_date(&[Value::Number(f64::INFINITY), Value::Number(1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_huge_year_returns_num_without_stalling() {
+        // 3e9 would saturate to i32::MAX and loop ~2B times without the
+        // pre-cast guard. Must return #NUM! instantly.
+        assert_eq!(
+            builtin_date(&[Value::Number(3e9), Value::Number(1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_fractional_year_truncated() {
+        // DATE(99.7, 1, 1) → year truncated to 99 → adjusted to 1999.
+        let result = builtin_date(&[Value::Number(99.7), Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.year_month_day(), (1999, 1, 1));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_empty_coercion_enters_adjustment() {
+        // Empty coerces to 0.0 → adjusted to 1900 → serial 1.
+        let result = builtin_date(&[Value::Empty, Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.serial, 1.0);
         } else {
             panic!("expected Date, got {result:?}");
         }
