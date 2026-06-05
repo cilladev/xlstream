@@ -93,3 +93,8 @@ fn issue_142_sumif_wildcard_text_only() {
 fn issue_143_lookup_range_bounds() {
     super::conformance::run_conformance("issues/issue-143-lookup-range-bounds.xlsx");
 }
+
+#[test]
+fn issue_144_date_year_adjust() {
+    super::conformance::run_conformance("issues/issue-144-date-year-adjust.xlsx");
+}

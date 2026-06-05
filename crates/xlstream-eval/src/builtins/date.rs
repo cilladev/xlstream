@@ -75,8 +75,23 @@ pub(crate) fn builtin_date(args: &[Value]) -> Value {
         Err(e) => return Value::Error(e),
     };
 
+    // Excel adds 1900 to the year argument when 0 <= year <= 1899.
+    let adjusted_y = if (0.0..1900.0).contains(&y) { y + 1900.0 } else { y };
+
+    // Negative years produce negative serials; Excel returns #NUM!.
+    if adjusted_y < 0.0 {
+        return Value::Error(CellError::Num);
+    }
+
     #[allow(clippy::cast_possible_truncation)]
-    let date = ExcelDate::from_ymd(y as i32, m as i32, d as i32);
+    let date = ExcelDate::from_ymd(adjusted_y as i32, m as i32, d as i32);
+
+    // Excel returns #NUM! for dates past 9999-12-31 (serial 2958465) or
+    // when month/day rollover pushes the result negative.
+    if date.serial < 0.0 || date.serial > xlstream_core::EXCEL_MAX_DATE_SERIAL {
+        return Value::Error(CellError::Num);
+    }
+
     Value::Date(date)
 }
 
@@ -529,6 +544,90 @@ mod tests {
         ]);
         if let Value::Date(d) = result {
             assert_eq!(d.year_month_day(), (2026, 1, 15));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_year_zero_maps_to_1900() {
+        // Excel: DATE(0,1,1) = 1900-01-01, serial 1.
+        let result = builtin_date(&[Value::Number(0.0), Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.serial, 1.0);
+            assert_eq!(d.year_month_day(), (1900, 1, 1));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_year_99_maps_to_1999() {
+        let result = builtin_date(&[Value::Number(99.0), Value::Number(12.0), Value::Number(31.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.serial, 36525.0);
+            assert_eq!(d.year_month_day(), (1999, 12, 31));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_year_1899_maps_to_3799() {
+        // Boundary: year 1899 + 1900 = 3799.
+        let result = builtin_date(&[Value::Number(1899.0), Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.year_month_day(), (3799, 1, 1));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_year_1900_not_adjusted() {
+        // Boundary: year 1900 is NOT adjusted (it's already a full year).
+        let result = builtin_date(&[Value::Number(1900.0), Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.serial, 1.0);
+            assert_eq!(d.year_month_day(), (1900, 1, 1));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_year_2026_not_adjusted() {
+        // Years >= 1900 pass through unchanged.
+        let result = builtin_date(&[Value::Number(2026.0), Value::Number(1.0), Value::Number(1.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.year_month_day(), (2026, 1, 1));
+        } else {
+            panic!("expected Date, got {result:?}");
+        }
+    }
+
+    #[test]
+    fn date_negative_year_returns_num() {
+        assert_eq!(
+            builtin_date(&[Value::Number(-1.0), Value::Number(1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_year_10000_returns_num() {
+        assert_eq!(
+            builtin_date(&[Value::Number(10000.0), Value::Number(1.0), Value::Number(1.0)]),
+            Value::Error(CellError::Num)
+        );
+    }
+
+    #[test]
+    fn date_year_9999_dec_31_is_max_valid() {
+        let result =
+            builtin_date(&[Value::Number(9999.0), Value::Number(12.0), Value::Number(31.0)]);
+        if let Value::Date(d) = result {
+            assert_eq!(d.serial, xlstream_core::EXCEL_MAX_DATE_SERIAL);
         } else {
             panic!("expected Date, got {result:?}");
         }
