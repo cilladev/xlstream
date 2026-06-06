@@ -28,14 +28,22 @@ pub enum Criteria {
     Equals(Value),
     /// `<>value` — not equal.
     NotEquals(Value),
-    /// `>number` — strictly greater.
+    /// `>number` — strictly greater (numeric).
     Greater(f64),
-    /// `>=number` — greater or equal.
+    /// `>=number` — greater or equal (numeric).
     GreaterOrEq(f64),
-    /// `<number` — strictly less.
+    /// `<number` — strictly less (numeric).
     Less(f64),
-    /// `<=number` — less or equal.
+    /// `<=number` — less or equal (numeric).
     LessOrEq(f64),
+    /// `>text` — strictly greater (case-insensitive alphabetical).
+    GreaterText(Box<str>),
+    /// `>=text` — greater or equal (case-insensitive alphabetical).
+    GreaterOrEqText(Box<str>),
+    /// `<text` — strictly less (case-insensitive alphabetical).
+    LessText(Box<str>),
+    /// `<=text` — less or equal (case-insensitive alphabetical).
+    LessOrEqText(Box<str>),
     /// Wildcard pattern with `*` and `?`.
     Wildcard(WildcardPattern),
     /// Empty string criteria — matches blank/empty cells.
@@ -171,38 +179,42 @@ impl Criteria {
 
         // >= or <=
         if let Some(rest) = trimmed.strip_prefix(">=") {
-            if let Ok(n) = rest.trim().parse::<f64>() {
+            let val = rest.trim();
+            if let Ok(n) = val.parse::<f64>() {
                 if n.is_finite() {
                     return Criteria::GreaterOrEq(n);
                 }
             }
-            return Criteria::Equals(parse_criteria_value(trimmed));
+            return Criteria::GreaterOrEqText(val.to_ascii_lowercase().into());
         }
         if let Some(rest) = trimmed.strip_prefix("<=") {
-            if let Ok(n) = rest.trim().parse::<f64>() {
+            let val = rest.trim();
+            if let Ok(n) = val.parse::<f64>() {
                 if n.is_finite() {
                     return Criteria::LessOrEq(n);
                 }
             }
-            return Criteria::Equals(parse_criteria_value(trimmed));
+            return Criteria::LessOrEqText(val.to_ascii_lowercase().into());
         }
 
         // > or <
         if let Some(rest) = trimmed.strip_prefix('>') {
-            if let Ok(n) = rest.trim().parse::<f64>() {
+            let val = rest.trim();
+            if let Ok(n) = val.parse::<f64>() {
                 if n.is_finite() {
                     return Criteria::Greater(n);
                 }
             }
-            return Criteria::Equals(parse_criteria_value(trimmed));
+            return Criteria::GreaterText(val.to_ascii_lowercase().into());
         }
         if let Some(rest) = trimmed.strip_prefix('<') {
-            if let Ok(n) = rest.trim().parse::<f64>() {
+            let val = rest.trim();
+            if let Ok(n) = val.parse::<f64>() {
                 if n.is_finite() {
                     return Criteria::Less(n);
                 }
             }
-            return Criteria::Equals(parse_criteria_value(trimmed));
+            return Criteria::LessText(val.to_ascii_lowercase().into());
         }
 
         // =value
@@ -242,6 +254,16 @@ impl Criteria {
             Criteria::GreaterOrEq(n) => numeric_for_compare(v).is_some_and(|vn| vn >= *n),
             Criteria::Less(n) => numeric_for_compare(v).is_some_and(|vn| vn < *n),
             Criteria::LessOrEq(n) => numeric_for_compare(v).is_some_and(|vn| vn <= *n),
+            Criteria::GreaterText(t) => {
+                text_for_compare(v).is_some_and(|s| s.as_str() > t.as_ref())
+            }
+            Criteria::GreaterOrEqText(t) => {
+                text_for_compare(v).is_some_and(|s| s.as_str() >= t.as_ref())
+            }
+            Criteria::LessText(t) => text_for_compare(v).is_some_and(|s| s.as_str() < t.as_ref()),
+            Criteria::LessOrEqText(t) => {
+                text_for_compare(v).is_some_and(|s| s.as_str() <= t.as_ref())
+            }
             // Excel wildcards match text cells only. Numbers (including
             // integers), booleans, dates, errors, and blanks never match,
             // regardless of their text form.
@@ -282,6 +304,16 @@ pub fn parse_criteria_value(s: &str) -> Value {
         return Value::Bool(false);
     }
     Value::Text(trimmed.into())
+}
+
+/// Lowercase a text value for case-insensitive comparison operators.
+/// Returns `None` for non-text values (they don't participate in text
+/// comparisons).
+fn text_for_compare(v: &Value) -> Option<String> {
+    match v {
+        Value::Text(s) => Some(s.to_ascii_lowercase()),
+        _ => None,
+    }
 }
 
 /// Extract a numeric value for comparison operators. Returns `None` for
@@ -525,5 +557,57 @@ mod tests {
         assert!(c.matches(&Value::Number(10.0)));
         assert!(c.matches(&Value::Number(15.0)));
         assert!(!c.matches(&Value::Number(9.0)));
+    }
+
+    // -- Text comparison --
+
+    #[test]
+    fn parse_greater_text() {
+        let c = Criteria::parse(">b");
+        assert!(matches!(c, Criteria::GreaterText(_)));
+    }
+
+    #[test]
+    fn greater_text_matches() {
+        let c = Criteria::parse(">b");
+        assert!(c.matches(&Value::Text("banana".into())));
+        assert!(c.matches(&Value::Text("cherry".into())));
+        assert!(!c.matches(&Value::Text("apple".into())));
+        assert!(!c.matches(&Value::Text("b".into())));
+        assert!(!c.matches(&Value::Number(999.0)));
+    }
+
+    #[test]
+    fn greater_or_eq_text_matches() {
+        let c = Criteria::parse(">=banana");
+        assert!(c.matches(&Value::Text("banana".into())));
+        assert!(c.matches(&Value::Text("cherry".into())));
+        assert!(!c.matches(&Value::Text("apple".into())));
+    }
+
+    #[test]
+    fn less_text_matches() {
+        let c = Criteria::parse("<banana");
+        assert!(c.matches(&Value::Text("apple".into())));
+        assert!(!c.matches(&Value::Text("banana".into())));
+        assert!(!c.matches(&Value::Text("cherry".into())));
+        assert!(!c.matches(&Value::Empty));
+    }
+
+    #[test]
+    fn less_or_eq_text_matches() {
+        let c = Criteria::parse("<=banana");
+        assert!(c.matches(&Value::Text("apple".into())));
+        assert!(c.matches(&Value::Text("banana".into())));
+        assert!(c.matches(&Value::Text("BANANA".into())));
+        assert!(!c.matches(&Value::Text("cherry".into())));
+    }
+
+    #[test]
+    fn text_compare_is_case_insensitive() {
+        let c = Criteria::parse(">B");
+        assert!(c.matches(&Value::Text("banana".into())));
+        assert!(c.matches(&Value::Text("CHERRY".into())));
+        assert!(!c.matches(&Value::Text("Apple".into())));
     }
 }

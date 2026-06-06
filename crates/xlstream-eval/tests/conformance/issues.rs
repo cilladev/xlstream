@@ -98,3 +98,8 @@ fn issue_143_lookup_range_bounds() {
 fn issue_144_date_year_adjust() {
     super::conformance::run_conformance("issues/issue-144-date-year-adjust.xlsx");
 }
+
+#[test]
+fn issue_175_countif_text_compare() {
+    super::conformance::run_conformance("issues/issue-175-countif-text-compare.xlsx");
+}
