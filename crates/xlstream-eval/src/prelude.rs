@@ -616,7 +616,16 @@ fn try_operator_criteria(
             fold.feed(stored_val);
         }
     }
-    fold.finish(key.kind)
+    // Buckets for COUNT store row counts (finished with Sum, not Count —
+    // see prelude_plan.rs line 1195). Re-folding must use the same kind
+    // so we sum row counts instead of counting buckets.
+    let finish_kind = match key.kind {
+        xlstream_parse::AggKind::Count | xlstream_parse::AggKind::Sum => {
+            xlstream_parse::AggKind::Sum
+        }
+        other => other,
+    };
+    fold.finish(finish_kind)
 }
 
 #[cfg(test)]

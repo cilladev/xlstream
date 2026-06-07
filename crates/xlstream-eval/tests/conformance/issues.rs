@@ -100,6 +100,11 @@ fn issue_144_date_year_adjust() {
 }
 
 #[test]
+fn issue_161_wildcard_blank() {
+    super::conformance::run_conformance("issues/issue-161-wildcard-blank.xlsx");
+}
+
+#[test]
 fn issue_175_countif_text_compare() {
     super::conformance::run_conformance("issues/issue-175-countif-text-compare.xlsx");
 }
