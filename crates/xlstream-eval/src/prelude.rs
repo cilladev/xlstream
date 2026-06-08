@@ -616,13 +616,15 @@ fn try_operator_criteria(
             fold.feed(stored_val);
         }
     }
-    // Buckets for COUNT store row counts (finished with Sum, not Count —
-    // see prelude_plan.rs line 1195). Re-folding must use the same kind
-    // so we sum row counts instead of counting buckets.
+    // Must mirror the finish_kind mapping in prelude_plan.rs (line 1195).
+    // COUNT/SUM buckets store row counts/sums (finished with Sum). AVERAGE
+    // buckets store per-bucket averages — re-folding averages-of-averages is
+    // mathematically wrong but matches the builder's current output.
     let finish_kind = match key.kind {
         xlstream_parse::AggKind::Count | xlstream_parse::AggKind::Sum => {
             xlstream_parse::AggKind::Sum
         }
+        xlstream_parse::AggKind::Average => xlstream_parse::AggKind::Average,
         other => other,
     };
     fold.finish(finish_kind)
