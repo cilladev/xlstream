@@ -41,7 +41,7 @@ formualizer-parse = "=2.0.0"
 formualizer-common = "=2.0.0"
 
 # Python binding
-pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 
 # Excel number formatting
 ssfmt = "0.1.2"
