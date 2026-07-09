@@ -33,7 +33,7 @@ authors = ["Priscilla Emasoga"]
 
 [workspace.dependencies]
 # xlsx I/O
-calamine = "0.35"
+calamine = "0.36"
 rust_xlsxwriter = { version = "0.95", features = ["constant_memory", "zlib", "ryu"] }
 
 # formula parser — pinned exactly per ADR docs/decisions/2026-04-18-phase-02-toolchain-bump.md.
