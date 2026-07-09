@@ -66,6 +66,21 @@ High-value functions that appear in real business workbooks.
 - [ ] **PDURATION** — periods required for investment to reach a value. ~1 hour.
 - [ ] **RRI** — equivalent interest rate for growth of an investment. ~1 hour.
 
+## Carried over from v0.3 (135)
+
+Planned in [`functions.md`](../../functions.md) with a v0.3 target but never
+scheduled in the v0.3 checklist, so they slipped. All row-local pure math
+unless noted. One PR per checkbox (family batch).
+
+- [ ] **Math & trig (15)** — ACOT, ACOTH, DECIMAL, MDETERM, MINVERSE, MMULT, MULTINOMIAL, MUNIT, QUOTIENT, SERIESSUM, SQRTPI, SUMSQ, SUMX2MY2, SUMX2PY2, SUMXMY2
+- [ ] **Statistical distributions (33)** — BETA.DIST, BETA.INV, BINOM.DIST.RANGE, CHISQ.DIST, CHISQ.DIST.RT, CHISQ.INV, CHISQ.INV.RT, CHISQ.TEST, CONFIDENCE.NORM, CONFIDENCE.T, F.DIST, F.DIST.RT, F.INV, F.INV.RT, F.TEST, FISHER, FISHERINV, GAMMA, GAMMA.DIST, GAMMA.INV, GAMMALN, GAMMALN.PRECISE, GAUSS, HYPGEOM.DIST, LOGNORM.DIST, LOGNORM.INV, NEGBINOM.DIST, PHI, PROB, STANDARDIZE, T.TEST, WEIBULL.DIST, Z.TEST
+- [ ] **Statistical aggregates (15)** — AVERAGEA, DEVSQ, GEOMEAN, HARMEAN, MAXA, MINA, PEARSON, PERCENTRANK.EXC, PERCENTRANK.INC, STDEVA, STDEVPA, STEYX, TRIMMEAN, VARA, VARPA
+- [ ] **Statistical regression/array (6) — LINEST, LOGEST, TREND, GROWTH, FREQUENCY, MODE.MULT return arrays in Excel; scope to scalar first-cell use or refuse at classification, decide per function** — FREQUENCY, GROWTH, LINEST, LOGEST, MODE.MULT, TREND
+- [ ] **Text (19)** — CHAR, CODE, DOLLAR, FINDB, FIXED, LEFTB, LENB, MIDB, NUMBERVALUE, REPLACEB, REPT, RIGHTB, SEARCHB, T, TEXTAFTER, TEXTBEFORE, UNICHAR, UNICODE, VALUETOTEXT
+- [ ] **Date & time (13)** — DATEVALUE, DAYS, DAYS360, HOUR, ISOWEEKNUM, MINUTE, NETWORKDAYS.INTL, SECOND, TIME, TIMEVALUE, WEEKNUM, WORKDAY.INTL, YEARFRAC
+- [ ] **Lookup & information (7)** — ADDRESS, LOOKUP, ERROR.TYPE, ISERR, ISEVEN, ISODD, N
+- [ ] **Engineering — complex & Bessel (27)** — BESSELI, BESSELJ, BESSELK, BESSELY, IMABS, IMARGUMENT, IMCONJUGATE, IMCOS, IMCOSH, IMCOT, IMCSC, IMCSCH, IMDIV, IMEXP, IMLN, IMLOG10, IMLOG2, IMPOWER, IMPRODUCT, IMSEC, IMSECH, IMSIN, IMSINH, IMSQRT, IMSUB, IMSUM, IMTAN
+
 ## Input format support
 
 - [ ] **Accept .xlsm** — macro-enabled workbooks. Calamine already reads via the xlsx code path. Accept the extension, ignore VBA macros. ~10 lines.

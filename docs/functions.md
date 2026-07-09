@@ -41,8 +41,8 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ABS | x | yes | v0.1 | x | x | |
 | ACOS | x | yes | v0.1 | x | | |
 | ACOSH | x | yes | v0.3 | x | | |
-| ACOT | . | yes | v0.3 | | | |
-| ACOTH | . | yes | v0.3 | | | |
+| ACOT | . | yes | v0.4 | | | |
+| ACOTH | . | yes | v0.4 | | | |
 | AGGREGATE | x | yes | v0.3 | x | | Multi-mode aggregate (fn 1-13, options 0-7; hidden-row/nested-SUBTOTAL ignoring deferred) |
 | ARABIC | x | yes | v0.3 | | | |
 | ASIN | x | yes | v0.1 | x | | |
@@ -62,7 +62,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | COTH | x | yes | v0.3 | | | |
 | CSC | x | yes | v0.3 | | | |
 | CSCH | x | yes | v0.3 | | | |
-| DECIMAL | . | yes | v0.3 | | | |
+| DECIMAL | . | yes | v0.4 | | | |
 | DEGREES | x | yes | v0.3 | x | | |
 | EVEN | x | yes | v0.3 | x | x | |
 | EXP | x | yes | v0.1 | x | | |
@@ -78,18 +78,18 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | LN | x | yes | v0.1 | x | x | |
 | LOG | x | yes | v0.1 | x | x | |
 | LOG10 | x | yes | v0.1 | x | | |
-| MDETERM | . | yes | v0.3 | | | |
-| MINVERSE | . | yes | v0.3 | | | |
-| MMULT | . | yes | v0.3 | | | |
+| MDETERM | . | yes | v0.4 | | | |
+| MINVERSE | . | yes | v0.4 | | | |
+| MMULT | . | yes | v0.4 | | | |
 | MOD | x | yes | v0.1 | x | x | |
 | MROUND | x | yes | v0.3 | x | x | |
-| MULTINOMIAL | . | yes | v0.3 | | | |
-| MUNIT | . | yes | v0.3 | | | |
+| MULTINOMIAL | . | yes | v0.4 | | | |
+| MUNIT | . | yes | v0.4 | | | |
 | ODD | x | yes | v0.3 | x | x | |
 | PI | x | yes | v0.1 | x | x | |
 | POWER | x | yes | v0.1 | x | x | |
 | PRODUCT | x | yes | v0.1 | x | | |
-| QUOTIENT | . | yes | v0.3 | | | |
+| QUOTIENT | . | yes | v0.4 | | | |
 | RADIANS | x | yes | v0.3 | x | | |
 | RAND | - | no | - | x | x | Volatile |
 | RANDARRAY | - | no | - | | | Volatile + spill |
@@ -101,21 +101,21 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SEC | x | yes | v0.3 | | | |
 | SECH | x | yes | v0.3 | | | |
 | SEQUENCE | - | no | - | | | Spill |
-| SERIESSUM | . | yes | v0.3 | | | |
+| SERIESSUM | . | yes | v0.4 | | | |
 | SIGN | x | yes | v0.1 | x | | |
 | SIN | x | yes | v0.1 | x | | |
 | SINH | x | yes | v0.3 | x | | |
 | SQRT | x | yes | v0.1 | x | x | |
-| SQRTPI | . | yes | v0.3 | | | |
+| SQRTPI | . | yes | v0.4 | | | |
 | SUBTOTAL | x | yes | v0.3 | x | | fn 1-11/101-111; hidden-row ignoring deferred |
 | SUM | x | yes | v0.1 | x | x | |
 | SUMIF | x | yes | v0.1 | x | x | Offset sum range (`B5:B14` vs `A2:A11`) returns #VALUE!; Excel resizes |
 | SUMIFS | x | yes | v0.1 | x | | |
 | SUMPRODUCT | x | yes | v0.2 | x | x | |
-| SUMSQ | . | yes | v0.3 | | | |
-| SUMX2MY2 | . | yes | v0.3 | | | |
-| SUMX2PY2 | . | yes | v0.3 | | | |
-| SUMXMY2 | . | yes | v0.3 | | | |
+| SUMSQ | . | yes | v0.4 | | | |
+| SUMX2MY2 | . | yes | v0.4 | | | |
+| SUMX2PY2 | . | yes | v0.4 | | | |
+| SUMXMY2 | . | yes | v0.4 | | | |
 | TAN | x | yes | v0.1 | x | | |
 | TANH | x | yes | v0.3 | x | | |
 | TRUNC | x | yes | v0.3 | x | x | |
@@ -125,22 +125,22 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | Function | xlstream | Streamable | Version | formualizer | xlcalculator | Notes |
 |---|---|---|---|---|---|---|
 | AVERAGE | x | yes | v0.1 | x | x | |
-| AVERAGEA | . | yes | v0.3 | | | |
+| AVERAGEA | . | yes | v0.4 | | | |
 | AVERAGEIF | x | yes | v0.1 | x | | Offset avg range returns #VALUE!; Excel resizes |
 | AVERAGEIFS | x | yes | v0.1 | x | | |
 | AVEDEV | x | yes | v0.3 | | | |
-| BETA.DIST | . | yes | v0.3 | | | |
-| BETA.INV | . | yes | v0.3 | | | |
+| BETA.DIST | . | yes | v0.4 | | | |
+| BETA.INV | . | yes | v0.4 | | | |
 | BINOM.DIST | x | yes | v0.3 | | | |
-| BINOM.DIST.RANGE | . | yes | v0.3 | | | |
+| BINOM.DIST.RANGE | . | yes | v0.4 | | | |
 | BINOM.INV | x | yes | v0.3 | | | |
-| CHISQ.DIST | . | yes | v0.3 | | | |
-| CHISQ.DIST.RT | . | yes | v0.3 | | | |
-| CHISQ.INV | . | yes | v0.3 | | | |
-| CHISQ.INV.RT | . | yes | v0.3 | | | |
-| CHISQ.TEST | . | yes | v0.3 | | | |
-| CONFIDENCE.NORM | . | yes | v0.3 | | | |
-| CONFIDENCE.T | . | yes | v0.3 | | | |
+| CHISQ.DIST | . | yes | v0.4 | | | |
+| CHISQ.DIST.RT | . | yes | v0.4 | | | |
+| CHISQ.INV | . | yes | v0.4 | | | |
+| CHISQ.INV.RT | . | yes | v0.4 | | | |
+| CHISQ.TEST | . | yes | v0.4 | | | |
+| CONFIDENCE.NORM | . | yes | v0.4 | | | |
+| CONFIDENCE.T | . | yes | v0.4 | | | |
 | CORREL | x | yes | v0.3 | | | |
 | COUNT | x | yes | v0.1 | x | x | |
 | COUNTA | x | yes | v0.1 | x | x | |
@@ -149,58 +149,58 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | COUNTIFS | x | yes | v0.1 | x | | |
 | COVARIANCE.P | x | yes | v0.3 | | | |
 | COVARIANCE.S | x | yes | v0.3 | | | |
-| DEVSQ | . | yes | v0.3 | | | |
+| DEVSQ | . | yes | v0.4 | | | |
 | EXPON.DIST | x | yes | v0.3 | | | |
-| F.DIST | . | yes | v0.3 | | | |
-| F.DIST.RT | . | yes | v0.3 | | | |
-| F.INV | . | yes | v0.3 | | | |
-| F.INV.RT | . | yes | v0.3 | | | |
-| F.TEST | . | yes | v0.3 | | | |
-| FISHER | . | yes | v0.3 | | | |
-| FISHERINV | . | yes | v0.3 | | | |
+| F.DIST | . | yes | v0.4 | | | |
+| F.DIST.RT | . | yes | v0.4 | | | |
+| F.INV | . | yes | v0.4 | | | |
+| F.INV.RT | . | yes | v0.4 | | | |
+| F.TEST | . | yes | v0.4 | | | |
+| FISHER | . | yes | v0.4 | | | |
+| FISHERINV | . | yes | v0.4 | | | |
 | FORECAST.LINEAR | x | yes | v0.3 | | | |
-| FREQUENCY | . | yes | v0.3 | | | |
-| GAMMA | . | yes | v0.3 | | | |
-| GAMMA.DIST | . | yes | v0.3 | | | |
-| GAMMA.INV | . | yes | v0.3 | | | |
-| GAMMALN | . | yes | v0.3 | | | |
-| GAMMALN.PRECISE | . | yes | v0.3 | | | |
-| GAUSS | . | yes | v0.3 | | | |
-| GEOMEAN | . | yes | v0.3 | | | |
-| GROWTH | . | yes | v0.3 | | | |
-| HARMEAN | . | yes | v0.3 | | | |
-| HYPGEOM.DIST | . | yes | v0.3 | | | |
+| FREQUENCY | . | yes | v0.4 | | | |
+| GAMMA | . | yes | v0.4 | | | |
+| GAMMA.DIST | . | yes | v0.4 | | | |
+| GAMMA.INV | . | yes | v0.4 | | | |
+| GAMMALN | . | yes | v0.4 | | | |
+| GAMMALN.PRECISE | . | yes | v0.4 | | | |
+| GAUSS | . | yes | v0.4 | | | |
+| GEOMEAN | . | yes | v0.4 | | | |
+| GROWTH | . | yes | v0.4 | | | |
+| HARMEAN | . | yes | v0.4 | | | |
+| HYPGEOM.DIST | . | yes | v0.4 | | | |
 | INTERCEPT | x | yes | v0.3 | | | |
 | KURT | x | yes | v0.3 | | | |
 | LARGE | x | yes | v0.3 | | | |
-| LINEST | . | yes | v0.3 | | | |
-| LOGEST | . | yes | v0.3 | | | |
-| LOGNORM.DIST | . | yes | v0.3 | | | |
-| LOGNORM.INV | . | yes | v0.3 | | | |
+| LINEST | . | yes | v0.4 | | | |
+| LOGEST | . | yes | v0.4 | | | |
+| LOGNORM.DIST | . | yes | v0.4 | | | |
+| LOGNORM.INV | . | yes | v0.4 | | | |
 | MAX | x | yes | v0.1 | x | x | |
-| MAXA | . | yes | v0.3 | | | |
+| MAXA | . | yes | v0.4 | | | |
 | MAXIFS | x | yes | v0.2 | x | x | |
 | MEDIAN | x | yes | v0.1 | x | | |
 | MIN | x | yes | v0.1 | x | x | |
-| MINA | . | yes | v0.3 | | | |
+| MINA | . | yes | v0.4 | | | |
 | MINIFS | x | yes | v0.2 | x | x | |
 | MODE.SNGL | x | yes | v0.3 | x | x | |
-| MODE.MULT | . | yes | v0.3 | | | |
-| NEGBINOM.DIST | . | yes | v0.3 | | | |
+| MODE.MULT | . | yes | v0.4 | | | |
+| NEGBINOM.DIST | . | yes | v0.4 | | | |
 | NORM.DIST | x | yes | v0.3 | x | x | |
 | NORM.INV | x | yes | v0.3 | x | x | |
 | NORM.S.DIST | x | yes | v0.3 | | | |
 | NORM.S.INV | x | yes | v0.3 | | | |
-| PEARSON | . | yes | v0.3 | | | |
+| PEARSON | . | yes | v0.4 | | | |
 | PERCENTILE.EXC | x | yes | v0.3 | | | |
 | PERCENTILE.INC | x | yes | v0.3 | | | |
-| PERCENTRANK.EXC | . | yes | v0.3 | | | |
-| PERCENTRANK.INC | . | yes | v0.3 | | | |
+| PERCENTRANK.EXC | . | yes | v0.4 | | | |
+| PERCENTRANK.INC | . | yes | v0.4 | | | |
 | PERMUT | x | yes | v0.3 | | | |
 | PERMUTATIONA | x | yes | v0.3 | | | |
-| PHI | . | yes | v0.3 | | | |
+| PHI | . | yes | v0.4 | | | |
 | POISSON.DIST | x | yes | v0.3 | | | |
-| PROB | . | yes | v0.3 | | | |
+| PROB | . | yes | v0.4 | | | |
 | QUARTILE.EXC | x | yes | v0.3 | | | |
 | QUARTILE.INC | x | yes | v0.3 | | | |
 | RANK.AVG | x | yes | v0.3 | | | |
@@ -210,70 +210,70 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SKEW.P | x | yes | v0.3 | | | |
 | SLOPE | x | yes | v0.3 | | | |
 | SMALL | x | yes | v0.3 | | | |
-| STANDARDIZE | . | yes | v0.3 | | | |
+| STANDARDIZE | . | yes | v0.4 | | | |
 | STDEV.P | x | yes | v0.3 | | | |
 | STDEV.S | x | yes | v0.3 | | | |
-| STDEVA | . | yes | v0.3 | | | |
-| STDEVPA | . | yes | v0.3 | | | |
-| STEYX | . | yes | v0.3 | | | |
+| STDEVA | . | yes | v0.4 | | | |
+| STDEVPA | . | yes | v0.4 | | | |
+| STEYX | . | yes | v0.4 | | | |
 | T.DIST | x | yes | v0.3 | | | |
 | T.DIST.2T | x | yes | v0.3 | | | |
 | T.DIST.RT | x | yes | v0.3 | | | |
 | T.INV | x | yes | v0.3 | | | |
 | T.INV.2T | x | yes | v0.3 | | | |
-| T.TEST | . | yes | v0.3 | | | |
-| TREND | . | yes | v0.3 | | | |
-| TRIMMEAN | . | yes | v0.3 | | | |
+| T.TEST | . | yes | v0.4 | | | |
+| TREND | . | yes | v0.4 | | | |
+| TRIMMEAN | . | yes | v0.4 | | | |
 | VAR.P | x | yes | v0.3 | | | |
 | VAR.S | x | yes | v0.3 | | | |
-| VARA | . | yes | v0.3 | | | |
-| VARPA | . | yes | v0.3 | | | |
-| WEIBULL.DIST | . | yes | v0.3 | | | |
-| Z.TEST | . | yes | v0.3 | | | |
+| VARA | . | yes | v0.4 | | | |
+| VARPA | . | yes | v0.4 | | | |
+| WEIBULL.DIST | . | yes | v0.4 | | | |
+| Z.TEST | . | yes | v0.4 | | | |
 
 ## Text
 
 | Function | xlstream | Streamable | Version | formualizer | xlcalculator | Notes |
 |---|---|---|---|---|---|---|
-| CHAR | . | yes | v0.3 | | | |
+| CHAR | . | yes | v0.4 | | | |
 | CLEAN | x | yes | v0.1 | x | | |
-| CODE | . | yes | v0.3 | | | |
+| CODE | . | yes | v0.4 | | | |
 | CONCAT | x | yes | v0.1 | x | x | |
 | CONCATENATE | x | yes | v0.1 | x | x | |
-| DOLLAR | . | yes | v0.3 | | | |
+| DOLLAR | . | yes | v0.4 | | | |
 | EXACT | x | yes | v0.1 | x | | |
 | FIND | x | yes | v0.1 | x | x | |
-| FINDB | . | yes | v0.3 | | | |
-| FIXED | . | yes | v0.3 | | | |
+| FINDB | . | yes | v0.4 | | | |
+| FIXED | . | yes | v0.4 | | | |
 | LEFT | x | yes | v0.1 | x | x | |
-| LEFTB | . | yes | v0.3 | | | |
+| LEFTB | . | yes | v0.4 | | | |
 | LEN | x | yes | v0.1 | x | x | |
-| LENB | . | yes | v0.3 | | | |
+| LENB | . | yes | v0.4 | | | |
 | LOWER | x | yes | v0.1 | x | x | |
 | MID | x | yes | v0.1 | x | x | |
-| MIDB | . | yes | v0.3 | | | |
-| NUMBERVALUE | . | yes | v0.3 | | | |
+| MIDB | . | yes | v0.4 | | | |
+| NUMBERVALUE | . | yes | v0.4 | | | |
 | PROPER | x | yes | v0.1 | x | | |
 | REPLACE | x | yes | v0.1 | x | | |
-| REPLACEB | . | yes | v0.3 | | | |
-| REPT | . | yes | v0.3 | | | |
+| REPLACEB | . | yes | v0.4 | | | |
+| REPT | . | yes | v0.4 | | | |
 | RIGHT | x | yes | v0.1 | x | x | |
-| RIGHTB | . | yes | v0.3 | | | |
+| RIGHTB | . | yes | v0.4 | | | |
 | SEARCH | x | yes | v0.1 | x | | |
-| SEARCHB | . | yes | v0.3 | | | |
+| SEARCHB | . | yes | v0.4 | | | |
 | SUBSTITUTE | x | yes | v0.1 | x | | |
-| T | . | yes | v0.3 | | | |
+| T | . | yes | v0.4 | | | |
 | TEXT | x | yes | v0.1 | x | | |
-| TEXTAFTER | . | yes | v0.3 | | | |
-| TEXTBEFORE | . | yes | v0.3 | | | |
+| TEXTAFTER | . | yes | v0.4 | | | |
+| TEXTBEFORE | . | yes | v0.4 | | | |
 | TEXTJOIN | x | yes | v0.1 | x | | |
 | TEXTSPLIT | - | no | - | | | Spill |
 | TRIM | x | yes | v0.1 | x | x | |
-| UNICHAR | . | yes | v0.3 | | | |
-| UNICODE | . | yes | v0.3 | | | |
+| UNICHAR | . | yes | v0.4 | | | |
+| UNICODE | . | yes | v0.4 | | | |
 | UPPER | x | yes | v0.1 | x | x | |
 | VALUE | x | yes | v0.1 | x | x | |
-| VALUETOTEXT | . | yes | v0.3 | | | |
+| VALUETOTEXT | . | yes | v0.4 | | | |
 
 ## Date & Time
 
@@ -281,41 +281,41 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 |---|---|---|---|---|---|---|
 | DATE | x | yes | v0.1 | x | x | |
 | DATEDIF | x | yes | v0.1 | x | | |
-| DATEVALUE | . | yes | v0.3 | | | |
+| DATEVALUE | . | yes | v0.4 | | | |
 | DAY | x | yes | v0.1 | x | x | |
-| DAYS | . | yes | v0.3 | | | |
-| DAYS360 | . | yes | v0.3 | | | |
+| DAYS | . | yes | v0.4 | | | |
+| DAYS360 | . | yes | v0.4 | | | |
 | EDATE | x | yes | v0.1 | x | x | |
 | EOMONTH | x | yes | v0.1 | x | x | |
-| HOUR | . | yes | v0.3 | | | |
-| ISOWEEKNUM | . | yes | v0.3 | x | | |
-| MINUTE | . | yes | v0.3 | | | |
+| HOUR | . | yes | v0.4 | | | |
+| ISOWEEKNUM | . | yes | v0.4 | x | | |
+| MINUTE | . | yes | v0.4 | | | |
 | MONTH | x | yes | v0.1 | x | x | |
 | NETWORKDAYS | x | yes | v0.1 | x | | |
-| NETWORKDAYS.INTL | . | yes | v0.3 | | | |
+| NETWORKDAYS.INTL | . | yes | v0.4 | | | |
 | NOW | x | yes | v0.1 | x | x | Once per run |
-| SECOND | . | yes | v0.3 | | | |
-| TIME | . | yes | v0.3 | | | |
-| TIMEVALUE | . | yes | v0.3 | | | |
+| SECOND | . | yes | v0.4 | | | |
+| TIME | . | yes | v0.4 | | | |
+| TIMEVALUE | . | yes | v0.4 | | | |
 | TODAY | x | yes | v0.1 | x | x | Once per run |
 | WEEKDAY | x | yes | v0.1 | x | x | |
-| WEEKNUM | . | yes | v0.3 | | | |
+| WEEKNUM | . | yes | v0.4 | | | |
 | WORKDAY | x | yes | v0.1 | x | | |
-| WORKDAY.INTL | . | yes | v0.3 | | | |
+| WORKDAY.INTL | . | yes | v0.4 | | | |
 | YEAR | x | yes | v0.1 | x | x | |
-| YEARFRAC | . | yes | v0.3 | x | x | |
+| YEARFRAC | . | yes | v0.4 | x | x | |
 
 ## Lookup & Reference
 
 | Function | xlstream | Streamable | Version | formualizer | xlcalculator | Notes |
 |---|---|---|---|---|---|---|
-| ADDRESS | . | yes | v0.3 | | | Builds A1 string |
+| ADDRESS | . | yes | v0.4 | | | Builds A1 string |
 | CHOOSE | x | yes | v0.1 | x | | |
 | COLUMN | x | yes | v0.3 | x | | |
 | COLUMNS | x | yes | v0.3 | x | | |
 | HLOOKUP | x | yes | v0.1 | x | | |
 | INDEX | x | yes | v0.1 | x | x | |
-| LOOKUP | . | yes | v0.3 | x | | Legacy |
+| LOOKUP | . | yes | v0.4 | x | | Legacy |
 | MATCH | x | yes | v0.1 | x | x | |
 | ROW | x | yes | v0.3 | x | | |
 | ROWS | x | yes | v0.3 | x | | |
@@ -356,11 +356,11 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | ISTEXT | x | yes | v0.1 | x | | |
 | NA | x | yes | v0.1 | x | | |
 | TYPE | x | yes | v0.1 | x | | |
-| ERROR.TYPE | . | yes | v0.3 | | | |
-| ISERR | . | yes | v0.3 | | | |
-| ISEVEN | . | yes | v0.3 | | | |
-| ISODD | . | yes | v0.3 | | | |
-| N | . | yes | v0.3 | | | |
+| ERROR.TYPE | . | yes | v0.4 | | | |
+| ISERR | . | yes | v0.4 | | | |
+| ISEVEN | . | yes | v0.4 | | | |
+| ISODD | . | yes | v0.4 | | | |
+| N | . | yes | v0.4 | | | |
 | CELL | - | no | - | | | Runtime environment |
 | INFO | - | no | - | | | Runtime environment |
 | ISFORMULA | - | no | - | | | Runtime inspection |
@@ -446,35 +446,35 @@ All row-local (pure math). No streaming concerns.
 | OCT2BIN | x | yes | v0.3 | | x | |
 | OCT2DEC | x | yes | v0.3 | | x | |
 | OCT2HEX | x | yes | v0.3 | | x | |
-| BESSELI | . | yes | v0.3 | | | |
-| BESSELJ | . | yes | v0.3 | | | |
-| BESSELK | . | yes | v0.3 | | | |
-| BESSELY | . | yes | v0.3 | | | |
-| IMABS | . | yes | v0.3 | | | Complex number ops |
+| BESSELI | . | yes | v0.4 | | | |
+| BESSELJ | . | yes | v0.4 | | | |
+| BESSELK | . | yes | v0.4 | | | |
+| BESSELY | . | yes | v0.4 | | | |
+| IMABS | . | yes | v0.4 | | | Complex number ops |
 | IMAGINARY | x | yes | v0.3 | | | |
-| IMARGUMENT | . | yes | v0.3 | | | |
-| IMCONJUGATE | . | yes | v0.3 | | | |
-| IMCOS | . | yes | v0.3 | | | |
-| IMCOSH | . | yes | v0.3 | | | |
-| IMCOT | . | yes | v0.3 | | | |
-| IMCSC | . | yes | v0.3 | | | |
-| IMCSCH | . | yes | v0.3 | | | |
-| IMDIV | . | yes | v0.3 | | | |
-| IMEXP | . | yes | v0.3 | | | |
-| IMLN | . | yes | v0.3 | | | |
-| IMLOG10 | . | yes | v0.3 | | | |
-| IMLOG2 | . | yes | v0.3 | | | |
-| IMPOWER | . | yes | v0.3 | | | |
-| IMPRODUCT | . | yes | v0.3 | | | |
+| IMARGUMENT | . | yes | v0.4 | | | |
+| IMCONJUGATE | . | yes | v0.4 | | | |
+| IMCOS | . | yes | v0.4 | | | |
+| IMCOSH | . | yes | v0.4 | | | |
+| IMCOT | . | yes | v0.4 | | | |
+| IMCSC | . | yes | v0.4 | | | |
+| IMCSCH | . | yes | v0.4 | | | |
+| IMDIV | . | yes | v0.4 | | | |
+| IMEXP | . | yes | v0.4 | | | |
+| IMLN | . | yes | v0.4 | | | |
+| IMLOG10 | . | yes | v0.4 | | | |
+| IMLOG2 | . | yes | v0.4 | | | |
+| IMPOWER | . | yes | v0.4 | | | |
+| IMPRODUCT | . | yes | v0.4 | | | |
 | IMREAL | x | yes | v0.3 | | | |
-| IMSEC | . | yes | v0.3 | | | |
-| IMSECH | . | yes | v0.3 | | | |
-| IMSIN | . | yes | v0.3 | | | |
-| IMSINH | . | yes | v0.3 | | | |
-| IMSQRT | . | yes | v0.3 | | | |
-| IMSUB | . | yes | v0.3 | | | |
-| IMSUM | . | yes | v0.3 | | | |
-| IMTAN | . | yes | v0.3 | | | |
+| IMSEC | . | yes | v0.4 | | | |
+| IMSECH | . | yes | v0.4 | | | |
+| IMSIN | . | yes | v0.4 | | | |
+| IMSINH | . | yes | v0.4 | | | |
+| IMSQRT | . | yes | v0.4 | | | |
+| IMSUB | . | yes | v0.4 | | | |
+| IMSUM | . | yes | v0.4 | | | |
+| IMTAN | . | yes | v0.4 | | | |
 
 ## Database
 
