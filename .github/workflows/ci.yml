@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           source .venv/bin/activate 2>/dev/null || source .venv/Scripts/activate
-          maturin develop --release
+          maturin develop --profile wheel
       - if: steps.guard.outputs.present == 'true'
         name: Run pytest
         working-directory: bindings/python

@@ -71,6 +71,14 @@ codegen-units = 1
 opt-level = 3
 strip = true
 
+# Python wheels only. Fat LTO drops encoding_rs static definitions when
+# linking the abi3 cdylib on linux-gnu (undefined R_X86_64_PC32
+# relocations, "recompile with -fPIC"); thin LTO links clean. Rust/CLI
+# builds keep fat LTO.
+[profile.wheel]
+inherits = "release"
+lto = "thin"
+
 [profile.bench]
 lto = "fat"
 codegen-units = 1
