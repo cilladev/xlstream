@@ -1,6 +1,6 @@
 # Python bindings
 
-PyO3 0.28 + maturin 1.13. Pattern cribbed from `pydantic-core` / `huggingface/tokenizers`.
+PyO3 0.29 + maturin 1.13. Pattern cribbed from `pydantic-core` / `huggingface/tokenizers`.
 
 ## Layout
 
@@ -32,7 +32,7 @@ name = "_xlstream"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 xlstream-core = { path = "../../crates/xlstream-core" }
 xlstream-eval = { path = "../../crates/xlstream-eval" }
 xlstream-io   = { path = "../../crates/xlstream-io" }

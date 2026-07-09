@@ -97,7 +97,7 @@ Each reader opens its own file handle. For our row-parallel design (N workers), 
 
 ## Version pin
 
-Track stable (`^0.34` at time of writing). Not pinned exactly — calamine's surface is conservative.
+Track stable (`^0.36` at time of writing). Not pinned exactly — calamine's surface is conservative.
 
 ## What we use, what we don't
 
