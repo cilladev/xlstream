@@ -154,71 +154,11 @@ pub fn evaluate(
             "parallel evaluation: spawning workers"
         );
 
-        // Write non-main sheets — evaluate formulas on secondary formula sheets.
-        for name in &plan.sheet_names {
-            if Some(name.as_str()) != plan.main_sheet.as_deref() {
-                let mut sh = writer.add_sheet(name)?;
-                let mut stream = reader.cells(name)?;
-
-                if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
-                    let sec_interp = Interpreter::new(&plan.prelude).with_main_sheet(name);
-                    let sec_options = EvaluateOptions {
-                        workers: None,
-                        iterative_calc: plan.iterative_calc,
-                        max_iterations: plan.max_iterations,
-                        max_change: plan.max_change,
-                        output_mode: plan.output_mode,
-                    };
-                    let mut header_pending = true;
-                    while let Some((row_idx, mut row_values)) = stream.next_row()? {
-                        if header_pending {
-                            sh.write_row(row_idx, &row_values)?;
-                            header_pending = false;
-                            continue;
-                        }
-                        for &fcol in &sp.topo_order {
-                            let ast = sp
-                                .row_overrides
-                                .get(&fcol)
-                                .and_then(|overrides| overrides.get(&row_idx))
-                                .or_else(|| sp.col_asts.get(&fcol));
-                            let Some(ast) = ast else { continue };
-                            eval_column(
-                                &sec_interp,
-                                ast,
-                                &mut row_values,
-                                row_idx,
-                                fcol,
-                                sp.self_referential_cols.contains(&fcol),
-                                &sec_options,
-                            );
-                        }
-                        if plan.output_mode.is_values_only() || sp.col_templates.is_empty() {
-                            sh.write_row(row_idx, &row_values)?;
-                        } else {
-                            write_formula_cells(
-                                &mut sh,
-                                row_idx,
-                                &row_values,
-                                &sp.col_templates,
-                                &sp.row_override_texts,
-                            )?;
-                        }
-                    }
-                } else {
-                    while let Some((row_idx, row_values)) = stream.next_row()? {
-                        sh.write_row(row_idx, &row_values)?;
-                    }
-                }
-
-                drop(sh);
-            }
-        }
-
         let mp = plan.main_plan.ok_or_else(|| XlStreamError::Internal("no main plan".into()))?;
+        let prelude = Arc::new(plan.prelude);
 
         let shared = SharedPlan {
-            prelude: Arc::new(plan.prelude),
+            prelude: Arc::clone(&prelude),
             col_asts: Arc::new(mp.col_asts),
             row_overrides: Arc::new(mp.row_overrides),
             self_referential_cols: Arc::new(mp.self_referential_cols),
@@ -233,15 +173,84 @@ pub fn evaluate(
             }),
         };
 
-        stream_parallel(
-            input,
-            &mut writer,
-            &shared,
-            &mp.topo_order,
-            &main_sheet_name,
-            plan.total_data_rows,
-            num_workers,
-        )?
+        // Write sheets in input order (#197). The constant-memory writer
+        // emits worksheets in add_sheet order, so the main sheet must go
+        // through the parallel workers at its original position; secondary
+        // sheets evaluate serially around it.
+        let mut totals = (0u64, 0u64);
+        for name in &plan.sheet_names {
+            if Some(name.as_str()) == plan.main_sheet.as_deref() {
+                let (rows, formulas) = stream_parallel(
+                    input,
+                    &mut writer,
+                    &shared,
+                    &mp.topo_order,
+                    &main_sheet_name,
+                    plan.total_data_rows,
+                    num_workers,
+                )?;
+                totals.0 += rows;
+                totals.1 += formulas;
+                continue;
+            }
+
+            let mut sh = writer.add_sheet(name)?;
+            let mut stream = reader.cells(name)?;
+
+            if let Some(sp) = plan.secondary_plans.get(name.as_str()) {
+                let sec_interp = Interpreter::new(&prelude).with_main_sheet(name);
+                let sec_options = EvaluateOptions {
+                    workers: None,
+                    iterative_calc: plan.iterative_calc,
+                    max_iterations: plan.max_iterations,
+                    max_change: plan.max_change,
+                    output_mode: plan.output_mode,
+                };
+                let mut header_pending = true;
+                while let Some((row_idx, mut row_values)) = stream.next_row()? {
+                    if header_pending {
+                        sh.write_row(row_idx, &row_values)?;
+                        header_pending = false;
+                        continue;
+                    }
+                    for &fcol in &sp.topo_order {
+                        let ast = sp
+                            .row_overrides
+                            .get(&fcol)
+                            .and_then(|overrides| overrides.get(&row_idx))
+                            .or_else(|| sp.col_asts.get(&fcol));
+                        let Some(ast) = ast else { continue };
+                        eval_column(
+                            &sec_interp,
+                            ast,
+                            &mut row_values,
+                            row_idx,
+                            fcol,
+                            sp.self_referential_cols.contains(&fcol),
+                            &sec_options,
+                        );
+                    }
+                    if plan.output_mode.is_values_only() || sp.col_templates.is_empty() {
+                        sh.write_row(row_idx, &row_values)?;
+                    } else {
+                        write_formula_cells(
+                            &mut sh,
+                            row_idx,
+                            &row_values,
+                            &sp.col_templates,
+                            &sp.row_override_texts,
+                        )?;
+                    }
+                }
+            } else {
+                while let Some((row_idx, row_values)) = stream.next_row()? {
+                    sh.write_row(row_idx, &row_values)?;
+                }
+            }
+
+            drop(sh);
+        }
+        totals
     } else {
         tracing::debug!("single-threaded evaluation");
         stream_single_threaded(&mut reader, &mut writer, &plan)?

@@ -150,3 +150,56 @@ fn issue_138_offset_sumif_value_range_returns_value_error() {
         "expected #VALUE! for offset sum range, got {c2:?}"
     );
 }
+
+/// Can't use conformance — the runner compares cell values, not sheet
+/// order, and the bug only triggers on the parallel path (workers > 1,
+/// main sheet with formulas, >= 10,000 data rows). Issue #197.
+#[test]
+fn issue_197_parallel_path_preserves_sheet_order() {
+    use calamine::{open_workbook, Reader as CalReader, Xlsx};
+
+    let input = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let output = NamedTempFile::with_suffix(".xlsx").unwrap();
+
+    let mut wb = Workbook::new();
+    let main = wb.add_worksheet();
+    main.set_name("Sheet1").unwrap();
+    main.write_string(0, 0, "region").unwrap();
+    main.write_string(0, 1, "factor").unwrap();
+    for row in 1..=12_000u32 {
+        main.write_string(row, 0, "north").unwrap();
+        main.write_formula(
+            row,
+            1,
+            Formula::new(format!(
+                "INDEX(RegionFactors!B2:B4,MATCH(A{},RegionFactors!A2:A4,0))",
+                row + 1
+            ))
+            .set_result("0"),
+        )
+        .unwrap();
+    }
+    for name in ["RegionFactors", "CategoryWeights", "RegionCodes"] {
+        let ws = wb.add_worksheet();
+        ws.set_name(name).unwrap();
+        ws.write_string(0, 0, "region").unwrap();
+        for (i, region) in ["north", "south", "east"].iter().enumerate() {
+            let row = (i + 1) as u32;
+            ws.write_string(row, 0, *region).unwrap();
+            ws.write_number(row, 1, f64::from(row) * 1.1).unwrap();
+        }
+    }
+    wb.save(input.path()).unwrap();
+
+    let opts = EvaluateOptions { workers: Some(2), ..Default::default() };
+    evaluate(input.path(), output.path(), &opts).unwrap();
+
+    let wb: Xlsx<_> = open_workbook(output.path()).unwrap();
+    let names = wb.sheet_names();
+    let order: Vec<&str> = names.iter().map(String::as_str).collect();
+    assert_eq!(
+        order,
+        vec!["Sheet1", "RegionFactors", "CategoryWeights", "RegionCodes"],
+        "output must preserve input sheet order"
+    );
+}
