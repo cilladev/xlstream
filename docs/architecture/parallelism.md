@@ -51,7 +51,7 @@ fn stream_parallel(
     let chunk_size = (total_data_rows as usize).div_ceil(num_workers);
 
     // Header: read from fresh reader, write before spawning workers.
-    // Non-main sheets: written by caller before this function.
+    // Non-main sheets: written by caller interleaved in input order.
 
     let (tx, rx) = crossbeam_channel::bounded(num_workers * 1024);
 

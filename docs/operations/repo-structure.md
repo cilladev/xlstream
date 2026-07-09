@@ -109,10 +109,10 @@ repository = "https://github.com/cilladev/xlstream"
 authors = ["Priscilla Emasoga"]
 
 [workspace.dependencies]
-calamine = "0.34"
+calamine = "0.36"
 rust_xlsxwriter = { version = "0.94", features = ["constant_memory", "zlib", "ryu"] }
 formualizer-parse = "0.5"     # pin exact version after first integration
-pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 rayon = "1.10"
 smallvec = "1.13"
 thiserror = "2.0"

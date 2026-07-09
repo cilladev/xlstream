@@ -2,7 +2,7 @@
 
 ## What we picked
 
-- **PyO3 0.28** with the Bound API.
+- **PyO3 0.29** with the Bound API.
 - **maturin 1.13+** as build tool.
 - **abi3-py39** for single-wheel-per-platform.
 - **Layout**: Rust workspace + `bindings/python/` nested crate. Pattern from `huggingface/tokenizers`.
@@ -93,11 +93,11 @@ name = "_myproject"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 myproject-core = { path = "../../crates/myproject-core" }
 ```
 
-## PyO3 0.28 idioms (changed from older versions)
+## PyO3 0.29 idioms (changed from older versions)
 
 ### Bound API (0.21+, mandatory 0.25+)
 
@@ -189,7 +189,7 @@ pydantic-core's trick: `pyproject.toml` reads version from `Cargo.toml` via `dyn
 
 ## Free-threaded Python (3.13t, 3.14t)
 
-PyO3 0.28 supports the free-threaded (GIL-less) CPython builds via `#[pymodule(gil_used = false)]`. Defer for v0.1 — add when users ask.
+PyO3 0.29 supports the free-threaded (GIL-less) CPython builds via `#[pymodule(gil_used = false)]`. Defer for v0.1 — add when users ask.
 
 ## Type stubs
 
