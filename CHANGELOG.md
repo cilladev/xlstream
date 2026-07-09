@@ -5,13 +5,15 @@ Semver.
 
 ## [Unreleased]
 
+### Security
+- Upgrade calamine 0.35 -> 0.36 (quick-xml 0.41: RUSTSEC-2026-0194, RUSTSEC-2026-0195), pyo3 0.28 -> 0.29 (RUSTSEC-2026-0176, RUSTSEC-2026-0177), crossbeam-epoch 0.9.20 (RUSTSEC-2026-0204), anyhow 1.0.103 (RUSTSEC-2026-0190)
+
 ### Fixed
 - Parallel evaluation (workers > 1, >= 10,000 rows) reordered output sheets, writing lookup sheets before the formula sheet; sheets now keep input order (#197)
 - Conditional aggregates (COUNTIF, SUMIF, AVERAGEIF, COUNTIFS, SUMIFS, AVERAGEIFS, MINIFS, MAXIFS) respect row bounds — `COUNTIF(A2:A11, ...)` no longer scans the whole column (#138)
 - *IFS functions return #VALUE! for incongruent range shapes, matching Excel; SUMIF/AVERAGEIF with an offset value range (`SUMIF(A2:A11, x, B5:B14)`) return #VALUE! instead of silently mis-pairing rows (documented divergence: Excel resizes the value range)
 - Blank and `<>` criteria count implicit empty rows: `COUNTIF(D:D,"")` returns 1,048,576 minus non-blank cells instead of counting only streamed rows
 - Operator criteria (`">30"`) merge prelude buckets exactly: AVERAGEIF(S) weight by row count instead of averaging per-bucket averages, and empty buckets no longer poison AVERAGEIF(S) with #DIV/0! or MINIFS/MAXIFS with 0
-
 ### Changed
 - Centralize formula registration — single registry replaces 9 scattered function-name registration sites. `classify()`, `rewrite()`, and `collect_lookup_keys()` now take a `fn_lookup` callback. Dispatch uses `registry::dispatch()` instead of 200-arm match.
 - Multi-conditional prelude buckets store partials (`BucketAgg`) finished at lookup time, replacing finished-value buckets
