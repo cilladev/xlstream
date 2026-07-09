@@ -37,8 +37,8 @@ The goal is to support **every formula that fits the streaming model** — ~465 
 v0.1  ✓  Core engine (103 functions, streaming, Python bindings)
 v0.2  ✓  Coverage + fidelity (named ranges, table refs, keep-formulas)
 v0.3  ✓  Statistical + engineering + math extras (225 functions total)
-v0.4     LET + financial (38) + v0.3 carry-over (135) + multi-format I/O (xlsm, xlsb, csv)
-v0.5     Compatibility aliases (39) + database functions (12)
+v0.4     LET + v0.3 carry-over (135) + CSV output
+v0.5     Compatibility aliases (39) + database (12) + financial (37) + multi-format I/O (xlsm, xlsb)
 v1.0     API stability — no breaking changes after this
 ```
 
@@ -56,21 +56,23 @@ Excel has 109 statistical and 78 engineering functions. Most are pure math — n
 
 All row-local (pure functions of their args). No streaming concerns. Mostly math formulas from reference implementations.
 
-### v0.4 — LET + financial + v0.3 carry-over + multi-format I/O
+### v0.4 — LET + v0.3 carry-over + CSV output
 
 **LET** is scoped variable binding: `=LET(x, A2*1.1, y, B2*0.9, IF(x>y, x, y))`. No spill, no closures, no recursion — just name substitution. Compatible with streaming.
 
-**Financial (37 functions):** XNPV, XIRR, NPER, SLN, DDB, DB, EFFECT, NOMINAL, CUMIPMT, CUMPRINC, PPMT, IPMT, DISC, PRICE, YIELD, DURATION, MDURATION, ACCRINT, TBILLEQ, TBILLPRICE, VDB, MIRR, FVSCHEDULE, DOLLARDE, DOLLARFR, PDURATION, RRI, and more. All row-local. Some iterative (XIRR uses Newton's method).
-
 **v0.3 carry-over (135):** planned in functions.md with a v0.3 target but never scheduled in the v0.3 checklist. Math extras, statistical distributions, byte-variant text functions, date/time parts, complex/Bessel engineering. All row-local. See the carried-over section in [`v0.4/README.md`](v0.4/README.md).
 
-**Input formats:** .xlsm (free — same reader as xlsx), .xltx/.xltm/.xlam (free), .xlsb (calamine has streaming reader). **Output formats:** .csv (data extraction), .xlsm (macro passthrough). See [`v0.4/README.md`](v0.4/README.md).
+**Output formats:** .csv (data extraction). See [`v0.4/README.md`](v0.4/README.md).
 
-### v0.5 — Compatibility + database
+### v0.5 — Compatibility + database + financial + multi-format I/O
 
 **Compatibility (39 aliases):** Old function names Excel keeps for backward compat. STDEV → STDEV.S, VAR → VAR.P, MODE → MODE.SNGL, PERCENTILE → PERCENTILE.INC, RANK → RANK.EQ, etc. Thin dispatch aliases to v0.3 implementations. No new logic.
 
 **Database (12 functions):** DSUM, DAVERAGE, DCOUNT, DCOUNTA, DGET, DMAX, DMIN, DPRODUCT, DSTDEV, DSTDEVP, DVAR, DVARP. Prelude aggregates with structured criteria parsing. See [`v0.5/README.md`](v0.5/README.md).
+
+**Financial (37 functions):** XNPV, XIRR, NPER, SLN, DDB, DB, EFFECT, NOMINAL, CUMIPMT, CUMPRINC, PPMT, IPMT, DISC, PRICE, YIELD, DURATION, MDURATION, ACCRINT, TBILLEQ, TBILLPRICE, VDB, MIRR, FVSCHEDULE, DOLLARDE, DOLLARFR, PDURATION, RRI, and more. All row-local. Some iterative (XIRR uses Newton's method).
+
+**Input formats:** .xlsm (same reader as xlsx), .xltx/.xltm/.xlam, .xlsb (calamine streaming reader). **Output formats:** .xlsm (macro passthrough; depends on .xlsm input). See [`v0.5/README.md`](v0.5/README.md).
 
 ### v1.0 — API stability
 
@@ -106,6 +108,6 @@ These are architecturally incompatible with streaming. Users get a clear `Classi
 | v0.1 | 103 | 103 | 13 | 116 |
 | v0.2 | +3 | 106 | 13 | 119 |
 | v0.3 | +119 | 225 | 13 | 238 |
-| v0.4 | +173 | 398 | 13 | 411 |
-| v0.5 | +51 | 449 | 13 | 462 |
+| v0.4 | +136 | 361 | 13 | 374 |
+| v0.5 | +88 | 449 | 13 | 462 |
 | v1.0 | 0 | 449 | 13 | 462 (API frozen) |
