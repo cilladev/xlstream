@@ -5,8 +5,15 @@ Semver.
 
 ## [Unreleased]
 
+### Fixed
+- Conditional aggregates (COUNTIF, SUMIF, AVERAGEIF, COUNTIFS, SUMIFS, AVERAGEIFS, MINIFS, MAXIFS) respect row bounds — `COUNTIF(A2:A11, ...)` no longer scans the whole column (#138)
+- *IFS functions return #VALUE! for incongruent range shapes, matching Excel; SUMIF/AVERAGEIF with an offset value range (`SUMIF(A2:A11, x, B5:B14)`) return #VALUE! instead of silently mis-pairing rows (documented divergence: Excel resizes the value range)
+- Blank and `<>` criteria count implicit empty rows: `COUNTIF(D:D,"")` returns 1,048,576 minus non-blank cells instead of counting only streamed rows
+- Operator criteria (`">30"`) merge prelude buckets exactly: AVERAGEIF(S) weight by row count instead of averaging per-bucket averages, and empty buckets no longer poison AVERAGEIF(S) with #DIV/0! or MINIFS/MAXIFS with 0
+
 ### Changed
 - Centralize formula registration — single registry replaces 9 scattered function-name registration sites. `classify()`, `rewrite()`, and `collect_lookup_keys()` now take a `fn_lookup` callback. Dispatch uses `registry::dispatch()` instead of 200-arm match.
+- Multi-conditional prelude buckets store partials (`BucketAgg`) finished at lookup time, replacing finished-value buckets
 
 ## [0.3.0] - 2026-05-19
 

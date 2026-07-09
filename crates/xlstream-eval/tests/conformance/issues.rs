@@ -108,3 +108,45 @@ fn issue_161_wildcard_blank() {
 fn issue_175_countif_text_compare() {
     super::conformance::run_conformance("issues/issue-175-countif-text-compare.xlsx");
 }
+
+#[test]
+fn issue_138_bounded_conditional_aggregate() {
+    super::conformance::run_conformance("issues/issue-138-bounded-conditional-aggregate.xlsx");
+}
+
+/// Can't use conformance — this is a deliberate divergence from Excel.
+/// Excel resizes an offset sum range (`B5:B14`) to the criteria shape and
+/// pairs rows with an offset; same-row streaming cannot express that, so
+/// xlstream refuses the formula with #VALUE! instead of silently
+/// mis-pairing rows. An Excel-saved fixture would cache the offset result.
+#[test]
+fn issue_138_offset_sumif_value_range_returns_value_error() {
+    use calamine::{open_workbook, Data, Reader as CalReader, Xlsx};
+
+    let input = NamedTempFile::with_suffix(".xlsx").unwrap();
+    let output = NamedTempFile::with_suffix(".xlsx").unwrap();
+
+    let mut wb = Workbook::new();
+    let ws = wb.add_worksheet();
+    ws.set_name("Sheet1").unwrap();
+    ws.write_string(0, 0, "cat").unwrap();
+    ws.write_string(0, 1, "val").unwrap();
+    for row in 1..=10 {
+        ws.write_string(row, 0, "x").unwrap();
+        ws.write_number(row, 1, f64::from(row)).unwrap();
+    }
+    ws.write_formula(1, 2, Formula::new("SUMIF(A2:A11,\"x\",B5:B14)").set_result("0")).unwrap();
+    wb.save(input.path()).unwrap();
+
+    let opts = EvaluateOptions { workers: Some(1), ..Default::default() };
+    evaluate(input.path(), output.path(), &opts).unwrap();
+
+    let mut wb: Xlsx<_> = open_workbook(output.path()).unwrap();
+    let range = wb.worksheet_range("Sheet1").unwrap();
+    let c2 = range.get_value((1, 2)).cloned().unwrap_or(Data::Empty);
+    assert!(
+        matches!(&c2, Data::String(s) if s == "#VALUE!")
+            || matches!(&c2, Data::Error(calamine::CellErrorType::Value)),
+        "expected #VALUE! for offset sum range, got {c2:?}"
+    );
+}

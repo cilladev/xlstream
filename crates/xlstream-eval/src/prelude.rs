@@ -86,6 +86,8 @@ pub struct ConditionalAggKey {
 ///     sum_col: 3,
 ///     criteria_cols: vec![1, 2],
 ///     sheet: None,
+///     start_row: None,
+///     end_row: None,
 /// };
 /// assert_eq!(key.criteria_cols.len(), 2);
 /// ```
@@ -100,6 +102,94 @@ pub struct MultiConditionalAggKey {
     pub criteria_cols: Vec<u32>,
     /// Sheet name (`None` = current streaming sheet).
     pub sheet: Option<String>,
+    /// First Excel row (1-based, inclusive) of the ranges. `None` for
+    /// whole-column ranges. All ranges of one formula share these bounds;
+    /// incongruent ranges are rejected before a key is built.
+    pub start_row: Option<u32>,
+    /// Last Excel row (1-based, inclusive) of the ranges. `None` for
+    /// whole-column ranges.
+    pub end_row: Option<u32>,
+}
+
+/// Partial per-bucket accumulator for multi-conditional aggregates.
+///
+/// Buckets store partials, not finished values, so operator-criteria
+/// lookups (`COUNTIF(B:B,">500")`) can merge buckets exactly: averages
+/// stay row-weighted instead of averaging per-bucket averages, and
+/// empty buckets contribute nothing to MIN/MAX instead of a poisoned
+/// `0.0` or `#DIV/0!`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) struct BucketAgg {
+    /// Sum of numeric values fed to the bucket. COUNTIFS-style buckets
+    /// feed `1.0` per matching row, so this doubles as the row count.
+    pub(crate) sum: f64,
+    /// Count of numeric values fed.
+    pub(crate) count: u64,
+    /// Minimum numeric value fed, `None` if none.
+    pub(crate) min: Option<f64>,
+    /// Maximum numeric value fed, `None` if none.
+    pub(crate) max: Option<f64>,
+    /// First error fed. Propagates through [`BucketAgg::finish`].
+    pub(crate) error: Option<CellError>,
+}
+
+impl BucketAgg {
+    /// Fold another bucket's partials into this one.
+    fn merge(&mut self, other: &BucketAgg) {
+        self.sum += other.sum;
+        self.count += other.count;
+        self.min = match (self.min, other.min) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        self.max = match (self.max, other.max) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+        if self.error.is_none() {
+            self.error = other.error;
+        }
+    }
+
+    /// Finish the partial for the given key kind.
+    ///
+    /// COUNTIFS-style buckets feed `1.0` per row, so `Count` finishes as
+    /// the sum. Only Sum, Count, Average, Min, and Max keys are ever
+    /// built for multi-conditional aggregates; other kinds finish as 0.
+    fn finish(&self, kind: AggKind) -> Value {
+        if let Some(e) = self.error {
+            return Value::Error(e);
+        }
+        match kind {
+            AggKind::Count | AggKind::Sum => Value::Number(self.sum),
+            AggKind::Average => {
+                if self.count == 0 {
+                    return Value::Error(CellError::Div0);
+                }
+                #[allow(clippy::cast_precision_loss)]
+                Value::Number(self.sum / self.count as f64)
+            }
+            AggKind::Min => Value::Number(self.min.unwrap_or(0.0)),
+            AggKind::Max => Value::Number(self.max.unwrap_or(0.0)),
+            AggKind::CountA | AggKind::CountBlank | AggKind::Product | AggKind::Median => {
+                Value::Number(0.0)
+            }
+        }
+    }
+
+    /// Wrap an already-finished value as a single-row bucket.
+    ///
+    /// Compatibility shim for [`Prelude::with_all`], which accepts inner
+    /// maps of finished values (test fixtures build preludes that way).
+    fn from_value(v: &Value) -> Self {
+        match v {
+            Value::Number(n) => {
+                Self { sum: *n, count: 1, min: Some(*n), max: Some(*n), error: None }
+            }
+            Value::Error(e) => Self { error: Some(*e), ..Self::default() },
+            _ => Self::default(),
+        }
+    }
 }
 
 /// Key for a bounded single-column range that must be cached during prelude.
@@ -152,10 +242,11 @@ pub struct Prelude {
     /// Conditional aggregate results keyed by `ConditionalAggKey`, with
     /// inner maps from lowercased criteria value to result.
     conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
-    /// Multi-criteria conditional aggregate results keyed by
+    /// Multi-criteria conditional aggregate partials keyed by
     /// `MultiConditionalAggKey`, with inner maps from composite key
-    /// (lowercased criteria values joined by `\0`) to result.
-    multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, Value>>,
+    /// (lowercased criteria values joined by `\0`) to bucket partials.
+    /// Finished at lookup time by [`BucketAgg::finish`].
+    multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, BucketAgg>>,
     /// Pre-loaded lookup sheet data, keyed by lowercased sheet name.
     lookup_sheets: HashMap<String, crate::lookup::LookupSheet>,
     /// Volatile data (TODAY/NOW). `None` until set via `with_volatile`.
@@ -270,9 +361,36 @@ impl Prelude {
         conditional_aggregates: HashMap<ConditionalAggKey, HashMap<String, Value>>,
         multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, Value>>,
     ) -> Self {
+        let multi_buckets = multi_conditional_aggregates
+            .into_iter()
+            .map(|(key, inner)| {
+                let buckets =
+                    inner.iter().map(|(c, v)| (c.clone(), BucketAgg::from_value(v))).collect();
+                (key, buckets)
+            })
+            .collect();
         Self {
             aggregates,
             conditional_aggregates,
+            multi_conditional_aggregates: multi_buckets,
+            lookup_sheets: HashMap::new(),
+            volatile: None,
+            cached_ranges: HashMap::new(),
+            operator_cache: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Build a prelude with simple aggregates and multi-conditional
+    /// bucket partials. This is the prelude-plan path: partials survive
+    /// to lookup time so operator criteria can merge buckets exactly.
+    #[must_use]
+    pub(crate) fn with_multi_buckets(
+        aggregates: HashMap<AggregateKey, Value>,
+        multi_conditional_aggregates: HashMap<MultiConditionalAggKey, HashMap<String, BucketAgg>>,
+    ) -> Self {
+        Self {
+            aggregates,
+            conditional_aggregates: HashMap::new(),
             multi_conditional_aggregates,
             lookup_sheets: HashMap::new(),
             volatile: None,
@@ -439,7 +557,7 @@ impl Prelude {
     ///     kind: AggKind::Sum,
     ///     sum_col: 3,
     ///     criteria_cols: vec![1, 2],
-    ///     sheet: None,
+    ///     sheet: None, start_row: None, end_row: None,
     /// };
     /// let mut inner = HashMap::new();
     /// inner.insert("east\0q1".to_string(), Value::Number(100.0));
@@ -456,8 +574,8 @@ impl Prelude {
         composite_key: &str,
     ) -> Value {
         if let Some(inner) = self.multi_conditional_aggregates.get(key) {
-            if let Some(v) = inner.get(composite_key) {
-                return v.clone();
+            if let Some(bucket) = inner.get(composite_key) {
+                return bucket.finish(key.kind);
             }
 
             let cache_key = (key.clone(), composite_key.to_string());
@@ -597,13 +715,13 @@ impl Prelude {
 
 fn try_operator_criteria(
     key: &MultiConditionalAggKey,
-    inner: &HashMap<String, Value>,
+    inner: &HashMap<String, BucketAgg>,
     composite_key: &str,
 ) -> Value {
     let parts: Vec<&str> = composite_key.split('\0').collect();
     let criteria: Vec<crate::Criteria> = parts.iter().map(|p| crate::Criteria::parse(p)).collect();
-    let mut fold = crate::prelude_plan::FoldState::new();
-    for (stored_key, stored_val) in inner {
+    let mut merged = BucketAgg::default();
+    for (stored_key, bucket) in inner {
         let stored_parts: Vec<&str> = stored_key.split('\0').collect();
         if stored_parts.len() != criteria.len() {
             continue;
@@ -613,21 +731,10 @@ fn try_operator_criteria(
             crit.matches(&val)
         });
         if all_match {
-            fold.feed(stored_val);
+            merged.merge(bucket);
         }
     }
-    // Must mirror the finish_kind mapping in prelude_plan.rs (line 1195).
-    // COUNT/SUM buckets store row counts/sums (finished with Sum). AVERAGE
-    // buckets store per-bucket averages — re-folding averages-of-averages is
-    // mathematically wrong but matches the builder's current output.
-    let finish_kind = match key.kind {
-        xlstream_parse::AggKind::Count | xlstream_parse::AggKind::Sum => {
-            xlstream_parse::AggKind::Sum
-        }
-        xlstream_parse::AggKind::Average => xlstream_parse::AggKind::Average,
-        other => other,
-    };
-    fold.finish(finish_kind)
+    merged.finish(key.kind)
 }
 
 #[cfg(test)]
@@ -741,6 +848,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let mut inner = HashMap::new();
         inner.insert("east\0q1".to_string(), Value::Number(200.0));
@@ -757,6 +866,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = Prelude::empty();
         assert_eq!(prelude.get_multi_conditional(&key, "east\0q1"), Value::Number(0.0));
@@ -769,9 +880,102 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = Prelude::empty();
         assert_eq!(prelude.get_multi_conditional(&key, "east\0q1"), Value::Error(CellError::Div0));
+    }
+
+    fn bucket_key(kind: AggKind) -> MultiConditionalAggKey {
+        MultiConditionalAggKey {
+            kind,
+            sum_col: 2,
+            criteria_cols: vec![1],
+            sheet: None,
+            start_row: None,
+            end_row: None,
+        }
+    }
+
+    fn prelude_with_buckets(
+        key: MultiConditionalAggKey,
+        buckets: Vec<(&str, BucketAgg)>,
+    ) -> Prelude {
+        let inner: HashMap<String, BucketAgg> =
+            buckets.into_iter().map(|(c, b)| (c.to_string(), b)).collect();
+        let mut multi = HashMap::new();
+        multi.insert(key, inner);
+        Prelude::with_multi_buckets(HashMap::new(), multi)
+    }
+
+    #[test]
+    fn operator_criteria_average_weights_buckets_by_row_count() {
+        // AVERAGEIF(A:A, ">30", B:B) over buckets {50: two rows summing
+        // 300, 80: one row of 800} must weight by row count:
+        // (300 + 800) / 3, not the average of per-bucket averages.
+        let key = bucket_key(AggKind::Average);
+        let prelude = prelude_with_buckets(
+            key.clone(),
+            vec![
+                ("10", BucketAgg { sum: 100.0, count: 1, ..BucketAgg::default() }),
+                ("50", BucketAgg { sum: 300.0, count: 2, ..BucketAgg::default() }),
+                ("80", BucketAgg { sum: 800.0, count: 1, ..BucketAgg::default() }),
+            ],
+        );
+        assert_eq!(prelude.get_multi_conditional(&key, ">30"), Value::Number(1100.0 / 3.0));
+    }
+
+    #[test]
+    fn operator_criteria_average_skips_buckets_with_no_numeric_values() {
+        // A matched bucket whose value cells are all empty contributes
+        // nothing — it must not poison the merge with #DIV/0!.
+        let key = bucket_key(AggKind::Average);
+        let prelude = prelude_with_buckets(
+            key.clone(),
+            vec![
+                ("50", BucketAgg::default()),
+                ("80", BucketAgg { sum: 800.0, count: 1, ..BucketAgg::default() }),
+            ],
+        );
+        assert_eq!(prelude.get_multi_conditional(&key, ">30"), Value::Number(800.0));
+    }
+
+    #[test]
+    fn operator_criteria_min_ignores_buckets_with_no_numeric_values() {
+        // An empty matched bucket must not contribute a poisoned 0.0 min.
+        let key = bucket_key(AggKind::Min);
+        let prelude = prelude_with_buckets(
+            key.clone(),
+            vec![
+                ("50", BucketAgg::default()),
+                ("80", BucketAgg { min: Some(5.0), max: Some(5.0), ..BucketAgg::default() }),
+            ],
+        );
+        assert_eq!(prelude.get_multi_conditional(&key, ">30"), Value::Number(5.0));
+    }
+
+    #[test]
+    fn operator_criteria_propagates_bucket_error() {
+        let key = bucket_key(AggKind::Sum);
+        let prelude = prelude_with_buckets(
+            key.clone(),
+            vec![
+                ("50", BucketAgg { error: Some(CellError::Value), ..BucketAgg::default() }),
+                ("80", BucketAgg { sum: 800.0, count: 1, ..BucketAgg::default() }),
+            ],
+        );
+        assert_eq!(prelude.get_multi_conditional(&key, ">30"), Value::Error(CellError::Value));
+    }
+
+    #[test]
+    fn direct_lookup_finishes_average_from_partials() {
+        let key = bucket_key(AggKind::Average);
+        let prelude = prelude_with_buckets(
+            key.clone(),
+            vec![("east", BucketAgg { sum: 90.0, count: 3, ..BucketAgg::default() })],
+        );
+        assert_eq!(prelude.get_multi_conditional(&key, "east"), Value::Number(30.0));
     }
 
     #[test]
