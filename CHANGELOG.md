@@ -6,6 +6,7 @@ Semver.
 ## [Unreleased]
 
 ### Fixed
+- Parallel evaluation (workers > 1, >= 10,000 rows) reordered output sheets, writing lookup sheets before the formula sheet; sheets now keep input order (#197)
 - Conditional aggregates (COUNTIF, SUMIF, AVERAGEIF, COUNTIFS, SUMIFS, AVERAGEIFS, MINIFS, MAXIFS) respect row bounds — `COUNTIF(A2:A11, ...)` no longer scans the whole column (#138)
 - *IFS functions return #VALUE! for incongruent range shapes, matching Excel; SUMIF/AVERAGEIF with an offset value range (`SUMIF(A2:A11, x, B5:B14)`) return #VALUE! instead of silently mis-pairing rows (documented divergence: Excel resizes the value range)
 - Blank and `<>` criteria count implicit empty rows: `COUNTIF(D:D,"")` returns 1,048,576 minus non-blank cells instead of counting only streamed rows
