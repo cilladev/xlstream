@@ -10,6 +10,7 @@ use xlstream_parse::{AggKind, NodeRef, NodeView};
 
 use crate::interp::Interpreter;
 use crate::prelude::MultiConditionalAggKey;
+use crate::prelude_plan::{if_row_bounds, ifs_row_bounds};
 use crate::scope::RowScope;
 
 /// Build a composite key from criteria values: lowercase each, join with
@@ -46,17 +47,21 @@ fn extract_criteria_col_and_sheet(
     }
 }
 
-/// `SUMIFS(sum_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
+/// Shared lookup for value-range *IFS builtins (SUMIFS, AVERAGEIFS,
+/// MINIFS, MAXIFS): `FN(value_range, crit_range1, crit1, ...)`.
 ///
-/// Looks up the pre-computed multi-conditional sum from the prelude.
-/// Returns `#VALUE!` if arguments are malformed.
-pub(crate) fn builtin_sumifs(
+/// All ranges must share identical row bounds — Excel's congruent-shape
+/// rule, which Excel itself enforces with `#VALUE!`. Key construction
+/// must mirror `extract_value_ifs_key` in `prelude_plan` exactly, or the
+/// prelude lookup silently misses.
+fn value_ifs_lookup(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
+    kind: AggKind,
 ) -> Value {
-    // Minimum: sum_range + at least one (criteria_range, criteria) pair = 3 args
-    // After first arg, remaining must be pairs.
+    // Minimum: value_range + at least one (criteria_range, criteria) pair = 3
+    // args. After first arg, remaining must be pairs.
     if args.len() < 3 || (args.len() - 1) % 2 != 0 {
         return Value::Error(CellError::Value);
     }
@@ -82,10 +87,28 @@ pub(crate) fn builtin_sumifs(
         criteria_values.push(val);
     }
 
-    let key = MultiConditionalAggKey { kind: AggKind::Sum, sum_col, criteria_cols, sheet };
+    let Some((start_row, end_row)) =
+        ifs_row_bounds(Some(args[0]), (0..num_pairs).map(|i| args[1 + i * 2]))
+    else {
+        return Value::Error(CellError::Value);
+    };
 
+    let key = MultiConditionalAggKey { kind, sum_col, criteria_cols, sheet, start_row, end_row };
     let composite = build_composite_key(&criteria_values);
     interp.prelude().get_multi_conditional(&key, &composite)
+}
+
+/// `SUMIFS(sum_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
+///
+/// Looks up the pre-computed multi-conditional sum from the prelude.
+/// Returns `#VALUE!` if arguments are malformed or the ranges do not
+/// share identical row bounds.
+pub(crate) fn builtin_sumifs(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    value_ifs_lookup(args, interp, scope, AggKind::Sum)
 }
 
 /// `COUNTIFS(criteria_range1, criteria1, criteria_range2, criteria2, ...)`
@@ -123,7 +146,19 @@ pub(crate) fn builtin_countifs(
         criteria_values.push(val);
     }
 
-    let key = MultiConditionalAggKey { kind: AggKind::Count, sum_col: 0, criteria_cols, sheet };
+    let Some((start_row, end_row)) = ifs_row_bounds(None, (0..num_pairs).map(|i| args[i * 2]))
+    else {
+        return Value::Error(CellError::Value);
+    };
+
+    let key = MultiConditionalAggKey {
+        kind: AggKind::Count,
+        sum_col: 0,
+        criteria_cols,
+        sheet,
+        start_row,
+        end_row,
+    };
 
     let composite = build_composite_key(&criteria_values);
     interp.prelude().get_multi_conditional(&key, &composite)
@@ -132,129 +167,55 @@ pub(crate) fn builtin_countifs(
 /// `AVERAGEIFS(avg_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
 ///
 /// Looks up the pre-computed multi-conditional average from the prelude.
-/// Returns `#VALUE!` if arguments are malformed.
+/// Returns `#VALUE!` if arguments are malformed or the ranges do not
+/// share identical row bounds.
 pub(crate) fn builtin_averageifs(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    // Minimum: avg_range + at least one (criteria_range, criteria) pair = 3 args
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
-        return Value::Error(CellError::Value);
-    }
-
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
-        return Value::Error(CellError::Value);
-    };
-
-    let num_pairs = (args.len() - 1) / 2;
-    let mut criteria_cols = Vec::with_capacity(num_pairs);
-    let mut criteria_values = Vec::with_capacity(num_pairs);
-
-    for i in 0..num_pairs {
-        let range_idx = 1 + i * 2;
-        let crit_idx = 2 + i * 2;
-
-        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
-            return Value::Error(CellError::Value);
-        };
-        criteria_cols.push(col);
-
-        let val = extract_static_criteria(args[crit_idx], interp, scope);
-        criteria_values.push(val);
-    }
-
-    let key = MultiConditionalAggKey { kind: AggKind::Average, sum_col, criteria_cols, sheet };
-
-    let composite = build_composite_key(&criteria_values);
-    interp.prelude().get_multi_conditional(&key, &composite)
+    value_ifs_lookup(args, interp, scope, AggKind::Average)
 }
 
 /// `MINIFS(min_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
 ///
 /// Looks up the pre-computed multi-conditional min from the prelude.
-/// Returns `#VALUE!` if arguments are malformed.
+/// Returns `#VALUE!` if arguments are malformed or the ranges do not
+/// share identical row bounds.
 pub(crate) fn builtin_minifs(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
-        return Value::Error(CellError::Value);
-    }
-
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
-        return Value::Error(CellError::Value);
-    };
-
-    let num_pairs = (args.len() - 1) / 2;
-    let mut criteria_cols = Vec::with_capacity(num_pairs);
-    let mut criteria_values = Vec::with_capacity(num_pairs);
-
-    for i in 0..num_pairs {
-        let range_idx = 1 + i * 2;
-        let crit_idx = 2 + i * 2;
-
-        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
-            return Value::Error(CellError::Value);
-        };
-        criteria_cols.push(col);
-
-        let val = extract_static_criteria(args[crit_idx], interp, scope);
-        criteria_values.push(val);
-    }
-
-    let key = MultiConditionalAggKey { kind: AggKind::Min, sum_col, criteria_cols, sheet };
-
-    let composite = build_composite_key(&criteria_values);
-    interp.prelude().get_multi_conditional(&key, &composite)
+    value_ifs_lookup(args, interp, scope, AggKind::Min)
 }
 
 /// `MAXIFS(max_range, criteria_range1, criteria1, criteria_range2, criteria2, ...)`
 ///
 /// Looks up the pre-computed multi-conditional max from the prelude.
-/// Returns `#VALUE!` if arguments are malformed.
+/// Returns `#VALUE!` if arguments are malformed or the ranges do not
+/// share identical row bounds.
 pub(crate) fn builtin_maxifs(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
-        return Value::Error(CellError::Value);
-    }
-
-    let Some((sum_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
-        return Value::Error(CellError::Value);
-    };
-
-    let num_pairs = (args.len() - 1) / 2;
-    let mut criteria_cols = Vec::with_capacity(num_pairs);
-    let mut criteria_values = Vec::with_capacity(num_pairs);
-
-    for i in 0..num_pairs {
-        let range_idx = 1 + i * 2;
-        let crit_idx = 2 + i * 2;
-
-        let Some((col, _)) = extract_criteria_col_and_sheet(interp, args[range_idx]) else {
-            return Value::Error(CellError::Value);
-        };
-        criteria_cols.push(col);
-
-        let val = extract_static_criteria(args[crit_idx], interp, scope);
-        criteria_values.push(val);
-    }
-
-    let key = MultiConditionalAggKey { kind: AggKind::Max, sum_col, criteria_cols, sheet };
-
-    let composite = build_composite_key(&criteria_values);
-    interp.prelude().get_multi_conditional(&key, &composite)
+    value_ifs_lookup(args, interp, scope, AggKind::Max)
 }
 
-/// `SUMIF(criteria_range, criteria, [sum_range])`
-pub(crate) fn builtin_sumif(
+/// Shared lookup for single-criteria conditional builtins (SUMIF,
+/// AVERAGEIF): `FN(criteria_range, criteria, [value_range])`.
+///
+/// The criteria range drives the row bounds; a value range must start on
+/// the same row or the formula returns `#VALUE!` (Excel would resize an
+/// offset value range, which same-row streaming cannot express). Key
+/// construction must mirror `extract_if_key` in `prelude_plan` exactly,
+/// or the prelude lookup silently misses.
+fn if_lookup(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
+    kind: AggKind,
 ) -> Value {
     if args.len() < 2 || args.len() > 3 {
         return Value::Error(CellError::Value);
@@ -270,18 +231,39 @@ pub(crate) fn builtin_sumif(
     } else {
         criteria_col
     };
+    let Some((start_row, end_row)) = if_row_bounds(args[0], args.get(2).copied()) else {
+        return Value::Error(CellError::Value);
+    };
     let criteria_val = extract_static_criteria(args[1], interp, scope);
     let key = MultiConditionalAggKey {
-        kind: AggKind::Sum,
+        kind,
         sum_col,
         criteria_cols: vec![criteria_col],
         sheet,
+        start_row,
+        end_row,
     };
     let composite = build_composite_key(&[criteria_val]);
     interp.prelude().get_multi_conditional(&key, &composite)
 }
 
+/// `SUMIF(criteria_range, criteria, [sum_range])`
+///
+/// Looks up the pre-computed conditional sum from the prelude. Returns
+/// `#VALUE!` if arguments are malformed or the sum range does not start
+/// on the criteria range's first row.
+pub(crate) fn builtin_sumif(
+    args: &[NodeRef<'_>],
+    interp: &Interpreter<'_>,
+    scope: &RowScope<'_>,
+) -> Value {
+    if_lookup(args, interp, scope, AggKind::Sum)
+}
+
 /// `COUNTIF(criteria_range, criteria)`
+///
+/// Looks up the pre-computed conditional count from the prelude. Returns
+/// `#VALUE!` if arguments are malformed.
 pub(crate) fn builtin_countif(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
@@ -293,46 +275,33 @@ pub(crate) fn builtin_countif(
     let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
         return Value::Error(CellError::Value);
     };
+    let Some((start_row, end_row)) = if_row_bounds(args[0], None) else {
+        return Value::Error(CellError::Value);
+    };
     let criteria_val = extract_static_criteria(args[1], interp, scope);
     let key = MultiConditionalAggKey {
         kind: AggKind::Count,
         sum_col: 0,
         criteria_cols: vec![criteria_col],
         sheet,
+        start_row,
+        end_row,
     };
     let composite = build_composite_key(&[criteria_val]);
     interp.prelude().get_multi_conditional(&key, &composite)
 }
 
 /// `AVERAGEIF(criteria_range, criteria, [avg_range])`
+///
+/// Looks up the pre-computed conditional average from the prelude.
+/// Returns `#VALUE!` if arguments are malformed or the average range does
+/// not start on the criteria range's first row.
 pub(crate) fn builtin_averageif(
     args: &[NodeRef<'_>],
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    if args.len() < 2 || args.len() > 3 {
-        return Value::Error(CellError::Value);
-    }
-    let Some((criteria_col, sheet)) = extract_criteria_col_and_sheet(interp, args[0]) else {
-        return Value::Error(CellError::Value);
-    };
-    let sum_col = if args.len() >= 3 {
-        let Some((sc, _)) = extract_criteria_col_and_sheet(interp, args[2]) else {
-            return Value::Error(CellError::Value);
-        };
-        sc
-    } else {
-        criteria_col
-    };
-    let criteria_val = extract_static_criteria(args[1], interp, scope);
-    let key = MultiConditionalAggKey {
-        kind: AggKind::Average,
-        sum_col,
-        criteria_cols: vec![criteria_col],
-        sheet,
-    };
-    let composite = build_composite_key(&[criteria_val]);
-    interp.prelude().get_multi_conditional(&key, &composite)
+    if_lookup(args, interp, scope, AggKind::Average)
 }
 
 #[cfg(test)]
@@ -368,6 +337,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![(composite, Value::Number(100.0))]);
         let result = prelude.get_multi_conditional(
@@ -376,6 +347,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             composite,
         );
@@ -389,6 +362,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\0q1", Value::Number(100.0))]);
         let result = prelude.get_multi_conditional(
@@ -397,6 +372,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "west\0q1",
         );
@@ -410,6 +387,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         // Key is stored lowercased
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(50.0))]);
@@ -419,6 +398,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east",
         );
@@ -432,6 +413,8 @@ mod tests {
             sum_col: 4,
             criteria_cols: vec![1, 2, 3],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\x00q1\x002024", Value::Number(75.0))]);
         let result = prelude.get_multi_conditional(
@@ -440,6 +423,8 @@ mod tests {
                 sum_col: 4,
                 criteria_cols: vec![1, 2, 3],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east\x00q1\x002024",
         );
@@ -454,6 +439,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         assert_eq!(prelude.get_multi_conditional(&key, "a\0b"), Value::Number(0.0));
     }
@@ -467,6 +454,8 @@ mod tests {
             sum_col: 0,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\0q1", Value::Number(5.0))]);
         let result = prelude.get_multi_conditional(
@@ -475,6 +464,8 @@ mod tests {
                 sum_col: 0,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east\0q1",
         );
@@ -488,6 +479,8 @@ mod tests {
             sum_col: 0,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(3.0))]);
         let result = prelude.get_multi_conditional(
@@ -496,6 +489,8 @@ mod tests {
                 sum_col: 0,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "west",
         );
@@ -509,6 +504,8 @@ mod tests {
             sum_col: 0,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("north", Value::Number(7.0))]);
         let result = prelude.get_multi_conditional(
@@ -517,6 +514,8 @@ mod tests {
                 sum_col: 0,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "north",
         );
@@ -530,6 +529,8 @@ mod tests {
             sum_col: 0,
             criteria_cols: vec![1, 2, 3],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("a\0b\0c", Value::Number(2.0))]);
         let result = prelude.get_multi_conditional(
@@ -538,6 +539,8 @@ mod tests {
                 sum_col: 0,
                 criteria_cols: vec![1, 2, 3],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "a\0b\0c",
         );
@@ -552,6 +555,8 @@ mod tests {
             sum_col: 0,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         assert_eq!(prelude.get_multi_conditional(&key, "x"), Value::Number(0.0));
     }
@@ -565,6 +570,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\0q1", Value::Number(25.0))]);
         let result = prelude.get_multi_conditional(
@@ -573,6 +580,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east\0q1",
         );
@@ -586,6 +595,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\0q1", Value::Number(25.0))]);
         let result = prelude.get_multi_conditional(
@@ -594,6 +605,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "west\0q1",
         );
@@ -607,6 +620,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(15.5))]);
         let result = prelude.get_multi_conditional(
@@ -615,6 +630,8 @@ mod tests {
                 sum_col: 2,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east",
         );
@@ -628,6 +645,8 @@ mod tests {
             sum_col: 4,
             criteria_cols: vec![1, 2, 3],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("x\0y\0z", Value::Number(42.0))]);
         let result = prelude.get_multi_conditional(
@@ -636,6 +655,8 @@ mod tests {
                 sum_col: 4,
                 criteria_cols: vec![1, 2, 3],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "x\0y\0z",
         );
@@ -650,6 +671,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         assert_eq!(prelude.get_multi_conditional(&key, "a\0b"), Value::Error(CellError::Div0));
     }
@@ -663,6 +686,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(10.0))]);
         let result = prelude.get_multi_conditional(
@@ -671,6 +696,8 @@ mod tests {
                 sum_col: 2,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east",
         );
@@ -684,6 +711,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(10.0))]);
         let result = prelude.get_multi_conditional(
@@ -692,6 +721,8 @@ mod tests {
                 sum_col: 2,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "west",
         );
@@ -705,6 +736,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\x00q1", Value::Number(5.0))]);
         let result = prelude.get_multi_conditional(
@@ -713,6 +746,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east\x00q1",
         );
@@ -727,6 +762,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         assert_eq!(prelude.get_multi_conditional(&key, "x"), Value::Number(0.0));
     }
@@ -740,6 +777,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(99.0))]);
         let result = prelude.get_multi_conditional(
@@ -748,6 +787,8 @@ mod tests {
                 sum_col: 2,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east",
         );
@@ -761,6 +802,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east", Value::Number(99.0))]);
         let result = prelude.get_multi_conditional(
@@ -769,6 +812,8 @@ mod tests {
                 sum_col: 2,
                 criteria_cols: vec![1],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "west",
         );
@@ -782,6 +827,8 @@ mod tests {
             sum_col: 3,
             criteria_cols: vec![1, 2],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         let prelude = prelude_with_multi(key, vec![("east\x00q1", Value::Number(200.0))]);
         let result = prelude.get_multi_conditional(
@@ -790,6 +837,8 @@ mod tests {
                 sum_col: 3,
                 criteria_cols: vec![1, 2],
                 sheet: None,
+                start_row: None,
+                end_row: None,
             },
             "east\x00q1",
         );
@@ -804,6 +853,8 @@ mod tests {
             sum_col: 2,
             criteria_cols: vec![1],
             sheet: None,
+            start_row: None,
+            end_row: None,
         };
         assert_eq!(prelude.get_multi_conditional(&key, "x"), Value::Number(0.0));
     }

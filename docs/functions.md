@@ -109,7 +109,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 | SQRTPI | . | yes | v0.3 | | | |
 | SUBTOTAL | x | yes | v0.3 | x | | fn 1-11/101-111; hidden-row ignoring deferred |
 | SUM | x | yes | v0.1 | x | x | |
-| SUMIF | x | yes | v0.1 | x | x | |
+| SUMIF | x | yes | v0.1 | x | x | Offset sum range (`B5:B14` vs `A2:A11`) returns #VALUE!; Excel resizes |
 | SUMIFS | x | yes | v0.1 | x | | |
 | SUMPRODUCT | x | yes | v0.2 | x | x | |
 | SUMSQ | . | yes | v0.3 | | | |
@@ -126,7 +126,7 @@ Every Excel function (~493), organized by category. Cross-referenced against xls
 |---|---|---|---|---|---|---|
 | AVERAGE | x | yes | v0.1 | x | x | |
 | AVERAGEA | . | yes | v0.3 | | | |
-| AVERAGEIF | x | yes | v0.1 | x | | |
+| AVERAGEIF | x | yes | v0.1 | x | | Offset avg range returns #VALUE!; Excel resizes |
 | AVERAGEIFS | x | yes | v0.1 | x | | |
 | AVEDEV | x | yes | v0.3 | | | |
 | BETA.DIST | . | yes | v0.3 | | | |

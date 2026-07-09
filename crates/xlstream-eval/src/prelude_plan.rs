@@ -111,6 +111,21 @@ impl FoldState {
         }
     }
 
+    /// Convert to a multi-conditional bucket partial.
+    ///
+    /// Drops median support (`nums`) — multi-conditional keys are only
+    /// ever Sum, Count, Average, Min, or Max.
+    #[must_use]
+    pub(crate) fn into_bucket(self) -> crate::prelude::BucketAgg {
+        crate::prelude::BucketAgg {
+            sum: self.sum,
+            count: self.count,
+            min: self.min,
+            max: self.max,
+            error: self.error,
+        }
+    }
+
     /// Produce the final aggregate value for the given kind.
     ///
     /// For error-propagating aggregates (SUM, AVERAGE, MIN, MAX,
@@ -278,7 +293,7 @@ fn collect_multi_keys_recursive(
             let normalized = upper.strip_prefix("_XLFN.").unwrap_or(&upper);
             match normalized {
                 "SUMIFS" => {
-                    if let Some(key) = extract_sumifs_key(node) {
+                    if let Some(key) = extract_value_ifs_key(node, AggKind::Sum) {
                         keys.push(key);
                     }
                 }
@@ -288,12 +303,12 @@ fn collect_multi_keys_recursive(
                     }
                 }
                 "AVERAGEIFS" => {
-                    if let Some(key) = extract_averageifs_key(node) {
+                    if let Some(key) = extract_value_ifs_key(node, AggKind::Average) {
                         keys.push(key);
                     }
                 }
                 "SUMIF" => {
-                    if let Some(key) = extract_sumif_key(node) {
+                    if let Some(key) = extract_if_key(node, AggKind::Sum) {
                         keys.push(key);
                     }
                 }
@@ -303,17 +318,17 @@ fn collect_multi_keys_recursive(
                     }
                 }
                 "AVERAGEIF" => {
-                    if let Some(key) = extract_averageif_key(node) {
+                    if let Some(key) = extract_if_key(node, AggKind::Average) {
                         keys.push(key);
                     }
                 }
                 "MINIFS" => {
-                    if let Some(key) = extract_minifs_key(node) {
+                    if let Some(key) = extract_value_ifs_key(node, AggKind::Min) {
                         keys.push(key);
                     }
                 }
                 "MAXIFS" => {
-                    if let Some(key) = extract_maxifs_key(node) {
+                    if let Some(key) = extract_value_ifs_key(node, AggKind::Max) {
                         keys.push(key);
                     }
                 }
@@ -358,10 +373,84 @@ fn extract_range_col_and_sheet(node: xlstream_parse::NodeRef<'_>) -> Option<(u32
     }
 }
 
-/// Extract a `MultiConditionalAggKey` from a SUMIFS function node.
-/// `SUMIFS(sum_range, crit_range1, crit1, crit_range2, crit2, ...)`
-fn extract_sumifs_key(
+/// Row bounds of a single-column range-ref node: `(start_row, end_row)`.
+///
+/// Whole-column refs (`A:A`) and refs missing either row bound normalize
+/// to `(None, None)`. Returns `None` if the node is not a single-column
+/// range.
+///
+/// Build-time key extraction and eval-time key reconstruction both call
+/// this (via [`if_row_bounds`] / [`ifs_row_bounds`]) on the same argument
+/// nodes: the two sides must produce identical bounds or prelude lookups
+/// silently miss.
+fn range_row_bounds(node: xlstream_parse::NodeRef<'_>) -> Option<(Option<u32>, Option<u32>)> {
+    match node.view() {
+        NodeView::RangeRef {
+            start_row, end_row, start_col: Some(sc), end_col: Some(ec), ..
+        } if sc == ec => match (start_row, end_row) {
+            (Some(sr), Some(er)) => Some((Some(sr), Some(er))),
+            _ => Some((None, None)),
+        },
+        _ => None,
+    }
+}
+
+/// Shared row bounds for SUMIF/AVERAGEIF/COUNTIF-style ranges.
+///
+/// The criteria range drives the bounds. A value (sum/avg) range, when
+/// present, must start on the same row: Excel resizes the value range to
+/// the criteria range's shape from its top-left cell, so equal starts make
+/// same-row pairing exact. Offset value ranges return `None` — callers
+/// refuse the formula (`#VALUE!`) rather than silently mis-pair rows.
+pub(crate) fn if_row_bounds(
+    criteria: xlstream_parse::NodeRef<'_>,
+    value: Option<xlstream_parse::NodeRef<'_>>,
+) -> Option<(Option<u32>, Option<u32>)> {
+    let bounds = range_row_bounds(criteria)?;
+    if let Some(v) = value {
+        let (value_start, _) = range_row_bounds(v)?;
+        if value_start != bounds.0 {
+            return None;
+        }
+    }
+    Some(bounds)
+}
+
+/// Shared row bounds for *IFS-style ranges (SUMIFS, COUNTIFS, AVERAGEIFS,
+/// MINIFS, MAXIFS).
+///
+/// Excel requires every range of a *IFS call to have the same shape and
+/// returns `#VALUE!` otherwise. This mirrors that rule: all criteria
+/// ranges and the optional value range must have identical row bounds,
+/// else `None`.
+pub(crate) fn ifs_row_bounds<'a, I>(
+    value: Option<xlstream_parse::NodeRef<'a>>,
+    mut criteria: I,
+) -> Option<(Option<u32>, Option<u32>)>
+where
+    I: Iterator<Item = xlstream_parse::NodeRef<'a>>,
+{
+    let first = criteria.next()?;
+    let bounds = range_row_bounds(first)?;
+    for range in criteria {
+        if range_row_bounds(range)? != bounds {
+            return None;
+        }
+    }
+    if let Some(v) = value {
+        if range_row_bounds(v)? != bounds {
+            return None;
+        }
+    }
+    Some(bounds)
+}
+
+/// Extract a `MultiConditionalAggKey` from a value-range *IFS node
+/// (SUMIFS, AVERAGEIFS, MINIFS, MAXIFS):
+/// `FN(value_range, crit_range1, crit1, crit_range2, crit2, ...)`
+fn extract_value_ifs_key(
     node: xlstream_parse::NodeRef<'_>,
+    kind: AggKind,
 ) -> Option<crate::prelude::MultiConditionalAggKey> {
     let args = node.args();
     if args.len() < 3 || (args.len() - 1) % 2 != 0 {
@@ -374,11 +463,15 @@ fn extract_sumifs_key(
         let (col, _) = extract_range_col_and_sheet(args[1 + i * 2])?;
         criteria_cols.push(col);
     }
+    let (start_row, end_row) =
+        ifs_row_bounds(Some(args[0]), (0..num_pairs).map(|i| args[1 + i * 2]))?;
     Some(crate::prelude::MultiConditionalAggKey {
-        kind: AggKind::Sum,
+        kind,
         sum_col,
         criteria_cols,
         sheet,
+        start_row,
+        end_row,
     })
 }
 
@@ -401,42 +494,22 @@ fn extract_countifs_key(
             sheet = s;
         }
     }
+    let (start_row, end_row) = ifs_row_bounds(None, (0..num_pairs).map(|i| args[i * 2]))?;
     Some(crate::prelude::MultiConditionalAggKey {
         kind: AggKind::Count,
         sum_col: 0,
         criteria_cols,
         sheet,
+        start_row,
+        end_row,
     })
 }
 
-/// Extract a `MultiConditionalAggKey` from an AVERAGEIFS function node.
-/// `AVERAGEIFS(avg_range, crit_range1, crit1, crit_range2, crit2, ...)`
-fn extract_averageifs_key(
+/// Extract a `MultiConditionalAggKey` from a SUMIF/AVERAGEIF node:
+/// `FN(criteria_range, criteria, [value_range])`
+fn extract_if_key(
     node: xlstream_parse::NodeRef<'_>,
-) -> Option<crate::prelude::MultiConditionalAggKey> {
-    let args = node.args();
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
-        return None;
-    }
-    let (sum_col, sheet) = extract_range_col_and_sheet(args[0])?;
-    let num_pairs = (args.len() - 1) / 2;
-    let mut criteria_cols = Vec::with_capacity(num_pairs);
-    for i in 0..num_pairs {
-        let (col, _) = extract_range_col_and_sheet(args[1 + i * 2])?;
-        criteria_cols.push(col);
-    }
-    Some(crate::prelude::MultiConditionalAggKey {
-        kind: AggKind::Average,
-        sum_col,
-        criteria_cols,
-        sheet,
-    })
-}
-
-/// Extract a `MultiConditionalAggKey` from a SUMIF function node.
-/// `SUMIF(criteria_range, criteria, [sum_range])`
-fn extract_sumif_key(
-    node: xlstream_parse::NodeRef<'_>,
+    kind: AggKind,
 ) -> Option<crate::prelude::MultiConditionalAggKey> {
     let args = node.args();
     if args.len() < 2 || args.len() > 3 {
@@ -449,11 +522,14 @@ fn extract_sumif_key(
     } else {
         criteria_col
     };
+    let (start_row, end_row) = if_row_bounds(args[0], args.get(2).copied())?;
     Some(crate::prelude::MultiConditionalAggKey {
-        kind: AggKind::Sum,
+        kind,
         sum_col,
         criteria_cols: vec![criteria_col],
         sheet,
+        start_row,
+        end_row,
     })
 }
 
@@ -467,83 +543,14 @@ fn extract_countif_key(
         return None;
     }
     let (criteria_col, sheet) = extract_range_col_and_sheet(args[0])?;
+    let (start_row, end_row) = if_row_bounds(args[0], None)?;
     Some(crate::prelude::MultiConditionalAggKey {
         kind: AggKind::Count,
         sum_col: 0,
         criteria_cols: vec![criteria_col],
         sheet,
-    })
-}
-
-/// Extract a `MultiConditionalAggKey` from an AVERAGEIF function node.
-/// `AVERAGEIF(criteria_range, criteria, [avg_range])`
-fn extract_averageif_key(
-    node: xlstream_parse::NodeRef<'_>,
-) -> Option<crate::prelude::MultiConditionalAggKey> {
-    let args = node.args();
-    if args.len() < 2 || args.len() > 3 {
-        return None;
-    }
-    let (criteria_col, sheet) = extract_range_col_and_sheet(args[0])?;
-    let sum_col = if args.len() >= 3 {
-        let (sc, _) = extract_range_col_and_sheet(args[2])?;
-        sc
-    } else {
-        criteria_col
-    };
-    Some(crate::prelude::MultiConditionalAggKey {
-        kind: AggKind::Average,
-        sum_col,
-        criteria_cols: vec![criteria_col],
-        sheet,
-    })
-}
-
-/// Extract a `MultiConditionalAggKey` from a MINIFS function node.
-/// `MINIFS(min_range, crit_range1, crit1, crit_range2, crit2, ...)`
-fn extract_minifs_key(
-    node: xlstream_parse::NodeRef<'_>,
-) -> Option<crate::prelude::MultiConditionalAggKey> {
-    let args = node.args();
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
-        return None;
-    }
-    let (sum_col, sheet) = extract_range_col_and_sheet(args[0])?;
-    let num_pairs = (args.len() - 1) / 2;
-    let mut criteria_cols = Vec::with_capacity(num_pairs);
-    for i in 0..num_pairs {
-        let (col, _) = extract_range_col_and_sheet(args[1 + i * 2])?;
-        criteria_cols.push(col);
-    }
-    Some(crate::prelude::MultiConditionalAggKey {
-        kind: AggKind::Min,
-        sum_col,
-        criteria_cols,
-        sheet,
-    })
-}
-
-/// Extract a `MultiConditionalAggKey` from a MAXIFS function node.
-/// `MAXIFS(max_range, crit_range1, crit1, crit_range2, crit2, ...)`
-fn extract_maxifs_key(
-    node: xlstream_parse::NodeRef<'_>,
-) -> Option<crate::prelude::MultiConditionalAggKey> {
-    let args = node.args();
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
-        return None;
-    }
-    let (sum_col, sheet) = extract_range_col_and_sheet(args[0])?;
-    let num_pairs = (args.len() - 1) / 2;
-    let mut criteria_cols = Vec::with_capacity(num_pairs);
-    for i in 0..num_pairs {
-        let (col, _) = extract_range_col_and_sheet(args[1 + i * 2])?;
-        criteria_cols.push(col);
-    }
-    Some(crate::prelude::MultiConditionalAggKey {
-        kind: AggKind::Max,
-        sum_col,
-        criteria_cols,
-        sheet,
+        start_row,
+        end_row,
     })
 }
 
@@ -876,6 +883,9 @@ pub fn execute_prelude(
     for i in 0..multi_keys.len() {
         multi_folds.insert(i, HashMap::new());
     }
+    // Rows actually fed per key. Count-kind keys use the deficit against
+    // the range size to account for never-streamed blank rows.
+    let mut multi_rows_seen: Vec<u64> = vec![0; multi_keys.len()];
 
     // Initialize bounded range collectors, split by sheet.
     let mut range_collectors: HashMap<crate::prelude::BoundedRangeKey, Vec<Value>> = HashMap::new();
@@ -970,12 +980,21 @@ pub fn execute_prelude(
             }
         }
 
-        // Feed multi-conditional folds (current-sheet keys only).
+        // Feed multi-conditional folds (current-sheet keys only),
+        // respecting row bounds.
         for (i, mk) in multi_keys.iter().enumerate() {
             let is_cross = mk.sheet.as_deref().is_some_and(|s| !s.eq_ignore_ascii_case(main_sheet));
             if is_cross {
                 continue;
             }
+            let in_bounds = match (mk.start_row, mk.end_row) {
+                (Some(sr), Some(er)) => excel_row >= sr && excel_row <= er,
+                _ => true,
+            };
+            if !in_bounds {
+                continue;
+            }
+            multi_rows_seen[i] += 1;
             // Build composite key from criteria columns.
             let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
             for &cc in &mk.criteria_cols {
@@ -1055,7 +1074,16 @@ pub fn execute_prelude(
                 row_values
             };
 
+            let cs_excel_row = row_idx + 1;
             for &(i, mk) in sheet_keys {
+                let in_bounds = match (mk.start_row, mk.end_row) {
+                    (Some(sr), Some(er)) => cs_excel_row >= sr && cs_excel_row <= er,
+                    _ => true,
+                };
+                if !in_bounds {
+                    continue;
+                }
+                multi_rows_seen[i] += 1;
                 let mut composite_parts: Vec<String> = Vec::with_capacity(mk.criteria_cols.len());
                 for &cc in &mk.criteria_cols {
                     let idx = (cc as usize).saturating_sub(1);
@@ -1186,29 +1214,44 @@ pub fn execute_prelude(
         }
     }
 
-    // Finish multi-conditional folds.
-    let mut multi_aggs: HashMap<crate::prelude::MultiConditionalAggKey, HashMap<String, Value>> =
-        HashMap::new();
+    // Convert multi-conditional folds to bucket partials. Buckets are
+    // finished at lookup time ([`crate::prelude::BucketAgg::finish`]) so
+    // operator criteria can merge them exactly.
+    let mut multi_aggs: HashMap<
+        crate::prelude::MultiConditionalAggKey,
+        HashMap<String, crate::prelude::BucketAgg>,
+    > = HashMap::new();
     for (i, mk) in multi_keys.iter().enumerate() {
-        // COUNTIFS feeds 1.0 per matching row, so finishing with Sum
-        // yields the count.
-        let finish_kind = match mk.kind {
-            AggKind::Count | AggKind::Sum => AggKind::Sum,
-            AggKind::Average => AggKind::Average,
-            other => other,
-        };
-        let folds_map = multi_folds.remove(&i).unwrap_or_default();
-        let mut inner: HashMap<String, Value> = HashMap::new();
-        for (composite_key, fold) in folds_map {
-            inner.insert(composite_key, fold.finish(finish_kind));
+        let mut folds_map = multi_folds.remove(&i).unwrap_or_default();
+        if mk.kind == AggKind::Count {
+            // Rows never streamed — bounds past the sheet's last row, or the
+            // implicit tail of a whole-column range up to EXCEL_MAX_ROWS —
+            // are blank in every column, so they belong to the all-empty
+            // composite bucket. Count buckets store row counts as sums, so
+            // one feed of the deficit keeps COUNTIF(range, "") and "<>x"
+            // Excel-exact. Sum/Average/Min/Max buckets ignore blanks.
+            let range_rows = match (mk.start_row, mk.end_row) {
+                (Some(sr), Some(er)) => u64::from(er.saturating_sub(sr)) + 1,
+                _ => xlstream_core::EXCEL_MAX_ROWS,
+            };
+            let missing = range_rows.saturating_sub(multi_rows_seen[i]);
+            if missing > 0 {
+                let blank_composite = "\0".repeat(mk.criteria_cols.len().saturating_sub(1));
+                #[allow(clippy::cast_precision_loss)]
+                folds_map.entry(blank_composite).or_default().feed(&Value::Number(missing as f64));
+            }
         }
+        let inner: HashMap<String, crate::prelude::BucketAgg> = folds_map
+            .into_iter()
+            .map(|(composite, fold)| (composite, fold.into_bucket()))
+            .collect();
         multi_aggs.insert(mk.clone(), inner);
     }
 
     let prelude = if multi_aggs.is_empty() {
         Prelude::with_aggregates(aggregates)
     } else {
-        Prelude::with_all(aggregates, HashMap::new(), multi_aggs)
+        Prelude::with_multi_buckets(aggregates, multi_aggs)
     };
 
     if range_collectors.is_empty() {
@@ -1617,6 +1660,78 @@ mod tests {
         let keys = collect_multi_conditional_keys(&rewritten);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].sheet.as_deref(), Some("RefData"));
+    }
+
+    // ===== multi-key row bounds =====
+
+    fn multi_keys_for(formula: &str) -> Vec<crate::prelude::MultiConditionalAggKey> {
+        let ast = xlstream_parse::parse(formula).unwrap();
+        let ctx = xlstream_parse::ClassificationContext::for_cell("Sheet1", 2, 9);
+        let verdict = xlstream_parse::classify(&ast, &ctx, &real_meta);
+        let rewritten = xlstream_parse::rewrite(ast, &ctx, &verdict, &real_meta);
+        collect_multi_conditional_keys(&rewritten)
+    }
+
+    #[test]
+    fn collect_multi_keys_whole_column_ranges_have_no_row_bounds() {
+        let keys = multi_keys_for("COUNTIF(A:A,\"x\")");
+        assert_eq!(keys.len(), 1);
+        assert_eq!((keys[0].start_row, keys[0].end_row), (None, None));
+    }
+
+    #[test]
+    fn collect_multi_keys_bounded_countif_captures_row_bounds() {
+        let keys = multi_keys_for("COUNTIF(A2:A11,\"x\")");
+        assert_eq!(keys.len(), 1);
+        assert_eq!((keys[0].start_row, keys[0].end_row), (Some(2), Some(11)));
+    }
+
+    #[test]
+    fn collect_multi_keys_bounded_sumifs_captures_row_bounds() {
+        let keys = multi_keys_for("SUMIFS(C2:C11,A2:A11,\"x\",B2:B11,5)");
+        assert_eq!(keys.len(), 1);
+        assert_eq!((keys[0].start_row, keys[0].end_row), (Some(2), Some(11)));
+    }
+
+    #[test]
+    fn collect_multi_keys_bounded_minifs_captures_row_bounds() {
+        let keys = multi_keys_for("MINIFS(C2:C11,A2:A11,\"x\")");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].kind, AggKind::Min);
+        assert_eq!((keys[0].start_row, keys[0].end_row), (Some(2), Some(11)));
+    }
+
+    #[test]
+    fn collect_multi_keys_rejects_mismatched_ifs_row_bounds() {
+        // Excel returns #VALUE! for incongruent *IFS range shapes; no key
+        // means the eval-side builtin errors before any lookup.
+        let keys = multi_keys_for("SUMIFS(C2:C11,A2:A12,\"x\")");
+        assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn collect_multi_keys_rejects_mixed_whole_column_and_bounded_ifs() {
+        let keys = multi_keys_for("COUNTIFS(A2:A11,\"x\",B:B,\"y\")");
+        assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn collect_multi_keys_rejects_offset_sumif_value_range() {
+        // Excel would resize B5:B14 to the criteria shape and pair rows
+        // with an offset; same-row streaming cannot express that, so the
+        // formula is refused instead of silently mis-paired.
+        let keys = multi_keys_for("SUMIF(A2:A11,\"x\",B5:B14)");
+        assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn collect_multi_keys_accepts_sumif_value_range_with_same_start() {
+        // Excel resizes the value range to the criteria shape from its
+        // top-left cell, so a shorter value range with the same start row
+        // pairs identically.
+        let keys = multi_keys_for("SUMIF(A2:A11,\"x\",B2:B5)");
+        assert_eq!(keys.len(), 1);
+        assert_eq!((keys[0].start_row, keys[0].end_row), (Some(2), Some(11)));
     }
 
     // ===== is_prelude_evaluable =====
