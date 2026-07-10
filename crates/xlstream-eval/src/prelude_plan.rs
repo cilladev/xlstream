@@ -196,7 +196,7 @@ impl FoldState {
                 }
                 self.nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 let mid = self.nums.len() / 2;
-                if self.nums.len() % 2 == 0 {
+                if self.nums.len().is_multiple_of(2) {
                     Value::Number(f64::midpoint(self.nums[mid - 1], self.nums[mid]))
                 } else {
                     Value::Number(self.nums[mid])
@@ -453,7 +453,7 @@ fn extract_value_ifs_key(
     kind: AggKind,
 ) -> Option<crate::prelude::MultiConditionalAggKey> {
     let args = node.args();
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+    if args.len() < 3 || !(args.len() - 1).is_multiple_of(2) {
         return None;
     }
     let (sum_col, sheet) = extract_range_col_and_sheet(args[0])?;
@@ -481,7 +481,7 @@ fn extract_countifs_key(
     node: xlstream_parse::NodeRef<'_>,
 ) -> Option<crate::prelude::MultiConditionalAggKey> {
     let args = node.args();
-    if args.len() < 2 || args.len() % 2 != 0 {
+    if args.len() < 2 || !args.len().is_multiple_of(2) {
         return None;
     }
     let num_pairs = args.len() / 2;

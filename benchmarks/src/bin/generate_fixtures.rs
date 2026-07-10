@@ -143,7 +143,7 @@ fn write_data_row(ws: &mut Worksheet, row: u32, rng: &mut Rng) {
     ws.write_number(row, 16, rng.int_range(1, 10) as f64).expect("Q");
     ws.write_string(row, 17, REGIONS[(row as usize) % REGIONS.len()]).expect("R");
     ws.write_number(row, 18, rng.f64_range(45292.0, 46023.0).round()).expect("S");
-    ws.write_boolean(row, 19, row % 2 == 0).expect("T");
+    ws.write_boolean(row, 19, row.is_multiple_of(2)).expect("T");
 }
 
 // ---------------------------------------------------------------------------

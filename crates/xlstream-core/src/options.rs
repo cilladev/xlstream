@@ -13,18 +13,13 @@ pub const ITERATIVE_CALC_DEFAULT_MAX_CHANGE: f64 = 0.001;
 /// use xlstream_core::OutputMode;
 /// assert_eq!(OutputMode::default(), OutputMode::Formulas);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OutputMode {
     /// Write both formula text and cached values: `<f>formula</f><v>cached</v>`.
+    #[default]
     Formulas,
     /// Write only cached values: `<v>cached</v>`.
     ValuesOnly,
-}
-
-impl Default for OutputMode {
-    fn default() -> Self {
-        Self::Formulas
-    }
 }
 
 impl OutputMode {
