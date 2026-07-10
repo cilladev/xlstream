@@ -540,7 +540,9 @@ fn classify_aggregate(
 fn is_criteria_arg(fn_upper: &str, index: usize) -> bool {
     match fn_upper {
         "SUMIF" | "COUNTIF" | "AVERAGEIF" => index == 1,
-        "SUMIFS" | "COUNTIFS" | "AVERAGEIFS" | "MINIFS" | "MAXIFS" => index >= 2 && index % 2 == 0,
+        "SUMIFS" | "COUNTIFS" | "AVERAGEIFS" | "MINIFS" | "MAXIFS" => {
+            index >= 2 && index.is_multiple_of(2)
+        }
         _ => false,
     }
 }

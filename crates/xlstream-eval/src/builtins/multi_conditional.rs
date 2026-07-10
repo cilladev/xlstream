@@ -62,7 +62,7 @@ fn value_ifs_lookup(
 ) -> Value {
     // Minimum: value_range + at least one (criteria_range, criteria) pair = 3
     // args. After first arg, remaining must be pairs.
-    if args.len() < 3 || (args.len() - 1) % 2 != 0 {
+    if args.len() < 3 || !(args.len() - 1).is_multiple_of(2) {
         return Value::Error(CellError::Value);
     }
 
@@ -121,7 +121,7 @@ pub(crate) fn builtin_countifs(
     scope: &RowScope<'_>,
 ) -> Value {
     // Must have pairs: at least 2 args, even count.
-    if args.len() < 2 || args.len() % 2 != 0 {
+    if args.len() < 2 || !args.len().is_multiple_of(2) {
         return Value::Error(CellError::Value);
     }
 

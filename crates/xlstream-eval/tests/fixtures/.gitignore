@@ -1,2 +1,5 @@
 # Override root *.xlsx ignore — regression fixtures are committed (Excel-verified golden files).
 !*.xlsx
+
+# Excel lock files
+~$*.xlsx

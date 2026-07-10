@@ -48,7 +48,7 @@ pub(crate) fn builtin_ifs(
     interp: &Interpreter<'_>,
     scope: &RowScope<'_>,
 ) -> Value {
-    if args.len() < 2 || args.len() % 2 != 0 {
+    if args.len() < 2 || !args.len().is_multiple_of(2) {
         return Value::Error(CellError::Value);
     }
     for pair in args.chunks(2) {

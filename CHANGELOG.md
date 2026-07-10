@@ -5,6 +5,9 @@ Semver.
 
 ## [Unreleased]
 
+### Changed
+- Pin Rust 1.94.1 — rustc 1.88 fat LTO drops encoding_rs statics, breaking release-profile links of any binary using calamine 0.36 (see docs/decisions/2026-07-10-toolchain-bump-1.94-lto-fix.md)
+
 ### Security
 - Upgrade calamine 0.35 -> 0.36 (quick-xml 0.41: RUSTSEC-2026-0194, RUSTSEC-2026-0195), pyo3 0.28 -> 0.29 (RUSTSEC-2026-0176, RUSTSEC-2026-0177), crossbeam-epoch 0.9.20 (RUSTSEC-2026-0204), anyhow 1.0.103 (RUSTSEC-2026-0190)
 
