@@ -3,18 +3,19 @@ name: Release
 on:
   push:
     branches: [main]
-    tags: ["v*"]
 
 jobs:
-  # On push to main, read version from Cargo.toml and create a tag if missing.
-  # The new tag triggers this same workflow again via the tags: ["v*"] trigger,
-  # which runs the build + publish jobs below.
+  # Read version from Cargo.toml. Create tag if missing. Output whether
+  # this is a new release so downstream jobs can gate on it.
   tag-release:
     name: Create Release Tag
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      created: ${{ steps.create.outputs.created }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -29,22 +30,26 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Create tag if missing
+        id: create
         run: |
           tag="${{ steps.meta.outputs.tag }}"
           git fetch --tags --force
           if git rev-parse "${tag}" >/dev/null 2>&1; then
             echo "Tag ${tag} already exists — skipping."
+            echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${tag}" -m "Release ${tag}"
           git push origin "${tag}"
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
   # Build one wheel per (os, arch). abi3-py39 = Python 3.9-3.14+ covered.
   build-wheels:
     name: wheels (${{ matrix.os }}-${{ matrix.target }})
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tag-release]
+    if: needs.tag-release.outputs.created == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -80,7 +85,8 @@ jobs:
   # Source distribution (.tar.gz of Python source). Fallback for platforms
   # without a prebuilt wheel — pip downloads and compiles locally.
   sdist:
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tag-release]
+    if: needs.tag-release.outputs.created == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -100,12 +106,12 @@ jobs:
   #   1. Sign in to https://pypi.org/ and create the project `xlstream`,
   #      OR use the "pending publisher" flow to pre-authorise before the
   #      first version exists.
-  #   2. Project → Manage → Publishing → Add a new trusted publisher:
+  #   2. Project -> Manage -> Publishing -> Add a new trusted publisher:
   #        Owner:            cilladev
   #        Repository:       xlstream
   #        Workflow name:    release.yml
   #        Environment:      pypi
-  #   3. Repo → Settings → Environments → create `pypi` with a required
+  #   3. Repo -> Settings -> Environments -> create `pypi` with a required
   #      reviewer so publishes gate on manual approval.
   publish-pypi:
     name: Publish to PyPI
@@ -127,7 +133,7 @@ jobs:
   # Creates a GitHub Release with changelog-extracted notes and wheel artifacts.
   publish-github:
     name: Publish GitHub Release
-    needs: [build-wheels, sdist]
+    needs: [tag-release, build-wheels, sdist]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -136,17 +142,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve version from tag
-        id: meta
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          version="${tag#v}"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-
       - name: Extract changelog section
         run: |
-          version="${{ steps.meta.outputs.version }}"
+          version="${{ needs.tag-release.outputs.version }}"
           python3 - "$version" <<'PY'
           import sys
           from pathlib import Path
@@ -187,8 +185,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ needs.tag-release.outputs.tag }}
+          name: ${{ needs.tag-release.outputs.tag }}
           body_path: release-notes.md
           files: dist/*
 
@@ -197,9 +195,9 @@ jobs:
   # publishing as of 2026, so this one still uses an API token.
   #
   # Setup (one-time):
-  #   1. crates.io → Account Settings → API tokens → New token scoped to
+  #   1. crates.io -> Account Settings -> API tokens -> New token scoped to
   #      the xlstream-* crates.
-  #   2. Repo → Settings → Environments → `crates-io` with required reviewer.
+  #   2. Repo -> Settings -> Environments -> `crates-io` with required reviewer.
   #   3. Under that environment, add secret `CARGO_REGISTRY_TOKEN`.
   publish-crates:
     name: Publish to crates.io
