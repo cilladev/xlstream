@@ -221,6 +221,16 @@ docs-check: ## verify internal markdown links (requires markdown-link-check; opt
 
 ## release
 
+.PHONY: bump
+bump: ## bump all crate versions: make bump VERSION=0.5.0
+	@[ -n "$(VERSION)" ] || { echo "usage: make bump VERSION=x.y.z"; exit 1; }
+	@echo "-> bumping to $(VERSION)"
+	sed -i '' 's/version = "0\.[0-9]*\.[0-9]*"/version = "$(VERSION)"/g' \
+		Cargo.toml $$(find crates/ bindings/ benchmarks/ -name Cargo.toml)
+	@echo "-> verifying workspace"
+	cargo check --workspace --quiet
+	@echo "-> done. git diff to review."
+
 .PHONY: release-dry
 release-dry: ## cargo publish --dry-run + maturin build check
 	cargo publish -p xlstream-core --dry-run

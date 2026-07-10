@@ -25,8 +25,8 @@ Before merging the version bump to main:
 2. **CHANGELOG.md** updated — `[Unreleased]` promoted to `[0.4.0] - YYYY-MM-DD`.
 3. **Docs reviewed** — no TODOs, no broken links.
 4. **Benchmarks pass** — `make bench-report VERSION=0.4.0`, reference workload within budget.
-5. **`make release-dry`** works (`cargo publish --dry-run` for each crate + `maturin build`).
-6. **Version bumped** in `Cargo.toml` workspace and `pyproject.toml`.
+5. **Version bumped** — `make bump VERSION=0.4.0` (updates all Cargo.toml files, runs `cargo check`).
+6. **`make release-dry`** works (`cargo publish --dry-run` for each crate + `maturin build`).
 7. **Commit**: `chore: bump to 0.4.0`.
 8. **Merge to main** — CI auto-tags `v0.4.0` and triggers the release pipeline.
 
