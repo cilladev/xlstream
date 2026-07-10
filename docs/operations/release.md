@@ -45,7 +45,7 @@ CI builds wheels and sdist automatically. Publishing is gated on manual approval
 
 A GitHub Release is created automatically with changelog notes and wheel artifacts.
 
-### 5. Verify
+### 5. Verify (Manual)
 
 - [ ] `pip install xlstream==0.5.0` works on a clean machine
 - [ ] `cargo add xlstream-eval@0.5.0` pulls the new version

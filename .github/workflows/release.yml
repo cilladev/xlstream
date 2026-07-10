@@ -1,5 +1,14 @@
 name: Release
 
+# How this works:
+# 1. Any push to main triggers release.yml
+# 2. tag-release job reads the version from Cargo.toml (e.g. 0.4.0), checks if tag v0.4.0 exists on the remote
+#   - Tag exists → outputs created=false → all downstream jobs skip. This is what happens on every normal feature PR merge (version unchanged, tag already exists).
+#   - Tag missing → creates v0.4.0, pushes it, outputs created=true → build + publish jobs run.
+# 3. Build jobs (gated on created=true) build wheels + sdist
+# 4. Publish jobs (gated on builds + manual approval) push to PyPI and crates.io
+# 5. GitHub Release created with changelog notes + artifacts
+
 on:
   push:
     branches: [main]
