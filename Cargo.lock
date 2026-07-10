@@ -1932,7 +1932,7 @@ dependencies = [
 
 [[package]]
 name = "xlstream"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "xlstream-core",
  "xlstream-eval",
@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "xlstream-benchmarks"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "criterion",
  "memory-stats",
@@ -1954,7 +1954,7 @@ dependencies = [
 
 [[package]]
 name = "xlstream-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "memory-stats",
@@ -1968,14 +1968,14 @@ dependencies = [
 
 [[package]]
 name = "xlstream-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "xlstream-eval"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "calamine",
  "crossbeam-channel",
@@ -1993,7 +1993,7 @@ dependencies = [
 
 [[package]]
 name = "xlstream-io"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "calamine",
  "rust_xlsxwriter",
@@ -2003,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "xlstream-parse"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bitflags",
  "formualizer-common",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "xlstream-python"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pyo3",
  "xlstream-core",

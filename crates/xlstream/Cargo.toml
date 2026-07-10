@@ -13,8 +13,8 @@ homepage.workspace = true
 authors.workspace = true
 
 [dependencies]
-xlstream-eval = { path = "../xlstream-eval", version = "0.3.0" }
-xlstream-core = { path = "../xlstream-core", version = "0.3.0" }
+xlstream-eval = { path = "../xlstream-eval", version = "0.4.0" }
+xlstream-core = { path = "../xlstream-core", version = "0.4.0" }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
